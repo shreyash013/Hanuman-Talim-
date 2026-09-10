@@ -142,44 +142,46 @@ export function DashboardPage() {
   return (
     <div className="space-y-6">
       {/* Header Greeting & Festival Countdown */}
-      <div className="bg-gradient-to-r from-amber-500/20 via-orange-500/10 to-slate-900 border border-amber-500/30 rounded-3xl p-6 relative overflow-hidden">
+      <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white rounded-3xl p-6 sm:p-7 relative overflow-hidden shadow-festive border border-amber-400/40">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
           <div>
-            <div className="flex items-center space-x-2 text-amber-400 font-bold text-xs mb-1">
-              <Sparkles className="w-4 h-4" />
+            <div className="flex items-center space-x-2 text-amber-200 font-extrabold text-xs mb-1">
+              <Sparkles className="w-4 h-4 text-amber-200" />
               <span>{mandal?.name_mr || 'श्री हनुमान तालीम मंडळ शिरोळ'}</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black text-white">
+            <h1 className="text-2xl sm:text-3xl font-black text-white font-marathi tracking-tight drop-shadow-sm">
               जय देव जय देव, जय मंगलमूर्ती! 🚩
             </h1>
-            <p className="text-xs sm:text-sm text-slate-300 mt-1">
+            <p className="text-xs sm:text-sm text-amber-100/90 mt-1 font-medium">
               गणेशोत्सव २०२६ - डिजिटल जमा-खर्च, वर्गणी व सर्वसमावेशक डॅशबोर्ड.
             </p>
           </div>
-          <div className="shrink-0 bg-slate-950/80 p-4 rounded-2xl border border-slate-800 backdrop-blur-md">
-            <span className="text-[11px] font-bold text-amber-400 block mb-1">गणपती आगमन काउंटडाऊन 🗓️</span>
-            <CountdownTimer targetDate={mandal?.arrival_date || '2026-09-14T09:00:00+05:30'} />
+          <div className="shrink-0 bg-black/25 backdrop-blur-md p-4 rounded-2xl border border-white/20">
+            <span className="text-[11px] font-black text-amber-200 block mb-2 text-center lg:text-left">
+              गणपती आगमन काउंटडाऊन 🗓️
+            </span>
+            <CountdownTimer targetDate={mandal?.arrival_date || '2026-09-14T09:00:00+05:30'} compact={true} />
           </div>
         </div>
       </div>
 
       {/* Special Feature: Today's Target vs Collection Progress Bar */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-amber-950/30 border border-amber-500/40 rounded-3xl p-6 shadow-xl">
+      <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-amber-500/30 rounded-3xl p-6 shadow-sm dark:shadow-md">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500">
               <Target className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="font-extrabold text-white text-base">आजचे वर्गणी संकलन ध्येय (Target vs Collection) ⭐</h2>
-              <p className="text-xs text-slate-400">आजचे ध्येय: ₹{targetAmount.toLocaleString('en-IN')}</p>
+              <h2 className="font-extrabold text-slate-900 dark:text-white text-base">आजचे वर्गणी संकलन ध्येय (Target vs Collection) ⭐</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">आजचे ध्येय: ₹{targetAmount.toLocaleString('en-IN')}</p>
             </div>
           </div>
           <div className="flex items-center space-x-3">
-            <span className="text-xl font-black text-amber-400">{progressPct}%</span>
+            <span className="text-xl font-black text-amber-600 dark:text-amber-400">{progressPct}%</span>
             <button
               onClick={() => setShowTargetModal(true)}
-              className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded-xl font-bold border border-slate-700 transition"
+              className="text-xs px-3.5 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-amber-700 dark:text-amber-300 rounded-xl font-bold border border-slate-200 dark:border-slate-700 transition"
             >
               ध्येय बदला
             </button>
@@ -187,15 +189,15 @@ export function DashboardPage() {
         </div>
 
         {/* Progress Bar */}
-        <div className="w-full bg-slate-950 rounded-full h-4 overflow-hidden border border-slate-800 p-0.5">
+        <div className="w-full bg-slate-200 dark:bg-slate-950 rounded-full h-4 overflow-hidden border border-slate-300 dark:border-slate-800 p-0.5">
           <div
-            className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-400 h-full rounded-full transition-all duration-700 shadow-lg"
+            className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-400 h-full rounded-full transition-all duration-700 shadow-md"
             style={{ width: `${progressPct}%` }}
           />
         </div>
-        <div className="flex justify-between text-xs text-slate-400 mt-2 font-medium">
-          <span>जमा: <strong className="text-emerald-400">₹{todayCollection.toLocaleString('en-IN')}</strong></span>
-          <span>उर्वरित: <strong className="text-amber-300">₹{Math.max(0, targetAmount - todayCollection).toLocaleString('en-IN')}</strong></span>
+        <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400 mt-2 font-semibold">
+          <span>जमा: <strong className="text-emerald-600 dark:text-emerald-400">₹{todayCollection.toLocaleString('en-IN')}</strong></span>
+          <span>उर्वरित: <strong className="text-amber-700 dark:text-amber-300">₹{Math.max(0, targetAmount - todayCollection).toLocaleString('en-IN')}</strong></span>
         </div>
       </div>
 

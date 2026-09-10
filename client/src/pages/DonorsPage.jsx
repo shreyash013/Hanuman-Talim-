@@ -38,20 +38,24 @@ export function DonorsPage() {
   const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
   const [area, setArea] = useState('');
-  const [singleAmount, setSingleAmount] = useState('500');
+  const [singleAmount, setSingleAmount] = useState('2000');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Bulk Add Donors Modal
   const [showBulkModal, setShowBulkModal] = useState(false);
-  const [bulkFixedAmount, setBulkFixedAmount] = useState('500');
+  const [bulkFixedAmount, setBulkFixedAmount] = useState('2000');
   const [bulkDefaultArea, setBulkDefaultArea] = useState('नदीवेस शिरोळ');
   const [bulkInputText, setBulkInputText] = useState('');
   const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
 
-  // Edit Individual Amount Modal
+  // Edit Donor Modal
   const [showEditAmountModal, setShowEditAmountModal] = useState(false);
   const [editingDonor, setEditingDonor] = useState(null);
+  const [editName, setEditName] = useState('');
+  const [editMobile, setEditMobile] = useState('');
+  const [editArea, setEditArea] = useState('');
+  const [editAddress, setEditAddress] = useState('');
   const [editAmountValue, setEditAmountValue] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
@@ -187,17 +191,25 @@ export function DonorsPage() {
     }
   };
 
-  // Open Edit Target Amount Modal
+  // Open Edit Modal
   const openEditAmountModal = (donor) => {
     setEditingDonor(donor);
+    setEditName(donor.name || '');
+    setEditMobile(donor.mobile || '');
+    setEditArea(donor.area || 'नदीवेस शिरोळ');
+    setEditAddress(donor.address || '');
     setEditAmountValue(donor.target_amount || donor.total_donated || 500);
     setShowEditAmountModal(true);
   };
 
-  // Save Edit Target Amount
+  // Save Edit Donor
   const handleSaveIndividualAmount = async (e) => {
     e.preventDefault();
     if (!editingDonor) return;
+    if (!editName.trim()) {
+      showToast('कृपया देणगीदाराचे नाव टाका.', 'warning');
+      return;
+    }
     const newAmt = Number(editAmountValue);
     if (isNaN(newAmt) || newAmt < 0) {
       showToast('कृपया वैध रक्कम टाका.', 'warning');
@@ -208,18 +220,21 @@ export function DonorsPage() {
       setIsSavingEdit(true);
       const res = await api.put(`/donors/${editingDonor.id}`, {
         id: editingDonor.id,
-        name: editingDonor.name,
+        name: editName.trim(),
+        mobile: editMobile.trim(),
+        area: editArea.trim(),
+        address: editAddress.trim(),
         target_amount: newAmt
       });
 
       if (res.success) {
-        showToast(`'${editingDonor.name}' यांची नक्की केलेली वर्गणी ₹${newAmt} अद्ययावत केली!`, 'success');
+        showToast(`'${editName}' यांची माहिती यशस्वीरित्या अद्ययावत केली!`, 'success');
         setShowEditAmountModal(false);
         setEditingDonor(null);
         fetchDonors();
       }
     } catch (err) {
-      showToast(err.message || 'रक्कम बदलताना त्रुटी.', 'error');
+      showToast(err.message || 'माहिती बदलताना त्रुटी.', 'error');
     } finally {
       setIsSavingEdit(false);
     }
@@ -269,6 +284,147 @@ export function DonorsPage() {
     window.open(`https://api.whatsapp.com/send?phone=${phone.length === 10 ? '91' + phone : phone}&text=${encodeURIComponent(text)}`, '_blank');
   };
 
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState([]);
+
+  // Toggle single donor selection
+  const toggleSelectDonor = (id) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  // Toggle select all filtered donors
+  const toggleSelectAll = () => {
+    if (selectedIds.length === filteredDonors.length && filteredDonors.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredDonors.map((d) => d.id));
+    }
+  };
+
+  // Bulk delete selected handler
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) {
+      showToast('कृपया हटवण्यासाठी किमान एक देणगीदार निवडा.', 'warning');
+      return;
+    }
+
+    const selectedDonors = filteredDonors.filter((d) => selectedIds.includes(d.id));
+    const selectedNames = selectedDonors.map((d) => d.name);
+
+    if (!window.confirm(`नक्की निवडलेले ${selectedIds.length} देणगीदार यादीतून हटवायचे आहेत का?`)) {
+      return;
+    }
+
+    try {
+      let res;
+      try {
+        res = await api.delete('/donors/bulk', { ids: selectedIds, names: selectedNames });
+      } catch (err) {
+        await Promise.all(selectedIds.map((id) => api.delete(`/donors/${id}`)));
+        res = { success: true };
+      }
+
+      if (res.success) {
+        showToast(`🎉 ${selectedIds.length} देणगीदार यशस्वीरित्या हटवले!`, 'success');
+        setSelectedIds([]);
+        fetchDonors();
+      }
+    } catch (err) {
+      showToast(err.message || 'देणगीदार हटवताना त्रुटी.', 'error');
+    }
+  };
+
+  // Dynamic Background & Text Color helper based on payment status & amount
+  const getDonorRowStyles = (d) => {
+    const target = Number(d.target_amount || d.total_donated || 500);
+    const paid = Number(d.paid_amount || 0);
+    const ratio = target > 0 ? paid / target : 0;
+
+    // 1. Full Amount Paid -> High Density Rich Vibrant Green
+    if (paid >= target || d.status === 'paid' || ratio >= 1.0) {
+      return {
+        rowClass: 'bg-emerald-700 text-white hover:bg-emerald-600 border-b border-emerald-800 shadow-sm',
+        nameClass: 'font-extrabold text-white text-sm',
+        subTextClass: 'text-emerald-100',
+        targetClass: 'text-white font-extrabold',
+        paidClass: 'text-white font-black',
+        pendingClass: 'text-emerald-200 font-bold',
+        badge: (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-900 text-emerald-100 border border-emerald-400 shadow">
+            <CheckCircle className="w-3.5 h-3.5 text-emerald-300" /> पूर्ण जमा
+          </span>
+        )
+      };
+    }
+
+    // 2. Unpaid / Initial -> White Background ("for all donor first take background colour white")
+    if (paid === 0 || d.status === 'unpaid') {
+      return {
+        rowClass: 'bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800',
+        nameClass: 'font-extrabold text-slate-900 dark:text-white text-sm',
+        subTextClass: 'text-slate-500 dark:text-slate-400',
+        targetClass: 'text-amber-600 dark:text-amber-400 font-extrabold',
+        paidClass: 'text-slate-500 dark:text-slate-400 font-black',
+        pendingClass: 'text-rose-600 dark:text-rose-400 font-black',
+        badge: (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700">
+            <AlertCircle className="w-3 h-3 text-slate-500 dark:text-slate-400" /> जमा बाकी
+          </span>
+        )
+      };
+    }
+
+    // 3. Paid Less -> Accordingly Red, Orange, Yellow based on payment percentage
+    if (ratio < 0.35) {
+      // Red (< 35% paid)
+      return {
+        rowClass: 'bg-red-600 text-white hover:bg-red-700 border-b border-red-700',
+        nameClass: 'font-extrabold text-white text-sm',
+        subTextClass: 'text-red-100',
+        targetClass: 'text-white font-extrabold',
+        paidClass: 'text-red-100 font-black',
+        pendingClass: 'text-yellow-200 font-black',
+        badge: (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-red-900 text-red-100 border border-red-400">
+            <Clock className="w-3 h-3" /> अंशतः (कमी जमा)
+          </span>
+        )
+      };
+    } else if (ratio < 0.70) {
+      // Orange (35% to 69% paid)
+      return {
+        rowClass: 'bg-orange-500 text-white hover:bg-orange-600 border-b border-orange-600',
+        nameClass: 'font-extrabold text-white text-sm',
+        subTextClass: 'text-orange-100',
+        targetClass: 'text-white font-extrabold',
+        paidClass: 'text-orange-100 font-black',
+        pendingClass: 'text-yellow-100 font-black',
+        badge: (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-orange-950 text-orange-200 border border-orange-400">
+            <Clock className="w-3 h-3" /> अंशतः (मध्यम)
+          </span>
+        )
+      };
+    } else {
+      // Yellow (70% to 99% paid)
+      return {
+        rowClass: 'bg-yellow-400 text-slate-950 hover:bg-yellow-300 border-b border-yellow-500',
+        nameClass: 'font-black text-slate-950 text-sm',
+        subTextClass: 'text-slate-800',
+        targetClass: 'text-slate-900 font-extrabold',
+        paidClass: 'text-slate-950 font-black',
+        pendingClass: 'text-red-800 font-black',
+        badge: (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-yellow-100 text-slate-900 border border-yellow-600">
+            <Clock className="w-3 h-3" /> जवळपास पूर्ण
+          </span>
+        )
+      };
+    }
+  };
+
   const parsedBulkList = getParsedBulkDonors();
 
   return (
@@ -305,57 +461,59 @@ export function DonorsPage() {
       </div>
 
       {/* 4 Summary Stats Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-        <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-          <span className="text-slate-400 block mb-1 font-semibold">एकूण देणगीदार</span>
-          <div className="flex items-center space-x-2">
-            <Users className="w-5 h-5 text-amber-400" />
-            <span className="text-xl font-black text-white">{summary.totalDonors} जण</span>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+        <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-amber-500/20 p-5 rounded-2xl shadow-sm transition">
+          <span className="text-slate-500 dark:text-slate-400 block mb-1 font-extrabold uppercase tracking-wider text-[11px]">एकूण देणगीदार</span>
+          <div className="flex items-center space-x-2.5 mt-1">
+            <div className="p-2 rounded-xl bg-amber-500/15 text-amber-500">
+              <Users className="w-5 h-5" />
+            </div>
+            <span className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-sans">{summary.totalDonors} जण</span>
           </div>
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-          <span className="text-slate-400 block mb-1 font-semibold">नक्की केलेली वर्गणी (Target)</span>
-          <div className="flex items-center space-x-1 font-black text-xl text-amber-400">
+        <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-amber-500/30 p-5 rounded-2xl shadow-sm transition">
+          <span className="text-amber-600 dark:text-amber-400/90 block mb-1 font-extrabold uppercase tracking-wider text-[11px]">नक्की केलेली वर्गणी (Target)</span>
+          <div className="flex items-center space-x-1 font-black text-2xl sm:text-3xl text-amber-600 dark:text-amber-400 font-sans mt-1">
             <span>₹{(summary.totalTarget || 0).toLocaleString('en-IN')}</span>
           </div>
         </div>
 
-        <div className="bg-slate-900 border border-emerald-500/30 p-4 rounded-2xl bg-emerald-950/20">
-          <span className="text-emerald-400 block mb-1 font-semibold">एकूण जमा वर्गणी (Paid)</span>
-          <div className="flex items-center space-x-1 font-black text-xl text-emerald-400">
+        <div className="bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-500/30 p-5 rounded-2xl shadow-sm transition">
+          <span className="text-emerald-700 dark:text-emerald-400 block mb-1 font-extrabold uppercase tracking-wider text-[11px]">एकूण जमा वर्गणी (Paid)</span>
+          <div className="flex items-center space-x-1 font-black text-2xl sm:text-3xl text-emerald-600 dark:text-emerald-400 font-sans mt-1">
             <span>₹{(summary.totalPaid || 0).toLocaleString('en-IN')}</span>
           </div>
         </div>
 
-        <div className="bg-slate-900 border border-rose-500/30 p-4 rounded-2xl bg-rose-950/20">
-          <span className="text-rose-400 block mb-1 font-semibold">एकूण शिल्लक बाकी (Pending)</span>
-          <div className="flex items-center space-x-1 font-black text-xl text-rose-400">
+        <div className="bg-rose-50/80 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-500/30 p-5 rounded-2xl shadow-sm transition">
+          <span className="text-rose-700 dark:text-rose-400 block mb-1 font-extrabold uppercase tracking-wider text-[11px]">एकूण शिल्लक बाकी (Pending)</span>
+          <div className="flex items-center space-x-1 font-black text-2xl sm:text-3xl text-rose-600 dark:text-rose-400 font-sans mt-1">
             <span>₹{(summary.totalPending || 0).toLocaleString('en-IN')}</span>
           </div>
         </div>
       </div>
 
       {/* Search & Area & Status Filter Bar */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
         <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+          <Search className="w-4 h-4 text-amber-500 absolute left-3.5 top-3" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="नावाने किंवा मोबाईलने शोधा..."
-            className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+            className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700/80 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-amber-500"
           />
         </div>
 
         <div className="flex items-center space-x-4 text-xs flex-wrap gap-2">
-          <div className="flex items-center space-x-1.5">
-            <span className="text-slate-400">स्थिती (Status):</span>
+          <div className="flex items-center space-x-2">
+            <span className="text-slate-700 dark:text-slate-300 font-bold">स्थिती:</span>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-bold"
+              className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-bold"
             >
               <option value="all">सर्व</option>
               <option value="paid">✓ पूर्ण जमा</option>
@@ -364,12 +522,12 @@ export function DonorsPage() {
             </select>
           </div>
 
-          <div className="flex items-center space-x-1.5">
-            <span className="text-slate-400">भाग (Area):</span>
+          <div className="flex items-center space-x-2">
+            <span className="text-slate-700 dark:text-slate-300 font-bold">भाग:</span>
             <select
               value={areaFilter}
               onChange={(e) => setAreaFilter(e.target.value)}
-              className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-bold"
+              className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-bold"
             >
               <option value="all">सर्व भाग</option>
               <option value="नदीवेस शिरोळ">नदीवेस शिरोळ</option>
@@ -382,12 +540,46 @@ export function DonorsPage() {
         </div>
       </div>
 
+      {/* Bulk Selection Delete Action Bar */}
+      {selectedIds.length > 0 && (
+        <div className="bg-rose-950/90 border border-rose-600/60 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xl animate-fadeIn">
+          <div className="flex items-center space-x-2 text-rose-200 text-xs font-bold">
+            <CheckCircle2 className="w-5 h-5 text-rose-400" />
+            <span>एकूण <strong className="text-white text-base font-black underline">{selectedIds.length}</strong> देणगीदार निवडले आहेत</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setSelectedIds([])}
+              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold text-xs transition"
+            >
+              निवड रद्द करा
+            </button>
+            <button
+              onClick={handleBulkDelete}
+              className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-black text-xs rounded-xl shadow-lg transition flex items-center space-x-1.5 border border-rose-400"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>🗑️ निवडलेले ({selectedIds.length}) हटवा (Delete Selected)</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Donors & Vargani Calculation Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-xl">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-md">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="bg-slate-950/80 text-slate-400 font-semibold border-b border-slate-800">
+              <tr className="bg-slate-100 dark:bg-slate-950 text-slate-700 dark:text-slate-300 font-extrabold border-b border-slate-200 dark:border-slate-800 uppercase tracking-wider">
+                <th className="p-4 w-10 text-center">
+                  <input
+                    type="checkbox"
+                    checked={filteredDonors.length > 0 && selectedIds.length === filteredDonors.length}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 rounded cursor-pointer accent-amber-500"
+                    title="सर्व देणगीदार निवडा / निवड रद्द करा"
+                  />
+                </th>
                 <th className="p-4">देणगीदाराचे नाव</th>
                 <th className="p-4">मोबाईल</th>
                 <th className="p-4">भाग (Area)</th>
@@ -398,121 +590,69 @@ export function DonorsPage() {
                 <th className="p-4 text-right">कृती (Actions)</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
-              {filteredDonors.map((d) => (
-                <tr
-                  key={d.id}
-                  className={`transition-all ${
-                    d.status === 'paid'
-                      ? 'bg-emerald-950/25 hover:bg-emerald-950/40 border-l-4 border-l-emerald-500'
-                      : d.status === 'partial'
-                      ? 'bg-amber-950/25 hover:bg-amber-950/40 border-l-4 border-l-amber-500'
-                      : 'hover:bg-slate-800/40 border-l-4 border-l-transparent'
-                  }`}
-                >
-                  <td className="p-4 font-bold text-white">
-                    {d.name}
-                    {d.address && <span className="block text-[11px] font-normal text-slate-400">{d.address}</span>}
-                  </td>
-                  <td className="p-4 text-slate-300 font-mono">{d.mobile || '-'}</td>
-                  <td className="p-4 text-slate-300">{d.area || 'शिरोळ'}</td>
+            <tbody className="divide-y divide-slate-200/20">
+              {filteredDonors.map((d) => {
+                const styles = getDonorRowStyles(d);
+                const isSelected = selectedIds.includes(d.id);
+                return (
+                  <tr key={d.id} className={`transition-all ${styles.rowClass} ${isSelected ? 'ring-2 ring-amber-400/80' : ''}`}>
+                    <td className="p-4 text-center">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelectDonor(d.id)}
+                        className="w-4 h-4 rounded cursor-pointer accent-amber-500"
+                      />
+                    </td>
+                    <td className={`p-4 ${styles.nameClass}`}>
+                      {d.name}
+                      {d.address && <span className={`block text-[11px] font-normal ${styles.subTextClass}`}>{d.address}</span>}
+                    </td>
+                    <td className={`p-4 font-mono ${styles.subTextClass}`}>{d.mobile || '-'}</td>
+                    <td className={`p-4 ${styles.subTextClass}`}>{d.area || 'शिरोळ'}</td>
 
-                  {/* Target Amount */}
-                  <td className="p-4 text-right">
-                    <div className="inline-flex items-center space-x-1 font-extrabold text-amber-400">
-                      <span>₹{(d.target_amount || d.total_donated || 500).toLocaleString('en-IN')}</span>
+                    {/* Target Amount */}
+                    <td className="p-4 text-right">
+                      <span className={styles.targetClass}>₹{(d.target_amount || d.total_donated || 500).toLocaleString('en-IN')}</span>
+                    </td>
+
+                    {/* Paid Amount */}
+                    <td className={`p-4 text-right ${styles.paidClass}`}>
+                      ₹{(d.paid_amount || 0).toLocaleString('en-IN')}
+                      {d.donations_count > 0 && (
+                        <span className={`block text-[10px] font-normal ${styles.subTextClass}`}>
+                          ({d.donations_count} पावत्या)
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Pending Amount */}
+                    <td className={`p-4 text-right ${styles.pendingClass}`}>
+                      ₹{(d.pending_amount || 0).toLocaleString('en-IN')}
+                    </td>
+
+                    {/* Status Badge */}
+                    <td className="p-4 text-center">
+                      {styles.badge}
+                    </td>
+
+                    {/* Actions Column: ONLY ONE EDIT OPTION */}
+                    <td className="p-4 text-right">
                       <button
                         onClick={() => openEditAmountModal(d)}
-                        className="p-1 text-slate-400 hover:text-amber-300 bg-slate-800/80 hover:bg-slate-800 rounded-lg transition"
-                        title="नक्की केलेली वर्गणी बदला"
+                        className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs shadow transition inline-flex items-center space-x-1 border border-amber-400"
+                        title="माहिती व वर्गणी बदला"
                       >
-                        <Pencil className="w-3 h-3" />
+                        <Pencil className="w-3.5 h-3.5" />
+                        <span>एडिट</span>
                       </button>
-                    </div>
-                  </td>
-
-                  {/* Paid Amount */}
-                  <td className="p-4 text-right font-black text-emerald-400">
-                    ₹{(d.paid_amount || 0).toLocaleString('en-IN')}
-                    {d.donations_count > 0 && (
-                      <span className="block text-[10px] text-slate-400 font-normal">
-                        ({d.donations_count} पावत्या)
-                      </span>
-                    )}
-                  </td>
-
-                  {/* Pending Amount */}
-                  <td className="p-4 text-right font-black text-rose-400">
-                    ₹{(d.pending_amount || 0).toLocaleString('en-IN')}
-                  </td>
-
-                  {/* Status Badge */}
-                  <td className="p-4 text-center">
-                    {d.status === 'paid' ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                        <CheckCircle className="w-3 h-3" /> पूर्ण जमा
-                      </span>
-                    ) : d.status === 'partial' ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                        <Clock className="w-3 h-3" /> अंशतः जमा
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                        <AlertCircle className="w-3 h-3" /> जमा बाकी
-                      </span>
-                    )}
-                  </td>
-
-                  <td className="p-4 text-right space-x-1 flex items-center justify-end">
-                    {/* Edit Target Amount Button */}
-                    <button
-                      onClick={() => openEditAmountModal(d)}
-                      className="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-lg text-[11px] font-bold border border-amber-500/40"
-                      title="या देणगीदाराची वर्गणी रक्कम बदला"
-                    >
-                      ✏️ वर्गणी
-                    </button>
-
-                    {/* WhatsApp Reminder */}
-                    <button
-                      onClick={() => sendWhatsAppReminder(d)}
-                      className="px-2 py-1 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 rounded-lg text-[11px] font-bold border border-sky-500/30"
-                      title="बाकी वर्गणी भरण्यासाठी रिमाइंडर मेसेज व लिंक पाठवा"
-                    >
-                      🔔 रिमाइंडर
-                    </button>
-
-                    {/* Thank you button */}
-                    <button
-                      onClick={() => sendWhatsAppThankYou(d)}
-                      className="px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded-lg text-[11px] font-bold border border-emerald-500/30"
-                      title="व्हॉट्सअ‍ॅप आभार संदेश"
-                    >
-                      आभार 🙏
-                    </button>
-
-                    {/* Profile CRM */}
-                    <button
-                      onClick={() => setSelectedDonorProfile(d)}
-                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[11px] font-bold border border-slate-700"
-                    >
-                      प्रोफाईल
-                    </button>
-
-                    {/* Delete Donor Button */}
-                    <button
-                      onClick={() => handleDeleteDonor(d)}
-                      className="p-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 rounded-lg text-[11px] font-bold border border-rose-500/30 transition"
-                      title="देणगीदार हटवा (Delete Donor)"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                );
+              })}
               {filteredDonors.length === 0 && (
                 <tr>
-                  <td colSpan="8" className="text-center py-8 text-slate-500">
+                  <td colSpan="9" className="text-center py-8 text-slate-500 bg-slate-900">
                     कोणतेही देणगीदार आढळले नाहीत.
                   </td>
                 </tr>
@@ -523,20 +663,73 @@ export function DonorsPage() {
       </div>
 
       {/* ========================================================== */}
-      {/* 1. EDIT INDIVIDUAL AMOUNT MODAL                             */}
+      {/* 1. EDIT DONOR MODAL                                        */}
       {/* ========================================================== */}
       <Modal
         isOpen={showEditAmountModal}
         onClose={() => setShowEditAmountModal(false)}
-        title="✏️ देणगीदाराची नक्की वर्गणी रक्कम बदला (Change Target Amount)"
-        subtitle={`${editingDonor?.name || ''} यांची नक्की वर्गणी अद्ययावत करा`}
+        title="✏️ देणगीदार माहिती व नक्की वर्गणी बदला (Edit Donor)"
+        subtitle={`${editingDonor?.name || ''} यांची माहिती अद्ययावत करा`}
         maxWidth="max-w-md"
       >
         <form onSubmit={handleSaveIndividualAmount} className="space-y-4 text-xs">
-          <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-1">
-            <span className="text-slate-400 block text-[11px]">देणगीदाराचे नाव:</span>
-            <h3 className="text-lg font-black text-white">{editingDonor?.name}</h3>
-            <p className="text-amber-400 text-xs font-bold">{editingDonor?.area || 'शिरोळ'} • {editingDonor?.mobile}</p>
+          <div>
+            <label className="text-slate-300 font-bold block mb-1">
+              👤 देणगीदाराचे नाव (Donor Name) *
+            </label>
+            <input
+              type="text"
+              required
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              placeholder="नाव टाका"
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-amber-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-slate-300 font-bold block mb-1">
+              📱 मोबाईल क्रमांक (Mobile Number)
+            </label>
+            <input
+              type="text"
+              value={editMobile}
+              onChange={(e) => setEditMobile(e.target.value)}
+              placeholder="98220XXXXX"
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-slate-300 font-bold block mb-1">
+                📍 भाग (Area)
+              </label>
+              <select
+                value={editArea}
+                onChange={(e) => setEditArea(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-amber-500"
+              >
+                <option value="नदीवेस शिरोळ">नदीवेस शिरोळ</option>
+                <option value="गावभाग">गावभाग</option>
+                <option value="तालीम गल्ली">तालीम गल्ली</option>
+                <option value="स्टँड रोड">स्टँड रोड</option>
+                <option value="इतर">इतर</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-slate-300 font-bold block mb-1">
+                🏠 पत्ता (Address)
+              </label>
+              <input
+                type="text"
+                value={editAddress}
+                onChange={(e) => setEditAddress(e.target.value)}
+                placeholder="पत्ता"
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
           </div>
 
           <div>
@@ -559,8 +752,8 @@ export function DonorsPage() {
           {/* Quick Preset Amount Buttons */}
           <div>
             <label className="text-slate-400 text-[11px] block mb-1">त्वरीत निवडा (Presets):</label>
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
-              {[2000, 3000, 4000, 5000, 7000].map((preset) => (
+            <div className="grid grid-cols-5 gap-1.5">
+              {[2000, 3000, 5000, 7000].map((preset) => (
                 <button
                   key={preset}
                   type="button"
@@ -576,11 +769,15 @@ export function DonorsPage() {
               ))}
               <button
                 type="button"
-                onClick={() => setEditAmountValue('')}
-                className={`py-1.5 px-1 rounded-lg text-[11px] font-bold transition-all border ${
-                  ![2000, 3000, 4000, 5000, 7000].includes(Number(editAmountValue))
-                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
-                    : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
+                onClick={() => {
+                  if ([2000, 3000, 5000, 7000].includes(Number(editAmountValue))) {
+                    setEditAmountValue('');
+                  }
+                }}
+                className={`py-1.5 px-1 rounded-lg text-xs font-extrabold transition-all border ${
+                  ![2000, 3000, 5000, 7000].includes(Number(editAmountValue)) && editAmountValue !== ''
+                    ? 'bg-amber-500 text-slate-950 border-amber-400 shadow'
+                    : 'bg-slate-950 text-slate-300 border-slate-800 hover:bg-slate-800'
                 }`}
               >
                 सानुकूल
@@ -601,7 +798,7 @@ export function DonorsPage() {
               disabled={isSavingEdit}
               className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl shadow transition"
             >
-              {isSavingEdit ? 'जतन होत आहे...' : 'रक्कम जतन करा (Save)'}
+              {isSavingEdit ? 'जतन होत आहे...' : 'माहिती जतन करा (Save)'}
             </button>
           </div>
         </form>
@@ -629,9 +826,40 @@ export function DonorsPage() {
                   type="number"
                   value={bulkFixedAmount}
                   onChange={(e) => setBulkFixedAmount(e.target.value)}
-                  placeholder="500"
+                  placeholder="2000"
                   className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-8 pr-3 py-2 text-white font-extrabold focus:outline-none focus:border-amber-500 text-base"
                 />
+              </div>
+              <div className="flex flex-wrap gap-1 mt-2">
+                {[2000, 3000, 5000, 7000].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setBulkFixedAmount(preset)}
+                    className={`py-1 px-2 rounded text-[11px] font-bold border transition ${
+                      Number(bulkFixedAmount) === preset
+                        ? 'bg-amber-500 text-slate-950 border-amber-400'
+                        : 'bg-slate-900 text-slate-400 border-slate-700 hover:bg-slate-800'
+                    }`}
+                  >
+                    ₹{preset}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if ([2000, 3000, 5000, 7000].includes(Number(bulkFixedAmount))) {
+                      setBulkFixedAmount('');
+                    }
+                  }}
+                  className={`py-1 px-2 rounded text-[11px] font-bold border transition ${
+                    ![2000, 3000, 5000, 7000].includes(Number(bulkFixedAmount)) && bulkFixedAmount !== ''
+                      ? 'bg-amber-500 text-slate-950 border-amber-400'
+                      : 'bg-slate-900 text-slate-400 border-slate-700 hover:bg-slate-800'
+                  }`}
+                >
+                  सानुकूल
+                </button>
               </div>
             </div>
 
@@ -861,9 +1089,40 @@ export function DonorsPage() {
               type="number"
               value={singleAmount}
               onChange={(e) => setSingleAmount(e.target.value)}
-              placeholder="500"
+              placeholder="2000"
               className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-amber-500 font-extrabold"
             />
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {[2000, 3000, 5000, 7000].map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => setSingleAmount(preset)}
+                  className={`py-1 px-2.5 rounded-lg text-xs font-bold border transition ${
+                    Number(singleAmount) === preset
+                      ? 'bg-amber-500 text-slate-950 border-amber-400 shadow'
+                      : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
+                  }`}
+                >
+                  ₹{preset}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  if ([2000, 3000, 5000, 7000].includes(Number(singleAmount))) {
+                    setSingleAmount('');
+                  }
+                }}
+                className={`py-1 px-2.5 rounded-lg text-xs font-bold border transition ${
+                  ![2000, 3000, 5000, 7000].includes(Number(singleAmount)) && singleAmount !== ''
+                    ? 'bg-amber-500 text-slate-950 border-amber-400 shadow'
+                    : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
+                }`}
+              >
+                सानुकूल
+              </button>
+            </div>
           </div>
 
           <div>

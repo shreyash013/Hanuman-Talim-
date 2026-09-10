@@ -60,6 +60,8 @@ router.get('/donors/search', donorController.searchDonors);
 router.get('/donors/:id', donorController.getDonorById);
 router.post('/donors', donorController.createDonor);
 router.put('/donors/:id', donorController.updateDonor);
+router.delete('/donors/bulk', donorController.deleteMultipleDonors);
+router.delete('/donors/:id', donorController.deleteDonor);
 router.get('/receipts', receiptController.getAllReceipts);
 router.get('/receipts/:id', receiptController.getReceiptById);
 router.get('/receipts/number/:receiptNumber', receiptController.getReceiptByNumber);

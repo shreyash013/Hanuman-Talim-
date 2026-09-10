@@ -23,7 +23,7 @@ import {
 export function PublicDonationPage() {
   const [mandalInfo, setMandalInfo] = useState(null);
   const [events, setEvents] = useState([]);
-  const [amount, setAmount] = useState(501);
+  const [amount, setAmount] = useState(2000);
   const [name, setName] = useState('');
   const [mobile, setMobile] = useState('');
   const [purpose, setPurpose] = useState('गणेशोत्सव वर्गणी / देणगी');
@@ -111,7 +111,7 @@ export function PublicDonationPage() {
     }
   };
 
-  const presetAmounts = [101, 251, 501, 1001, 2100, 5001];
+  const presetAmounts = [2000, 3000, 5000, 7000];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-950 via-orange-950 to-slate-950 text-slate-100 p-4 sm:p-6 lg:p-8 font-sans">
@@ -153,21 +153,36 @@ export function PublicDonationPage() {
             {/* Quick Amount Chips */}
             <div className="space-y-1.5 text-left">
               <label className="text-xs font-bold text-slate-400">रक्कम निवडा:</label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-5 gap-1.5">
                 {presetAmounts.map((amt) => (
                   <button
                     key={amt}
                     type="button"
                     onClick={() => setAmount(amt)}
-                    className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all ${
-                      amount === amt
+                    className={`py-2 px-1 rounded-xl text-xs font-bold transition-all ${
+                      Number(amount) === amt
                         ? 'bg-amber-500 text-white shadow-md ring-2 ring-amber-300'
                         : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                     }`}
                   >
-                    ₹ {amt}
+                    ₹{amt}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (presetAmounts.includes(Number(amount))) {
+                      setAmount('');
+                    }
+                  }}
+                  className={`py-2 px-1 rounded-xl text-xs font-bold transition-all ${
+                    !presetAmounts.includes(Number(amount)) && amount !== ''
+                      ? 'bg-amber-500 text-white shadow-md ring-2 ring-amber-300'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  सानुकूल
+                </button>
               </div>
             </div>
 

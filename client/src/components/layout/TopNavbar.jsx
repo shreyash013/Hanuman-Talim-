@@ -62,10 +62,10 @@ export function TopNavbar({ onOpenMobileMenu }) {
         {/* AI Assistant Button */}
         <button
           onClick={() => setShowAiModal(true)}
-          className="flex items-center space-x-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl font-bold text-xs shadow-md transition"
+          className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 rounded-xl font-black text-xs shadow-glow-amber transition-all active:scale-95 border border-amber-300/40"
           title="AI Financial Assistant"
         >
-          <Bot className="w-4 h-4" />
+          <Bot className="w-4 h-4 text-slate-950" />
           <span className="hidden sm:inline">AI Assistant</span>
         </button>
 

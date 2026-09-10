@@ -97,16 +97,55 @@ export async function createDonor(req, res) {
 export async function updateDonor(req, res) {
   try {
     const { id } = req.params;
-    const { name, mobile, email = '', address = '', area = '', notes = '' } = req.body;
+    const { name, mobile, email = '', address = '', area = '', notes = '', target_amount } = req.body;
     const { data: donor, error } = await db.from('donors').select('*').eq('id', id).maybeSingle();
     throwIfError(error);
     if (!donor) return res.status(404).json({ success: false, message: 'देणगीदार सापडला नाही.' });
 
-    const { data: updated, error: updateError } = await db.from('donors').update({ name: name?.trim() || donor.name, mobile: mobile?.trim() || donor.mobile, email: email.trim(), address: address.trim(), area: area.trim(), notes: notes.trim() }).eq('id', id).select('*').single();
+    const updatePayload = {
+      name: name?.trim() || donor.name,
+      mobile: mobile?.trim() || donor.mobile,
+      email: email.trim(),
+      address: address.trim(),
+      area: area.trim(),
+      notes: notes.trim()
+    };
+    if (target_amount !== undefined) {
+      updatePayload.target_amount = Number(target_amount);
+    }
+
+    const { data: updated, error: updateError } = await db.from('donors').update(updatePayload).eq('id', id).select('*').single();
     throwIfError(updateError);
     return res.json({ success: true, message: 'माहिती अद्ययावत केली / Donor updated successfully', data: updated });
   } catch (err) {
     console.error('updateDonor error:', err);
     return res.status(500).json({ success: false, message: 'अद्ययावत करताना त्रुटी' });
+  }
+}
+
+export async function deleteDonor(req, res) {
+  try {
+    const { id } = req.params;
+    const { error } = await db.from('donors').delete().eq('id', id);
+    throwIfError(error);
+    return res.json({ success: true, message: 'देणगीदार यशस्वीरित्या हटवला / Donor deleted successfully' });
+  } catch (err) {
+    console.error('deleteDonor error:', err);
+    return res.status(500).json({ success: false, message: 'देणगीदार हटवताना त्रुटी' });
+  }
+}
+
+export async function deleteMultipleDonors(req, res) {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, message: 'हटवण्यासाठी किमान एक देणगीदार निवडा.' });
+    }
+    const { error } = await db.from('donors').delete().in('id', ids);
+    throwIfError(error);
+    return res.json({ success: true, message: `${ids.length} देणगीदार यशस्वीरित्या हटवले / Selected donors deleted successfully` });
+  } catch (err) {
+    console.error('deleteMultipleDonors error:', err);
+    return res.status(500).json({ success: false, message: 'देणगीदार हटवताना त्रुटी' });
   }
 }

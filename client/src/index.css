@@ -5,11 +5,11 @@
 @layer base {
   body, html, input, button, select, textarea {
     font-family: 'Tiro Devanagari Marathi', 'Noto Sans Devanagari', 'Inter', serif;
-    @apply antialiased overflow-x-hidden;
+    @apply antialiased overflow-x-hidden text-slate-900 dark:text-slate-100 bg-slate-50 dark:bg-slate-950 transition-colors duration-200;
   }
 }
 
-/* Custom Festive Scrollbars */
+/* Custom Festive & Modern Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -20,12 +20,63 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #f97316;
+  background: linear-gradient(to bottom, #f59e0b, #ea580c);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #ea580c;
+  background: linear-gradient(to bottom, #d97706, #c2410c);
+}
+
+/* Glassmorphism Classes */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.dark .glass-panel {
+  background: rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.glass-card {
+  background: rgba(30, 41, 59, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(245, 158, 11, 0.15);
+}
+
+/* Custom Glow Effects */
+.shadow-glow-amber {
+  box-shadow: 0 0 20px -3px rgba(245, 158, 11, 0.35);
+}
+
+.shadow-glow-emerald {
+  box-shadow: 0 0 20px -3px rgba(16, 185, 129, 0.35);
+}
+
+.shadow-glow-orange {
+  box-shadow: 0 0 20px -3px rgba(234, 88, 12, 0.35);
+}
+
+/* Text Gradients */
+.text-gradient-gold {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-festive {
+  background: linear-gradient(135deg, #f97316 0%, #f59e0b 50%, #eab308 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Decorative Rangoli Pattern */
+.bg-mandala {
+  background-image: radial-gradient(circle at center, rgba(245, 158, 11, 0.08) 0, transparent 70%);
 }
 
 /* Print Specific Rules */
@@ -55,22 +106,4 @@
     box-shadow: none !important;
     border: none !important;
   }
-}
-
-/* Glassmorphism Classes */
-.glass-panel {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-
-.dark .glass-panel {
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-
-/* Decorative Rangoli Pattern */
-.bg-mandala {
-  background-image: radial-gradient(circle at center, rgba(234, 88, 12, 0.05) 0, transparent 70%);
 }

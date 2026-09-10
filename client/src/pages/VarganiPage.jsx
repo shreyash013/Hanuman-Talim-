@@ -43,7 +43,7 @@ export function VarganiPage() {
   const [mobile, setMobile] = useState('');
   const [address, setAddress] = useState('');
   const [area, setArea] = useState('नदीवेस शिरोळ');
-  const [amount, setAmount] = useState(501);
+  const [amount, setAmount] = useState(2000);
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [purpose, setPurpose] = useState('श्री गणेशोत्सव वर्गणी');
   const [notes, setNotes] = useState('');
@@ -60,7 +60,7 @@ export function VarganiPage() {
   const [generatedReceipt, setGeneratedReceipt] = useState(null);
 
   // Quick Amounts
-  const quickAmounts = [101, 251, 501, 1001, 2001, 5001, 11000];
+  const quickAmounts = [2000, 3000, 5000, 7000];
 
   // Areas list
   const pethAreas = ['नदीवेस शिरोळ', 'गावभाग', 'तालीम गल्ली', 'स्टँड रोड', 'बाजार पेठ', 'इतर'];
@@ -196,7 +196,7 @@ export function VarganiPage() {
     setMobile('');
     setAddress('');
     setArea('नदीवेस शिरोळ');
-    setAmount(501);
+    setAmount(2000);
     setNotes('');
     setDonorHistory(null);
   };
@@ -204,14 +204,14 @@ export function VarganiPage() {
   return (
     <div className="space-y-6">
       {/* Header Banner & Offline Mode Toggle */}
-      <div className="bg-gradient-to-r from-amber-500/20 via-orange-500/10 to-slate-900 border border-amber-500/30 rounded-3xl p-6 relative overflow-hidden">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-gradient-to-r from-amber-500/25 via-orange-500/15 to-slate-900/90 border border-amber-500/40 rounded-3xl p-6 relative overflow-hidden shadow-lg backdrop-blur-md">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
           <div>
-            <div className="flex items-center space-x-2 text-amber-400 font-bold text-xs mb-1">
-              <Sparkles className="w-4 h-4" />
+            <div className="flex items-center space-x-2 text-amber-400 font-extrabold text-xs mb-1">
+              <Sparkles className="w-4 h-4 text-amber-400" />
               <span>जलद वर्गणी संकलन (Fast Vargani Collection)</span>
             </div>
-            <h1 className="text-2xl font-black text-white">प्रगत वर्गणी सिस्टीम (Advanced Vargani System) ⭐</h1>
+            <h1 className="text-2xl font-black text-white font-marathi tracking-tight">प्रगत वर्गणी सिस्टीम (Advanced Vargani System) ⭐</h1>
             <p className="text-xs text-slate-300 mt-1">
               क्यूआर स्कॅनर, देणगीदार शोध, मागील वर्षाचा इतिहास, ऑफलाईन मोड व व्हॉट्सअ‍ॅप पावती.
             </p>
@@ -219,7 +219,7 @@ export function VarganiPage() {
           <div className="flex items-center space-x-3">
             <button
               onClick={() => setIsOffline(!isOffline)}
-              className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition border ${
+              className={`flex items-center space-x-2 px-4 py-2 rounded-2xl text-xs font-black transition border shadow-sm ${
                 isOffline
                   ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
                   : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
@@ -236,15 +236,15 @@ export function VarganiPage() {
         {/* Main Vargani Entry Form */}
         <div className="lg:col-span-2 space-y-6">
           {/* Donor Search Bar & QR Scanner Trigger */}
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-3">
+          <div className="bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-3xl p-5 space-y-3 shadow-md">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-300 flex items-center space-x-1.5">
+              <label className="text-xs font-black text-slate-200 flex items-center space-x-1.5">
                 <Search className="w-4 h-4 text-amber-400" />
                 <span>देणगीदार शोधा (नावाने किंवा मोबाईलने):</span>
               </label>
               <button
                 onClick={handleSimulateQrScan}
-                className="flex items-center space-x-1.5 px-3 py-1 bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 rounded-xl text-xs font-bold border border-amber-500/30 transition"
+                className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 rounded-xl text-xs font-bold border border-amber-500/40 transition"
               >
                 <QrCode className="w-3.5 h-3.5" />
                 <span>QR स्कॅन करा</span>
@@ -257,7 +257,7 @@ export function VarganiPage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="नाव किंवा मोबाईल टाका..."
-                className="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                className="w-full bg-slate-950/90 border border-slate-700/80 rounded-2xl px-4 py-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
               />
               {searchResults.length > 0 && (
                 <div className="absolute top-full left-0 right-0 mt-2 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl z-30 overflow-hidden divide-y divide-slate-800 max-h-60 overflow-y-auto">
@@ -280,7 +280,7 @@ export function VarganiPage() {
           </div>
 
           {/* Form Card */}
-          <form onSubmit={handleSubmitVargani} className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-5">
+          <form onSubmit={handleSubmitVargani} className="bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-3xl p-6 space-y-5 shadow-xl">
             {/* Duplicate donor warning */}
             {duplicateWarning && (
               <div className="bg-amber-500/10 border border-amber-500/40 p-3.5 rounded-2xl flex items-center justify-between text-xs text-amber-300">
@@ -372,6 +372,21 @@ export function VarganiPage() {
                     ₹{q}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (quickAmounts.includes(Number(amount))) {
+                      setAmount('');
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                    !quickAmounts.includes(Number(amount)) && amount !== ''
+                      ? 'bg-amber-500 text-slate-950 shadow-md'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                  }`}
+                >
+                  सानुकूल (Custom)
+                </button>
               </div>
             </div>
 

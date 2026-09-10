@@ -9,7 +9,7 @@ export function AppLayout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-amber-50/30 dark:bg-slate-950 font-sans">
+    <div className="flex h-screen overflow-hidden bg-slate-100 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100">
       {/* Desktop Sidebar */}
       <div className="hidden lg:block h-full flex-shrink-0">
         <Sidebar />

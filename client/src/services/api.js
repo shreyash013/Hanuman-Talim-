@@ -996,12 +996,53 @@ export async function request(endpoint, options = {}) {
     }
 
     if (options.method === 'DELETE') {
-      const parts = endpoint.split('/');
-      const donorId = parts[parts.length - 1];
-      donorsList = donorsList.filter(d => String(d.id) !== String(donorId));
+      let deletedIds = [];
+      let deletedNames = getLocalStore('deleted_donor_names', []);
+
+      let bodyData = {};
+      try {
+        bodyData = JSON.parse(options.body || '{}');
+      } catch (e) {}
+
+      if (endpoint.includes('/donors/bulk')) {
+        deletedIds = (bodyData.ids || []).map(String);
+        if (Array.isArray(bodyData.names)) {
+          bodyData.names.forEach(n => {
+            if (n) deletedNames.push(String(n).trim().toLowerCase());
+          });
+        }
+      } else {
+        const parts = endpoint.split('/');
+        const donorId = parts[parts.length - 1];
+        if (donorId && donorId !== 'donors' && donorId !== 'bulk') {
+          deletedIds = [String(donorId)];
+        }
+      }
+
+      // Collect names of deleted donors from donorsList AND incomeList
+      const namesFromDonors = donorsList.filter(d => deletedIds.includes(String(d.id))).map(d => (d.name || '').trim().toLowerCase());
+      const namesFromIncome = incomeList.filter(inc => deletedIds.includes(String(inc.id)) || deletedIds.includes(String(inc.donor_id))).map(inc => (inc.donor_name || '').trim().toLowerCase());
+
+      const namesToDelete = Array.from(new Set([...namesFromDonors, ...namesFromIncome]));
+      deletedNames = Array.from(new Set([...deletedNames, ...namesToDelete, ...deletedIds]));
+      setLocalStore('deleted_donor_names', deletedNames);
+
+      donorsList = donorsList.filter(d =>
+        !deletedIds.includes(String(d.id)) &&
+        !deletedNames.includes((d.name || '').trim().toLowerCase())
+      );
       setLocalStore('donors', donorsList);
+
       return { success: true, message: 'देणगीदार यशस्वीरित्या हटवला!' };
     }
+
+    const deletedNames = getLocalStore('deleted_donor_names', []).map(n => String(n).trim().toLowerCase());
+
+    // Filter out deleted donors from donorsList
+    donorsList = donorsList.filter(d =>
+      !deletedNames.includes(String(d.id)) &&
+      !deletedNames.includes((d.name || '').trim().toLowerCase())
+    );
 
     // Process & calculate paid amount by matching name/phone with income transactions
     const processedDonors = donorsList.map(d => {
@@ -1041,9 +1082,14 @@ export async function request(endpoint, options = {}) {
       };
     });
 
-    // Check income records that are not in donorsList
+    // Check income records that are not in donorsList and NOT deleted
     incomeList.forEach(inc => {
-      if (inc.donor_name && !processedDonors.some(d => d.name.trim().toLowerCase() === inc.donor_name.trim().toLowerCase() || (inc.mobile && d.mobile && d.mobile.replace(/\D/g, '') === inc.mobile.replace(/\D/g, '')))) {
+      if (inc.is_deleted) return;
+      const incNameClean = (inc.donor_name || '').trim().toLowerCase();
+      if (!incNameClean) return;
+      if (deletedNames.includes(incNameClean) || deletedNames.includes(String(inc.id))) return;
+
+      if (!processedDonors.some(d => d.name.trim().toLowerCase() === incNameClean || (inc.mobile && d.mobile && d.mobile.replace(/\D/g, '') === inc.mobile.replace(/\D/g, '')))) {
         const paid_amount = Number(inc.amount) || 0;
         processedDonors.push({
           id: inc.id || Date.now(),
@@ -1224,8 +1270,12 @@ export const api = {
     });
   },
 
-  delete: (endpoint) => {
-    return request(endpoint, { method: 'DELETE' });
+  delete: (endpoint, body) => {
+    const isFormData = body instanceof FormData;
+    return request(endpoint, {
+      method: 'DELETE',
+      body: body ? (isFormData ? body : JSON.stringify(body)) : undefined
+    });
   }
 };
 

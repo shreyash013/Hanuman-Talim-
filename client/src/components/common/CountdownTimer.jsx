@@ -3,7 +3,7 @@ import { useLanguage } from '../../context/LanguageContext';
 import { calculateCountdown } from '../../utils/dateUtils';
 import { Sparkles, Calendar } from 'lucide-react';
 
-export function CountdownTimer({ targetDate }) {
+export function CountdownTimer({ targetDate, compact = false }) {
   const { t } = useLanguage();
   const [timeLeft, setTimeLeft] = useState(() => calculateCountdown(targetDate));
 
@@ -33,6 +33,26 @@ export function CountdownTimer({ targetDate }) {
     { label: t('dashboard.minutes', 'मिनिटे'), value: timeLeft.minutes },
     { label: t('dashboard.seconds', 'सेकंद'), value: timeLeft.seconds }
   ];
+
+  if (compact) {
+    return (
+      <div className="grid grid-cols-4 gap-2 sm:gap-3">
+        {timeBlocks.map((b, idx) => (
+          <div
+            key={idx}
+            className="flex flex-col items-center justify-center bg-black/30 backdrop-blur-md rounded-2xl p-2.5 min-w-[60px] sm:min-w-[70px] border border-white/20 shadow-inner"
+          >
+            <span className="text-xl sm:text-2xl font-black tracking-tight text-white font-mono drop-shadow">
+              {String(b.value).padStart(2, '0')}
+            </span>
+            <span className="text-[10px] sm:text-xs font-bold text-amber-200/90 mt-0.5">
+              {b.label}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-orange-600 via-amber-600 to-orange-700 text-white p-5 shadow-festive border border-amber-400/30">

@@ -42,7 +42,10 @@ export function Sidebar({ onCloseMobile }) {
   const navItems = [
     { to: '/dashboard', label: t('nav.dashboard', 'डॅशबोर्ड'), icon: LayoutDashboard, exact: true },
     ...(isPrivileged ? [
-      { to: '/vargani', label: t('nav.vargani', 'वर्गणी व्यवस्थापन'), icon: Receipt, highlight: true },
+      { to: '/vargani', label: t('nav.vargani', 'वर्गणी व्यवस्थापन'), icon: Receipt, highlight: true }
+    ] : []),
+    { to: '/donors', label: t('nav.donors', 'देणगीदार यादी (Donors)'), icon: Users, highlight: true },
+    ...(isPrivileged ? [
       { to: '/income', label: t('nav.income', 'जमा रक्कम'), icon: HandCoins },
       { to: '/expenses', label: t('nav.expenses', 'खर्च व्यवस्थापन'), icon: CreditCard }
     ] : []),
@@ -53,9 +56,8 @@ export function Sidebar({ onCloseMobile }) {
       { to: '/loans', label: 'उधारी व्यवस्थापन (Loans)', icon: Landmark }
     ] : []),
     { to: '/digital-payments', label: t('nav.digitalPayments', 'UPI व पेमेंट QR'), icon: QrCode },
-    { to: '/donors', label: t('nav.donors', 'देणगीदार CRM'), icon: Users },
     { to: '/members', label: t('nav.members', 'मंडळ कार्यकर्ते'), icon: UserCheck },
-    { to: '/festival-planner', label: 'उत्सव प्लॅनर (Festival Planner)', icon: CalendarDays, highlight: true },
+    { to: '/festival-planner', label: 'उत्सव प्लॅनर (Festival Planner)', icon: CalendarDays },
     { to: '/volunteers', label: 'कार्यकर्ते लीडरबोर्ड (Volunteers)', icon: Award },
     { to: '/events', label: t('nav.events', 'उत्सव कार्यक्रम'), icon: CalendarDays },
     ...(isPrivileged ? [{ to: '/reports', label: t('nav.reports', 'आर्थिक अहवाल'), icon: FileSpreadsheet }] : []),
@@ -69,15 +71,16 @@ export function Sidebar({ onCloseMobile }) {
   ];
 
   return (
-    <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col h-full select-none shadow-sm">
+    <aside className="w-64 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-r border-slate-200/80 dark:border-slate-800 flex flex-col h-full select-none shadow-md">
       {/* Brand Header */}
-      <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3 bg-amber-500/5 dark:bg-amber-500/10">
+      <div className="p-4 border-b border-slate-200/80 dark:border-slate-800 flex items-center gap-3 bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-transparent">
         <GanpatiLogo size="md" />
         <div className="overflow-hidden">
-          <h2 className="font-extrabold text-sm text-slate-900 dark:text-white truncate font-marathi">
+          <h2 className="font-black text-sm text-slate-900 dark:text-white truncate font-marathi tracking-tight">
             {mandal?.name_mr || 'श्री हनुमान तालीम मंडळ शिरोळ'}
           </h2>
-          <p className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold tracking-wider uppercase">
+          <p className="text-[10px] text-amber-600 dark:text-amber-400 font-extrabold tracking-wider uppercase flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
             {mandal?.festival_year ? `उत्सव ${mandal.festival_year}` : 'व्यवस्थापन प्रणाली'}
           </p>
         </div>
@@ -85,12 +88,12 @@ export function Sidebar({ onCloseMobile }) {
 
       {/* User Role Card */}
       {user && (
-        <div className="mx-3 mt-3 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between">
+        <div className="mx-3 mt-3 p-2.5 rounded-2xl bg-slate-100/80 dark:bg-slate-800/90 border border-amber-500/20 dark:border-amber-500/30 flex items-center justify-between shadow-sm">
           <div className="overflow-hidden pr-2">
-            <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+            <p className="text-xs font-black text-slate-900 dark:text-slate-100 truncate">
               {user.name}
             </p>
-            <span className="inline-block mt-0.5 text-[10px] font-semibold px-2 py-0.2 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300">
+            <span className="inline-block mt-0.5 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30">
               {t(`roles.${user.role}`, user.role)}
             </span>
           </div>
@@ -107,12 +110,12 @@ export function Sidebar({ onCloseMobile }) {
               to={item.to}
               onClick={onCloseMobile}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-150 ${
+                `flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all duration-200 ${
                   isActive
-                    ? 'bg-gradient-to-r from-orange-600 to-amber-600 text-white shadow-festive'
+                    ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-slate-950 shadow-glow-amber font-extrabold scale-[1.01]'
                     : item.highlight
-                    ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50'
-                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white'
+                    ? 'bg-amber-500/10 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/20 hover:bg-amber-500/20 dark:hover:bg-amber-500/30'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white'
                 }`
               }
             >
@@ -124,10 +127,10 @@ export function Sidebar({ onCloseMobile }) {
       </div>
 
       {/* Logout Footer */}
-      <div className="p-3 border-t border-slate-100 dark:border-slate-800">
+      <div className="p-3 border-t border-slate-200/80 dark:border-slate-800">
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors"
+          className="w-full flex items-center gap-2 px-3.5 py-2.5 rounded-2xl text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition-colors border border-rose-500/10"
         >
           <LogOut className="w-4 h-4" />
           <span>{t('nav.logout', 'बाहेर पडा')}</span>
