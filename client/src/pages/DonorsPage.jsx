@@ -379,7 +379,16 @@ export function DonorsPage() {
             </thead>
             <tbody className="divide-y divide-slate-800/60">
               {filteredDonors.map((d) => (
-                <tr key={d.id} className="hover:bg-slate-800/40 transition">
+                <tr
+                  key={d.id}
+                  className={`transition-all ${
+                    d.status === 'paid'
+                      ? 'bg-emerald-950/25 hover:bg-emerald-950/40 border-l-4 border-l-emerald-500'
+                      : d.status === 'partial'
+                      ? 'bg-amber-950/25 hover:bg-amber-950/40 border-l-4 border-l-amber-500'
+                      : 'hover:bg-slate-800/40 border-l-4 border-l-transparent'
+                  }`}
+                >
                   <td className="p-4 font-bold text-white">
                     {d.name}
                     {d.address && <span className="block text-[11px] font-normal text-slate-400">{d.address}</span>}
