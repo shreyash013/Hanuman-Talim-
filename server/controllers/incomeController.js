@@ -74,7 +74,7 @@ export async function createIncome(req, res) {
 
     const { data: mandal, error: mandalError } = await db.from('mandal_settings').select('*').limit(1).maybeSingle();
     throwIfError(mandalError);
-    const settings = mandal || { receipt_prefix: 'YUVA-2026-', festival_year: 2026 };
+    const settings = mandal || { receipt_prefix: 'HANUMAN-2026-', festival_year: 2026 };
 
     finalDonorId = donor_id || null;
     if (!finalDonorId && mobile.trim()) {
@@ -122,7 +122,7 @@ export async function createIncome(req, res) {
     throwIfError(countError);
     const nextNum = (count || 0) + 1;
     const formattedNum = String(nextNum).padStart(6, '0');
-    const receiptNumber = `${settings.receipt_prefix || 'YUVA-2026-'}${formattedNum}`;
+    const receiptNumber = `${settings.receipt_prefix || 'HANUMAN-2026-'}${formattedNum}`;
     const transactionId = `TXN-${settings.festival_year || 2026}-${formattedNum}`;
     const attachmentUrl = req.file ? await uploadFileToSupabase(req.file, 'income') : '';
     const collectorName = req.user?.name || 'स्वयंसेवक';

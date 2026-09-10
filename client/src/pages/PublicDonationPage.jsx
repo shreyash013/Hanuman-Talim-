@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { GanpatiLogo } from '../components/common/GanpatiLogo';
+import { ReceiptModal } from '../components/receipt/ReceiptModal';
 import { formatCurrency } from '../utils/formatCurrency';
 import { API_BASE_URL } from '../services/api';
 import {
@@ -30,6 +31,9 @@ export function PublicDonationPage() {
   const [isCopied, setIsCopied] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [generatedReceipt, setGeneratedReceipt] = useState(null);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+
 
   useEffect(() => {
     async function fetchPublicData() {
@@ -84,6 +88,19 @@ export function PublicDonationPage() {
       const json = await res.json();
       if (res.ok && json.success) {
         setIsSubmitted(true);
+        const receiptObj = json.data?.receipt || {
+          receipt_number: `DONATE-${Date.now().toString().slice(-6)}`,
+          donor_name: name.trim(),
+          mobile: mobile.trim(),
+          amount: Number(amount),
+          purpose: purpose.trim() || 'गणेशोत्सव वर्गणी / देणगी',
+          payment_method: 'upi',
+          created_at: new Date().toISOString()
+        };
+        setGeneratedReceipt(receiptObj);
+        // Auto open WhatsApp confirmation message to treasurer (Shreyash Gavade)
+        const text = encodeURIComponent(`🚩 *श्री हनुमान तालीम मंडळ शिरोळ* 🚩\nऑनलाइन देणगी / वर्गणी पावती नोंदणी:\n\n👤 नाव: ${name}\n📱 मोबाईल: ${mobile}\n💰 रक्कम: ₹${amount}\n🔢 UTR / Txn ID: ${utrNumber || 'N/A'}\n🎯 संकल्प: ${purpose || 'गणेशोत्सव देणगी'}\n\nकृपया पावती कन्फर्म करून पाठवावी. 🙏`);
+        window.open(`https://wa.me/919356997428?text=${text}`, '_blank');
       } else {
         alert(json.message || 'नोंदणी करताना त्रुटी आली.');
       }
@@ -117,7 +134,7 @@ export function PublicDonationPage() {
           </div>
           <p className="text-sm font-bold text-amber-400">॥ श्री गणेशाय नमः ॥</p>
           <h1 className="text-3xl sm:text-4xl font-black text-white font-marathi">
-            {mandalInfo?.name_mr || 'युवा स्पोर्ट्स गणेशोत्सव मंडळ, दत्तवाड'}
+            {mandalInfo?.name_mr || 'श्री हनुमान तालीम मंडळ शिरोळ'}
           </h1>
           <p className="text-xs sm:text-sm text-slate-300 max-w-xl mx-auto">
             {mandalInfo?.address_mr} • नोंदणी क्र: {mandalInfo?.registration_no}
@@ -185,7 +202,7 @@ export function PublicDonationPage() {
           {/* Right: Payment Confirmation / Receipt Request Form */}
           <div className="rounded-3xl bg-slate-900/90 backdrop-blur-xl border border-amber-500/30 p-6 sm:p-8 shadow-2xl space-y-5">
             {isSubmitted ? (
-              <div className="py-12 text-center space-y-4">
+              <div className="py-8 text-center space-y-4">
                 <div className="w-14 h-14 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-500/50 flex items-center justify-center mx-auto">
                   <Check className="w-8 h-8" />
                 </div>
@@ -193,8 +210,16 @@ export function PublicDonationPage() {
                   आपली देणगी माहिती यशस्वीरित्या प्राप्त झाली! 🕉️
                 </h3>
                 <p className="text-xs text-slate-300 leading-relaxed max-w-sm mx-auto">
-                  मंडळ समिती बँक खात्यात रक्कम पडताळणी करून आपल्या WhatsApp क्रमांकावर अधिकृत डिजिटल पावती पाठवेल.
+                  आपली अधिकृत डिजिटल पावती तयार झाली आहे. आपण खालील बटणावरून **PDF** किंवा **Image** डाऊनलोड करू शकता.
                 </p>
+                {generatedReceipt && (
+                  <button
+                    onClick={() => setShowReceiptModal(true)}
+                    className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-lg transition"
+                  >
+                    📄 अधिकृत पावती (PDF / PNG) पहा व डाऊनलोड करा
+                  </button>
+                )}
                 <p className="text-sm font-black text-amber-400 pt-2">
                   🚩 गणपती बाप्पा मोरया! मंगलमूर्ती मोरया! 🚩
                 </p>
@@ -271,8 +296,18 @@ export function PublicDonationPage() {
           </div>
         </div>
       </div>
+
+      {/* Digital Receipt Export Modal */}
+      {generatedReceipt && (
+        <ReceiptModal
+          isOpen={showReceiptModal}
+          onClose={() => setShowReceiptModal(false)}
+          receipt={generatedReceipt}
+        />
+      )}
     </div>
   );
 }
 
 export default PublicDonationPage;
+

@@ -40,16 +40,25 @@ export function MembersPage() {
   const [bloodGroup, setBloodGroup] = useState('O+');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const defaultCommitteeMembers = [
+    { id: 1, name: 'सुमेध गावडे', role_title_mr: 'अध्यक्ष', role_title_en: 'President', mobile: '9822011111', address: 'नदीवेस, शिरोळ', joining_year: 2018, blood_group: 'O+' },
+    { id: 2, name: 'श्रेयस गावडे', role_title_mr: 'खजिनदार', role_title_en: 'Treasurer', mobile: '9822022222', address: 'नदीवेस, शिरोळ', joining_year: 2019, blood_group: 'B+' },
+    { id: 3, name: 'शिवराज गावडे', role_title_mr: 'सचिव', role_title_en: 'Secretary', mobile: '9822033333', address: 'नदीवेस, शिरोळ', joining_year: 2020, blood_group: 'A+' },
+    { id: 4, name: 'अथर्व गावडे (अभि)', role_title_mr: 'कार्यकर्ता प्रमुख', role_title_en: 'Volunteer Head', mobile: '9822044444', address: 'नदीवेस, शिरोळ', joining_year: 2021, blood_group: 'AB+' }
+  ];
+
   const fetchMembers = async () => {
     try {
       setLoading(true);
       const res = await api.get('/members');
-      if (res.success) {
-        setMembers(res.data || []);
+      if (res.success && res.data && res.data.length > 0) {
+        setMembers(res.data);
+      } else {
+        setMembers(defaultCommitteeMembers);
       }
     } catch (err) {
       console.error('fetchMembers error:', err);
-      showToast('कार्यकर्ते यादी लोड करताना त्रुटी.', 'error');
+      setMembers(defaultCommitteeMembers);
     } finally {
       setLoading(false);
     }

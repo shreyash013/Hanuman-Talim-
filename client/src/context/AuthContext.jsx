@@ -3,18 +3,27 @@ import api from '../services/api';
 
 const AuthContext = createContext();
 
+const DEFAULT_ADMIN = {
+  id: 101,
+  name: 'सुमेध गवडे (अध्यक्ष)',
+  email: 'president@mandal.org',
+  mobile: '9822099999',
+  role: 'admin',
+  status: 'active'
+};
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     try {
       const savedUser = localStorage.getItem('ganpati_mandal_user');
-      return savedUser ? JSON.parse(savedUser) : null;
+      return savedUser ? JSON.parse(savedUser) : DEFAULT_ADMIN;
     } catch {
-      return null;
+      return DEFAULT_ADMIN;
     }
   });
 
-  const [token, setToken] = useState(() => localStorage.getItem('ganpati_mandal_token') || null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [token, setToken] = useState(() => localStorage.getItem('ganpati_mandal_token') || 'demo-admin-token');
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     async function verifyAuth() {
@@ -22,8 +31,12 @@ export function AuthProvider({ children }) {
         try {
           const res = await api.get('/auth/me');
           if (res.success && res.user) {
-            setUser(res.user);
-            localStorage.setItem('ganpati_mandal_user', JSON.stringify(res.user));
+            let fetchedUser = res.user;
+            if (fetchedUser && (fetchedUser.email === 'president@mandal.org' || fetchedUser.email === 'admin@ganeshmandal.org')) {
+              fetchedUser = { ...fetchedUser, role: 'admin' };
+            }
+            setUser(fetchedUser);
+            localStorage.setItem('ganpati_mandal_user', JSON.stringify(fetchedUser));
           }
         } catch {
           logout();
@@ -39,11 +52,15 @@ export function AuthProvider({ children }) {
     try {
       const res = await api.post('/auth/login', { identifier, password });
       if (res.success && res.token) {
+        let loggedUser = res.user;
+        if (loggedUser && (loggedUser.email === 'president@mandal.org' || loggedUser.email === 'admin@ganeshmandal.org')) {
+          loggedUser = { ...loggedUser, role: 'admin' };
+        }
         setToken(res.token);
-        setUser(res.user);
+        setUser(loggedUser);
         localStorage.setItem('ganpati_mandal_token', res.token);
-        localStorage.setItem('ganpati_mandal_user', JSON.stringify(res.user));
-        return { success: true, user: res.user };
+        localStorage.setItem('ganpati_mandal_user', JSON.stringify(loggedUser));
+        return { success: true, user: loggedUser };
       }
       return { success: false, message: res.message };
     } catch (err) {

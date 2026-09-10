@@ -9,6 +9,8 @@ import { downloadCsvReport } from '../utils/exportCsv';
 import { Badge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
 import { ReceiptModal } from '../components/receipt/ReceiptModal';
+import { useMandal } from '../context/MandalContext';
+import { openWhatsAppReceipt } from '../utils/whatsappHelper';
 import {
   HandCoins,
   PlusCircle,
@@ -21,13 +23,15 @@ import {
   FileText,
   CreditCard,
   User,
-  Smartphone
+  Smartphone,
+  MessageCircle
 } from 'lucide-react';
 
 export function IncomePage() {
   const { t, lang } = useLanguage();
   const { isAdmin } = useAuth();
   const { showToast } = useNotification();
+  const { mandal } = useMandal();
 
   const [incomeList, setIncomeList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -116,6 +120,9 @@ export function IncomePage() {
         fetchIncome();
         if (res.data?.receipt) {
           setSelectedReceipt(res.data.receipt);
+          if (mobile && mobile.trim()) {
+            openWhatsAppReceipt(res.data.receipt, mandal, true);
+          }
         }
       }
     } catch (err) {
@@ -232,6 +239,7 @@ export function IncomePage() {
             <option value="">सर्व पेमेंट पद्धती (All Methods)</option>
             <option value="cash">रोख (Cash)</option>
             <option value="upi">UPI</option>
+            <option value="pending_udhar">🚩 उधार / जमा बाकी (Pending Credit)</option>
             <option value="bank_transfer">बँक ट्रान्सफर</option>
             <option value="cheque">धनादेश (Cheque)</option>
           </select>
@@ -300,22 +308,42 @@ export function IncomePage() {
                     <td className="py-3 px-4 text-center">
                       <div className="flex items-center justify-center gap-1.5">
                         {row.receipt_number && (
-                          <button
-                            onClick={async () => {
-                              try {
-                                const r = await api.get(`/receipts/number/${row.receipt_number}`);
-                                if (r.success && r.data?.receipt) {
-                                  setSelectedReceipt(r.data.receipt);
+                          <>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const r = await api.get(`/receipts/number/${row.receipt_number}`);
+                                  if (r.success && r.data?.receipt) {
+                                    setSelectedReceipt(r.data.receipt);
+                                  }
+                                } catch {
+                                  showToast('पावती मिळवता आली नाही.', 'error');
                                 }
-                              } catch {
-                                showToast('पावती मिळवता आली नाही.', 'error');
-                              }
-                            }}
-                            className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 hover:bg-amber-100 transition-colors"
-                            title="पावती पहा / WhatsApp"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                          </button>
+                              }}
+                              className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 hover:bg-amber-100 transition-colors"
+                              title="पावती पहा"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                const receiptObj = {
+                                  receipt_number: row.receipt_number,
+                                  donor_name: row.donor_name,
+                                  mobile: row.mobile,
+                                  amount: row.amount,
+                                  created_at: row.created_at,
+                                  purpose: row.purpose,
+                                  payment_method: row.payment_method
+                                };
+                                openWhatsAppReceipt(receiptObj, mandal, true);
+                              }}
+                              className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 transition-colors"
+                              title="WhatsApp वर पावती पाठवा"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5" />
+                            </button>
+                          </>
                         )}
                         {isAdmin && (
                           <button
@@ -426,16 +454,17 @@ export function IncomePage() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">पेमेंट पद्धत</label>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">पेमेंट पद्धत / स्टेटस</label>
               <select
                 value={incomePaymentMethod}
                 onChange={(e) => setIncomePaymentMethod(e.target.value)}
                 className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold outline-none focus:ring-2 focus:ring-amber-500"
               >
-                <option value="cash">रोख (Cash)</option>
-                <option value="upi">UPI</option>
-                <option value="bank_transfer">बँक ट्रान्सफर (NEFT/IMPS)</option>
-                <option value="cheque">धनादेश (Cheque)</option>
+                <option value="cash">💵 रोख (Cash)</option>
+                <option value="upi">📲 UPI</option>
+                <option value="pending_udhar">🚩 उधार / जमा बाकी (Pending Credit)</option>
+                <option value="bank_transfer">🏛️ बँक ट्रान्सफर (NEFT/IMPS)</option>
+                <option value="cheque">📝 धनादेश (Cheque)</option>
               </select>
             </div>
 

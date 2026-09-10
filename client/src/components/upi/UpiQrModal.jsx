@@ -10,11 +10,11 @@ export function UpiQrModal({ isOpen, onClose, defaultAmount = 0, note = 'श्�
   const { mandal } = useMandal();
   const { t } = useLanguage();
   const { showToast } = useNotification();
-  const [customAmount, setCustomAmount] = useState(defaultAmount || 501);
+  const [customAmount, setCustomAmount] = useState(defaultAmount || 2500);
   const [isCopied, setIsCopied] = useState(false);
 
   const upiId = mandal?.upi_id || 'sarveshkharoshe8-2@okaxis';
-  const upiName = mandal?.upi_name || 'Sarvesh Kharoshe';
+  const upiName = mandal?.upi_name || 'Shreyash Gavade';
 
   // Construct NPCI standard UPI deep-link URI
   const upiUri = customAmount > 0
@@ -28,14 +28,14 @@ export function UpiQrModal({ isOpen, onClose, defaultAmount = 0, note = 'श्�
     setTimeout(() => setIsCopied(false), 2500);
   };
 
-  const presetAmounts = [101, 251, 501, 1001, 2100, 5001];
+  const presetAmounts = [2500, 3000];
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       title="🕉️ अधिकृत UPI QR कोड पेमेंट"
-      subtitle={`${mandal?.name_mr || 'युवा स्पोर्ट्स गणेशोत्सव मंडळ'} बँक खाते`}
+      subtitle={`${mandal?.name_mr || 'श्री हनुमान तालीम मंडळ शिरोळ'} बँक खाते`}
       maxWidth="max-w-md"
     >
       <div className="flex flex-col items-center text-center space-y-4">

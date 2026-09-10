@@ -4,185 +4,176 @@ import { DigitalReceipt } from './DigitalReceipt';
 import { useLanguage } from '../../context/LanguageContext';
 import { useMandal } from '../../context/MandalContext';
 import { useNotification } from '../../context/NotificationContext';
-import { formatDate } from '../../utils/dateUtils';
-import { Share2, Download, Printer, Copy, Check, MessageCircle } from 'lucide-react';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
+import {
+  openWhatsAppReceipt,
+  downloadReceiptImage,
+  downloadReceiptPdf,
+  copyReceiptImageToClipboard,
+  shareReceiptFile
+} from '../../utils/whatsappHelper';
+import {
+  Share2,
+  Download,
+  Printer,
+  Copy,
+  Check,
+  MessageCircle,
+  FileImage,
+  FileText,
+  Sparkles
+} from 'lucide-react';
 
 export function ReceiptModal({ isOpen, onClose, receipt }) {
-  const { t, lang } = useLanguage();
+  const { t } = useLanguage();
   const { mandal } = useMandal();
   const { showToast } = useNotification();
   const receiptRef = useRef(null);
-  const [isExporting, setIsExporting] = useState(false);
-  const [isCopied, setIsCopied] = useState(false);
+
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isExportingImage, setIsExportingImage] = useState(false);
+  const [isCopyingImage, setIsCopyingImage] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
+  const [isCopiedImage, setIsCopiedImage] = useState(false);
 
   if (!receipt) return null;
 
-  const mandalName = mandal?.name_mr || 'युवा स्पोर्ट्स गणेशोत्सव मंडळ, दत्तवाड';
-  const verificationUrl = `${window.location.origin}/verify-receipt/${receipt.receipt_number}`;
-
-  // WhatsApp formatted messages
-  const getWhatsAppMessage = () => {
-    if (lang === 'en') {
-      return `🙏 *Greetings ${receipt.donor_name}*,
-
-Thank you wholeheartedly for your contribution to *${mandal?.name_en || 'Yuva Sports Ganeshotsav Mandal, Dattawad'}*.
-
-🧾 *Receipt No:* ${receipt.receipt_number}
-💰 *Amount:* ₹${Number(receipt.amount).toLocaleString('en-IN')}
-📅 *Date:* ${formatDate(receipt.created_at, 'en')}
-🎯 *Purpose:* ${receipt.purpose || 'Ganpati Festival Contribution'}
-
-🔗 *Verify & View Digital Receipt:*
-${verificationUrl}
-
-🚩 *Ganpati Bappa Morya! Mangalmurti Morya!* 🙏`;
+  const handleShareImageOrPdf = async (format = 'image') => {
+    if (!receiptRef.current) return;
+    try {
+      setIsSharing(true);
+      showToast(`${format === 'pdf' ? 'PDF' : 'इमेज'} तयार होत आहे...`, 'info');
+      const status = await shareReceiptFile(receiptRef.current, receipt, mandal, format);
+      if (status === 'shared') {
+        showToast('पावती यशस्वीरित्या शेअर केली!', 'success');
+      } else {
+        showToast('फाइल डाऊनलोड झाली व WhatsApp उघडले!', 'success');
+      }
+    } catch (err) {
+      console.error('Share error:', err);
+      showToast('शेअर करताना त्रुटी आली.', 'error');
+    } finally {
+      setIsSharing(false);
     }
-
-    if (lang === 'hi') {
-      return `🙏 *नमस्कार ${receipt.donor_name} जी*,
-
-*${mandalName}* गणेशोत्सव के लिए आपके द्वारा दिए गए चंदे/दान के लिए हार्दिक धन्यवाद।
-
-🧾 *रसीद क्र:* ${receipt.receipt_number}
-💰 *राशि:* ₹${Number(receipt.amount).toLocaleString('en-IN')}
-📅 *दिनांक:* ${formatDate(receipt.created_at, 'hi')}
-🎯 *उद्देश्य:* ${receipt.purpose || 'गणेशोत्सव चंदा'}
-
-🔗 *डिजिटल रसीद देखें व सत्यापित करें:*
-${verificationUrl}
-
-🚩 *गणपति बाप्पा मोरया! मंगलमूर्ति मोरया!* 🙏`;
-    }
-
-    // Default Marathi
-    return `🙏 *नमस्कार ${receipt.donor_name}*,
-
-*${mandalName}* गणेशोत्सवासाठी आपण दिलेल्या वर्गणी/देणगीबद्दल मनःपूर्वक धन्यवाद!
-
-🧾 *पावती क्र:* ${receipt.receipt_number}
-💰 *रक्कम:* ₹${Number(receipt.amount).toLocaleString('en-IN')}
-📅 *दिनांक:* ${formatDate(receipt.created_at, 'mr')}
-🎯 *उद्देश:* ${receipt.purpose || 'गणेशोत्सव वर्गणी'}
-
-🔗 *आपली अधिकृत डिजिटल पावती येथे पहा:*
-${verificationUrl}
-
-आपले सहकार्य आमच्यासाठी मोलाचे आहे.
-
-🚩 *गणपती बाप्पा मोरया! मंगलमूर्ती मोरया!* 🙏`;
   };
 
-  const handleWhatsAppShare = () => {
-    const rawMobile = receipt.mobile ? receipt.mobile.replace(/\D/g, '') : '';
-    // Format to 91XXXXXXXXXX if standard 10 digit Indian number
-    const formattedMobile = rawMobile.length === 10 ? `91${rawMobile}` : rawMobile;
-
-    const message = getWhatsAppMessage();
-    const encodedText = encodeURIComponent(message);
-
-    let url = '';
-    if (formattedMobile) {
-      url = `https://wa.me/${formattedMobile}?text=${encodedText}`;
-    } else {
-      url = `https://wa.me/?text=${encodedText}`;
+  const handleDownloadImage = async () => {
+    if (!receiptRef.current) return;
+    try {
+      setIsExportingImage(true);
+      showToast('इमेज (PNG) तयार होत आहे...', 'info');
+      await downloadReceiptImage(receiptRef.current, receipt);
+      showToast('पावती इमेज (PNG) यशस्वीरित्या डाऊनलोड झाली!', 'success');
+    } catch (err) {
+      console.error('Image export error:', err);
+      showToast('इमेज डाऊनलोड करताना त्रुटी आली.', 'error');
+    } finally {
+      setIsExportingImage(false);
     }
-
-    window.open(url, '_blank');
-    showToast('WhatsApp उघडत आहे...', 'success');
   };
 
-  const handleCopyMessage = () => {
-    const message = getWhatsAppMessage();
-    navigator.clipboard.writeText(message);
-    setIsCopied(true);
-    showToast('पावती संदेश क्लिपबोर्डवर कॉपी झाला!', 'success');
-    setTimeout(() => setIsCopied(false), 2500);
+  const handleDownloadPdf = async () => {
+    if (!receiptRef.current) return;
+    try {
+      setIsExportingPdf(true);
+      showToast('PDF तयार होत आहे...', 'info');
+      await downloadReceiptPdf(receiptRef.current, receipt);
+      showToast('पावती PDF यशस्वीरित्या डाऊनलोड झाली!', 'success');
+    } catch (err) {
+      console.error('PDF export error:', err);
+      showToast('PDF डाऊनलोड करताना त्रुटी आली.', 'error');
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
+  const handleCopyImage = async () => {
+    if (!receiptRef.current) return;
+    try {
+      setIsCopyingImage(true);
+      showToast('इमेज कॉपी होत आहे...', 'info');
+      await copyReceiptImageToClipboard(receiptRef.current);
+      setIsCopiedImage(true);
+      showToast('पावती इमेज कॉपी झाली! WhatsApp Web वर Ctrl+V दाबून पेस्ट करा.', 'success');
+      setTimeout(() => setIsCopiedImage(false), 3000);
+    } catch (err) {
+      console.error('Copy image error:', err);
+      showToast('इमेज कॉपी करणे supported नाही. PNG / PDF डाउनलोड वापरा.', 'warning');
+    } finally {
+      setIsCopyingImage(false);
+    }
   };
 
   const handlePrint = () => {
     window.print();
   };
 
-  const handleDownloadPdf = async () => {
-    if (!receiptRef.current) return;
-    try {
-      setIsExporting(true);
-      showToast('PDF तयार होत आहे...', 'info');
-
-      const canvas = await html2canvas(receiptRef.current, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff'
-      });
-
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a5');
-      const imgWidth = 148;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
-      pdf.save(`Receipt_${receipt.receipt_number}.pdf`);
-      showToast('पावती PDF यशस्वीरित्या डाऊनलोड झाली!', 'success');
-    } catch (err) {
-      console.error('PDF export error:', err);
-      showToast('PDF डाऊनलोड करताना त्रुटी आली.', 'error');
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={t('receipt.title', 'डिजिटल वर्गणी पावती')}
+      title={t('receipt.title', 'डिजिटल वर्गणी पावती (Official Receipt)')}
       maxWidth="max-w-3xl"
     >
-      <div className="space-y-6">
+      <div className="space-y-5">
         {/* Action Buttons Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-2xl bg-amber-50 dark:bg-slate-800/60 border border-amber-200 dark:border-slate-700">
-          <div className="flex flex-wrap items-center gap-2">
-            {/* WhatsApp Direct Share Button */}
+        <div className="p-4 rounded-2xl bg-amber-500/10 dark:bg-slate-800/80 border border-amber-500/30 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {/* Primary Mobile Share Button */}
             <button
-              onClick={handleWhatsAppShare}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-sm shadow-md transition-all duration-150 transform hover:-translate-y-0.5"
+              disabled={isSharing}
+              onClick={() => handleShareImageOrPdf('image')}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs sm:text-sm shadow-md transition-all transform hover:-translate-y-0.5 disabled:opacity-50"
             >
               <MessageCircle className="w-4 h-4 fill-current" />
-              {t('receipt.sendOnWhatsApp', 'WhatsApp वर पाठवा')}
+              <span>{isSharing ? 'तयार होत आहे...' : 'WhatsApp वर इमेज पावती पाठवा'}</span>
             </button>
 
-            {/* Download PDF */}
-            <button
-              disabled={isExporting}
-              onClick={handleDownloadPdf}
-              className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm shadow-sm transition-all duration-150"
-            >
-              <Download className="w-4 h-4" />
-              {isExporting ? 'डाऊनलोड...' : t('receipt.downloadPdf', 'PDF डाऊनलोड')}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Copy Image Button */}
+              <button
+                disabled={isCopyingImage}
+                onClick={handleCopyImage}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-600 transition shadow-sm"
+                title="WhatsApp Web वर पेस्ट करण्यासाठी इमेज कॉपी करा"
+              >
+                {isCopiedImage ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4 text-amber-500" />}
+                <span>{isCopiedImage ? 'कॉपी झाली!' : 'इमेज कॉपी करा (Ctrl+V)'}</span>
+              </button>
 
-            {/* Print Button */}
-            <button
-              onClick={handlePrint}
-              className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-800 dark:text-slate-100 font-semibold text-sm transition-colors"
-            >
-              <Printer className="w-4 h-4" />
-              {t('receipt.print', 'प्रिंट')}
-            </button>
+              {/* Download Image PNG */}
+              <button
+                disabled={isExportingImage}
+                onClick={handleDownloadImage}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-sm transition disabled:opacity-50"
+              >
+                <FileImage className="w-4 h-4" />
+                <span>{isExportingImage ? '...' : 'PNG फोटो डाऊनलोड'}</span>
+              </button>
+
+              {/* Download PDF */}
+              <button
+                disabled={isExportingPdf}
+                onClick={handleDownloadPdf}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-800 hover:bg-red-900 text-white font-bold text-xs shadow-sm transition disabled:opacity-50"
+              >
+                <FileText className="w-4 h-4" />
+                <span>{isExportingPdf ? '...' : 'PDF डाऊनलोड'}</span>
+              </button>
+
+              {/* Print Button */}
+              <button
+                onClick={handlePrint}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-800 dark:text-slate-100 font-bold text-xs transition"
+              >
+                <Printer className="w-4 h-4" />
+                <span>प्रिंट</span>
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* Copy WhatsApp Text */}
-            <button
-              onClick={handleCopyMessage}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-colors"
-            >
-              {isCopied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-              {isCopied ? t('receipt.copied', 'कॉपी झाले!') : t('receipt.copyMessage', 'संदेश कॉपी करा')}
-            </button>
+          <div className="flex items-center justify-between text-[11px] text-amber-800 dark:text-amber-300 font-medium pt-1 border-t border-amber-500/20">
+            <span>📱 <strong>मोबाईल:</strong> WhatsApp बटणावर क्लिक करताच इमेज / PDF फाइल डायरेक्ट चॅटवर पाठवता येते.</span>
+            <span className="hidden sm:inline">💻 <strong>डेस्कटॉप:</strong> 'इमेज कॉपी करा' दाबून WhatsApp Web मध्ये direct Ctrl+V (Paste) करा.</span>
           </div>
         </div>
 
@@ -200,3 +191,4 @@ ${verificationUrl}
 }
 
 export default ReceiptModal;
+

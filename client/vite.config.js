@@ -7,11 +7,11 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'https://yuva-sports.onrender.com',
+        target: 'https://hanuman-talim-mandal.onrender.com',
         changeOrigin: true,
       },
       '/uploads': {
-        target: 'https://yuva-sports.onrender.com',
+        target: 'https://hanuman-talim-mandal.onrender.com',
         changeOrigin: true,
       }
     }

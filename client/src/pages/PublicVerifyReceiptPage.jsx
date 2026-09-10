@@ -4,7 +4,7 @@ import { formatCurrency } from '../utils/formatCurrency';
 import { formatDate } from '../utils/dateUtils';
 import { GanpatiLogo } from '../components/common/GanpatiLogo';
 import { ReceiptModal } from '../components/receipt/ReceiptModal';
-import { API_BASE_URL } from '../services/api';
+import api, { API_BASE_URL } from '../services/api';
 import {
   CheckCircle2,
   XCircle,
@@ -35,10 +35,9 @@ export function PublicVerifyReceiptPage() {
       setError('');
       setData(null);
 
-      const res = await fetch(`${API_BASE_URL}/public/verify-receipt/${encodeURIComponent(codeToVerify.trim())}`);
-      const json = await res.json();
+      const json = await api.get(`/public/verify-receipt/${encodeURIComponent(codeToVerify.trim())}`);
 
-      if (res.ok && json.valid && json.data) {
+      if (json.valid && json.data) {
         setData(json.data);
       } else {
         setError(json.message || 'ही पावती अवैध आहे किंवा सिस्टीममध्ये नोंद आढळली नाही.');
@@ -193,7 +192,7 @@ export function PublicVerifyReceiptPage() {
                   className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold text-xs shadow-lg transition-all"
                 >
                   <FileText className="w-4 h-4" />
-                  <span>📄 अधिकृत डिजिटल पावती पहा व PDF डाऊनलोड करा</span>
+                  <span>📄 अधिकृत डिजिटल पावती पहा (PDF / PNG डाऊनलोड करा)</span>
                 </button>
 
                 <button

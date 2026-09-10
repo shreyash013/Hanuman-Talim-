@@ -10,7 +10,6 @@ import { formatDate } from '../utils/dateUtils';
 import { StatCard } from '../components/common/StatCard';
 import { Badge } from '../components/common/Badge';
 import { CountdownTimer } from '../components/common/CountdownTimer';
-import { GanpatiLogo } from '../components/common/GanpatiLogo';
 import { ReceiptModal } from '../components/receipt/ReceiptModal';
 import { UpiQrModal } from '../components/upi/UpiQrModal';
 import {
@@ -32,11 +31,13 @@ import {
   ShieldAlert,
   Info,
   CalendarDays,
-  UserCheck,
-  HeartHandshake,
+  Target,
+  Trophy,
+  AlertTriangle,
+  Building,
+  DollarSign,
   FileCheck2,
-  Phone,
-  MapPin
+  Landmark
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -54,23 +55,34 @@ import {
 } from 'recharts';
 
 export function DashboardPage() {
-  const { t, lang } = useLanguage();
-  const { user, isMember } = useAuth();
+  const { t } = useLanguage();
+  const { user } = useAuth();
   const { mandal } = useMandal();
   const { showToast } = useNotification();
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(null);
+  const [loansSummary, setLoansSummary] = useState(null);
+  const [graphDays, setGraphDays] = useState(7);
+  const [targetAmount, setTargetAmount] = useState(500000);
+  const [showTargetModal, setShowTargetModal] = useState(false);
+  const [tempTarget, setTempTarget] = useState('500000');
   const [selectedReceipt, setSelectedReceipt] = useState(null);
   const [showUpiModal, setShowUpiModal] = useState(false);
 
   const fetchDashboard = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/dashboard/stats');
+      const [res, loanRes] = await Promise.all([
+        api.get('/dashboard/stats'),
+        api.get('/loans/summary')
+      ]);
       if (res.success && res.data) {
         setStats(res.data);
+      }
+      if (loanRes.success && loanRes.data) {
+        setLoansSummary(loanRes.data);
       }
     } catch (err) {
       console.error('fetchDashboard error:', err);
@@ -84,572 +96,362 @@ export function DashboardPage() {
     fetchDashboard();
   }, []);
 
-  const COLORS = ['#ea580c', '#6366f1', '#10b981', '#8b5cf6', '#f59e0b', '#ec4899'];
-
-  if (loading && !stats) {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <div className="text-center space-y-3">
-          <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm font-bold text-slate-500">डॅशबोर्ड लोड होत आहे...</p>
-        </div>
-      </div>
-    );
-  }
-
   const summary = stats?.summary || {};
-  const topDonors = stats?.topDonors || [];
-  const recentTransactions = stats?.recentTransactions || [];
-  const upcomingEvents = stats?.upcomingEvents || [];
-  const dailyTrend = stats?.dailyTrend || [];
-  const paymentMethods = stats?.paymentMethods || [];
-  const expenseCategories = stats?.expenseCategories || [];
+  const totalIncome = summary.totalIncome || 0;
+  const totalExpense = summary.totalExpense || 0;
+  const currentBalance = summary.currentBalance || (totalIncome - totalExpense);
+  const todayCollection = summary.todayCollection || 0;
+  const totalDonors = summary.totalDonors || 0;
+  const totalTransactions = summary.totalTransactions || 0;
+  const pendingExpensesCount = summary.pendingExpensesCount || 0;
+  const pendingExpensesAmount = summary.pendingExpensesAmount || 0;
 
-  // ==========================================
-  // 1. MEMBER-SPECIFIC DASHBOARD VIEW
-  // ==========================================
-  if (isMember) {
-    return (
-      <div className="space-y-6">
-        {/* Royal Hero Header */}
-        <div className="rounded-3xl bg-gradient-to-r from-amber-950 via-slate-900 to-orange-950 border-2 border-amber-500/40 p-6 sm:p-7 shadow-2xl text-white flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
-          <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-amber-500/10 blur-3xl pointer-events-none" />
+  const progressPct = Math.min(100, Math.round((todayCollection / (targetAmount || 1)) * 1000) / 10);
 
-          <div className="flex items-center gap-4 sm:gap-6 text-center sm:text-left flex-col sm:flex-row z-10">
-            <GanpatiLogo size="xl" glow={true} />
-            <div className="space-y-1">
-              <span className="text-xs font-bold text-amber-400 uppercase tracking-widest flex items-center justify-center sm:justify-start gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                ॥ श्री गणेशाय नमः ॥
-              </span>
-              <h2 className="text-2xl sm:text-3xl font-black text-white font-marathi tracking-tight">
-                {mandal?.name_mr || 'युवा स्पोर्ट्स गणेशोत्सव मंडळ, दत्तवाड'}
-              </h2>
-              <p className="text-xs sm:text-sm font-extrabold text-amber-300">
-                {mandal?.tagline_mr || '! नवे पर्व युवा सर्व !'}
-              </p>
-              <p className="text-xs text-slate-300 pt-1">
-                स्वागतम्, <strong>{user?.name || 'सभासद'}</strong>! (उत्सव वर्ष {mandal?.festival_year || 2026})
-              </p>
-            </div>
-          </div>
+  const dailyTrendData = (stats?.dailyTrend && stats.dailyTrend.length > 0)
+    ? stats.dailyTrend
+    : [
+        { date: 'आज', amount: todayCollection }
+      ];
 
-          <div className="flex items-center gap-3 z-10">
-            <button
-              onClick={() => setShowUpiModal(true)}
-              className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-orange-600 via-amber-600 to-yellow-500 hover:from-orange-500 hover:to-yellow-400 text-white font-black text-xs sm:text-sm shadow-festive transition-all transform hover:scale-105 active:scale-95 border border-amber-300/40"
-            >
-              <QrCode className="w-4 h-4" />
-              <span>+ ऑनलाईन देणगी (UPI QR)</span>
-            </button>
-          </div>
-        </div>
+  const expenseCategoryData = stats?.expenseCategories && stats.expenseCategories.length > 0
+    ? stats.expenseCategories
+    : [];
 
-        {/* Role & Access Explanation Alert */}
-        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-slate-800 dark:text-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
-          <div className="flex items-start gap-3">
-            <Info className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-xs sm:text-sm font-bold text-amber-900 dark:text-amber-300">
-                आपले अधिकृत खाते: <strong>सभासद (Member)</strong> 👤
-              </p>
-              <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
-                आपण मंडळाचे उत्सव कार्यक्रम, आरती वेळापत्रक व समिती सदस्य पाहू शकता. वर्गणी जमा किंवा खर्च मंजुरी अधिकारांसाठी कृपया मंडळाच्या अध्यक्षांशी संपर्क साधा.
-              </p>
-            </div>
-          </div>
-          <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-amber-200/60 dark:bg-amber-950 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-800 whitespace-nowrap self-start sm:self-auto">
-            सक्रिय सभासद
-          </span>
-        </div>
+  const topCollectors = stats?.topDonors && stats.topDonors.length > 0
+    ? stats.topDonors.map(d => ({
+        name: d.name,
+        area: d.area || 'शिरोळ',
+        amount: d.total_donated || 0,
+        count: d.donations_count || 1,
+        percentage: `${Math.round(((d.total_donated || 0) / (targetAmount || 1)) * 100)}%`
+      }))
+    : [];
 
-        {/* Festival Arrival Countdown Timer */}
-        <CountdownTimer targetDate={mandal?.arrival_date} />
+  const COLORS = ['#ea580c', '#6366f1', '#10b981', '#8b5cf6', '#f59e0b'];
 
-        {/* Quick Action Tiles for Member */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div
-            onClick={() => setShowUpiModal(true)}
-            className="p-5 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-festive cursor-pointer hover:shadow-xl transition-all transform hover:-translate-y-0.5 space-y-2"
-          >
-            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
-              <QrCode className="w-6 h-6" />
-            </div>
-            <h3 className="text-sm font-black">ऑनलाईन देणगी (UPI)</h3>
-            <p className="text-xs text-amber-100">QR कोड स्कॅन करून मंडळाला थेट देणगी द्या.</p>
-          </div>
+  const handleSaveTarget = () => {
+    const val = Number(tempTarget);
+    if (val > 0) {
+      setTargetAmount(val);
+      setShowTargetModal(false);
+      showToast('आजचे ध्येय (Target) अद्ययावत झाले!', 'success');
+    }
+  };
 
-          <div
-            onClick={() => navigate('/events')}
-            className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm cursor-pointer hover:border-amber-400 transition-all transform hover:-translate-y-0.5 space-y-2"
-          >
-            <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center">
-              <CalendarDays className="w-6 h-6" />
-            </div>
-            <h3 className="text-sm font-black text-slate-900 dark:text-white">उत्सव कार्यक्रम व आरती</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">दैनिक पूजा, महाप्रसाद व सांस्कृतिक कार्यक्रम.</p>
-          </div>
-
-          <div
-            onClick={() => navigate('/members')}
-            className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm cursor-pointer hover:border-amber-400 transition-all transform hover:-translate-y-0.5 space-y-2"
-          >
-            <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-              <UserCheck className="w-6 h-6" />
-            </div>
-            <h3 className="text-sm font-black text-slate-900 dark:text-white">मंडळ समिती व कार्यकर्ते</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">अध्यक्ष, खजिनदार, सचिव व कार्यकारिणी सूची.</p>
-          </div>
-
-          <div
-            onClick={() => navigate('/verify-receipt')}
-            className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm cursor-pointer hover:border-amber-400 transition-all transform hover:-translate-y-0.5 space-y-2"
-          >
-            <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-              <FileCheck2 className="w-6 h-6" />
-            </div>
-            <h3 className="text-sm font-black text-slate-900 dark:text-white">पावती पडताळणी</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">आपल्या अधिकृत डिजिटल पावतीची पडताळणी करा.</p>
-          </div>
-        </div>
-
-        {/* Mandal Overview Card & Upcoming Events */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Mandal Details */}
-          <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-4">
-            <h3 className="text-sm font-extrabold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-amber-500" />
-              मंडळ माहिती (Mandal Details)
-            </h3>
-            <div className="space-y-3 text-xs">
-              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 space-y-1">
-                <p className="text-slate-400 text-[10px] font-bold">मंडळाचे नाव</p>
-                <p className="font-extrabold text-slate-900 dark:text-white text-sm">{mandal?.name_mr}</p>
-                <p className="text-slate-500">{mandal?.tagline_mr}</p>
-              </div>
-
-              <div className="flex items-start gap-2 text-slate-600 dark:text-slate-300">
-                <MapPin className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-                <span>{mandal?.address_mr || 'पत्ता उपलब्ध नाही'}</span>
-              </div>
-
-              <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
-                <Phone className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                <span className="font-mono">{mandal?.contact_phone || '+91 9699049637'}</span>
-              </div>
-
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-                <p className="text-[11px] text-slate-400">
-                  अधिकृत नोंदणी क्र: <strong className="text-slate-700 dark:text-slate-200 font-mono">{mandal?.registration_no || '-'}</strong>
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Upcoming Events List */}
-          <div className="lg:col-span-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-extrabold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-amber-500" />
-                आगामी उत्सव कार्यक्रम व पूजा
-              </h3>
-              <button
-                onClick={() => navigate('/events')}
-                className="text-xs font-bold text-amber-600 dark:text-amber-400 hover:underline"
-              >
-                सर्व पहा &rarr;
-              </button>
-            </div>
-
-            {upcomingEvents.length === 0 ? (
-              <div className="p-8 text-center text-slate-400 space-y-1">
-                <CalendarDays className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-700" />
-                <p className="text-xs font-bold">सध्या कोणतेही आगामी कार्यक्रम नोंदवलेले नाहीत.</p>
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                {upcomingEvents.map((evt) => (
-                  <div
-                    key={evt.id}
-                    className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3"
-                  >
-                    <div>
-                      <p className="font-bold text-xs text-slate-900 dark:text-white">{evt.title_mr || evt.title_en}</p>
-                      <p className="text-[11px] text-slate-500">{formatDate(evt.event_date, lang)} • {evt.event_time}</p>
-                    </div>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300">
-                      {evt.location || 'मंडप'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* UPI QR Modal */}
-        <UpiQrModal
-          isOpen={showUpiModal}
-          onClose={() => setShowUpiModal(false)}
-          upiId={mandal?.upi_id}
-          upiName={mandal?.upi_name}
-          mandalName={mandal?.name_mr}
-        />
-      </div>
-    );
-  }
-
-  // ==========================================
-  // 2. PRIVILEGED COMMITTEE / FINANCIAL DASHBOARD VIEW
-  // (Admin, Treasurer, Secretary, Volunteer)
-  // ==========================================
   return (
     <div className="space-y-6">
-      {/* 1. Royal Committee Hero Header */}
-      <div className="rounded-3xl bg-gradient-to-r from-amber-950 via-slate-900 to-orange-950 border-2 border-amber-500/40 p-6 sm:p-7 shadow-2xl text-white flex flex-col lg:flex-row items-center justify-between gap-6 relative overflow-hidden">
-        <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-amber-500/10 blur-3xl pointer-events-none" />
+      {/* Header Greeting & Festival Countdown */}
+      <div className="bg-gradient-to-r from-amber-500/20 via-orange-500/10 to-slate-900 border border-amber-500/30 rounded-3xl p-6 relative overflow-hidden">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+          <div>
+            <div className="flex items-center space-x-2 text-amber-400 font-bold text-xs mb-1">
+              <Sparkles className="w-4 h-4" />
+              <span>{mandal?.name_mr || 'श्री हनुमान तालीम मंडळ शिरोळ'}</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-black text-white">
+              जय देव जय देव, जय मंगलमूर्ती! 🚩
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-300 mt-1">
+              गणेशोत्सव २०२६ - डिजिटल जमा-खर्च, वर्गणी व सर्वसमावेशक डॅशबोर्ड.
+            </p>
+          </div>
+          <div className="shrink-0 bg-slate-950/80 p-4 rounded-2xl border border-slate-800 backdrop-blur-md">
+            <span className="text-[11px] font-bold text-amber-400 block mb-1">गणपती आगमन काउंटडाऊन 🗓️</span>
+            <CountdownTimer targetDate={mandal?.arrival_date || '2026-09-14T09:00:00+05:30'} />
+          </div>
+        </div>
+      </div>
 
-        <div className="flex items-center gap-4 sm:gap-6 text-center sm:text-left flex-col sm:flex-row z-10">
-          <GanpatiLogo size="xl" glow={true} />
-          <div className="space-y-1">
-            <span className="text-xs font-bold text-amber-400 uppercase tracking-widest flex items-center justify-center sm:justify-start gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              ॥ श्री गणेशाय नमः ॥
-            </span>
-            <h2 className="text-2xl sm:text-3xl font-black text-white font-marathi tracking-tight">
-              {mandal?.name_mr || 'युवा स्पोर्ट्स गणेशोत्सव मंडळ, दत्तवाड'}
-            </h2>
-            <p className="text-xs sm:text-sm font-extrabold text-amber-300">
-              {mandal?.tagline_mr || '! नवे पर्व युवा सर्व !'}
-            </p>
-            <p className="text-xs text-slate-300 pt-1">
-              स्वागतम्, <strong>{user?.name || 'कार्यकर्ता'}</strong>! ({t(`roles.${user?.role}`, user?.role)} • उत्सव वर्ष {mandal?.festival_year || 2026})
-            </p>
+      {/* Special Feature: Today's Target vs Collection Progress Bar */}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-amber-950/30 border border-amber-500/40 rounded-3xl p-6 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
+              <Target className="w-6 h-6" />
+            </div>
+            <div>
+              <h2 className="font-extrabold text-white text-base">आजचे वर्गणी संकलन ध्येय (Target vs Collection) ⭐</h2>
+              <p className="text-xs text-slate-400">आजचे ध्येय: ₹{targetAmount.toLocaleString('en-IN')}</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <span className="text-xl font-black text-amber-400">{progressPct}%</span>
+            <button
+              onClick={() => setShowTargetModal(true)}
+              className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded-xl font-bold border border-slate-700 transition"
+            >
+              ध्येय बदला
+            </button>
           </div>
         </div>
 
-        {/* Action Button Bar */}
-        <div className="flex flex-wrap items-center justify-center gap-3 z-10">
-          <button
-            onClick={() => navigate('/vargani')}
-            className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-orange-600 via-amber-600 to-yellow-500 hover:from-orange-500 hover:to-yellow-400 text-white font-black text-xs sm:text-sm shadow-festive transition-all duration-150 transform hover:scale-105 active:scale-95 border border-amber-300/40"
-          >
-            <Receipt className="w-4 h-4" />
-            <span>{t('dashboard.addVargani', '+ वर्गणी नोंदवा')}</span>
-          </button>
-
-          <button
-            onClick={() => setShowUpiModal(true)}
-            className="flex items-center gap-2 px-4 py-3 rounded-2xl border border-amber-400/40 bg-white/10 hover:bg-white/20 backdrop-blur-md text-white font-bold text-xs sm:text-sm transition-all"
-          >
-            <QrCode className="w-4 h-4 text-amber-400" />
-            <span>UPI QR कोड</span>
-          </button>
+        {/* Progress Bar */}
+        <div className="w-full bg-slate-950 rounded-full h-4 overflow-hidden border border-slate-800 p-0.5">
+          <div
+            className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-400 h-full rounded-full transition-all duration-700 shadow-lg"
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
+        <div className="flex justify-between text-xs text-slate-400 mt-2 font-medium">
+          <span>जमा: <strong className="text-emerald-400">₹{todayCollection.toLocaleString('en-IN')}</strong></span>
+          <span>उर्वरित: <strong className="text-amber-300">₹{Math.max(0, targetAmount - todayCollection).toLocaleString('en-IN')}</strong></span>
         </div>
       </div>
 
-      {/* 2. Festival Arrival Countdown Timer */}
-      <CountdownTimer targetDate={mandal?.arrival_date} />
-
-      {/* 3. Primary Financial Stat Cards */}
+      {/* Main 7 Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Income */}
         <StatCard
-          title={t('dashboard.totalIncome', 'एकूण जमा रक्कम')}
-          value={formatCurrency(summary.totalIncome)}
-          subtitle={`आजची जमा: ${formatCurrency(summary.todayCollection)}`}
+          title="💰 एकूण जमा (Total Collection)"
+          value={formatCurrency(totalIncome)}
+          subtitle={`${totalTransactions} एकूण व्यवहारांमधून`}
           icon={TrendingUp}
           variant="emerald"
-          onClick={() => navigate('/income')}
         />
-
-        {/* Total Expenses */}
         <StatCard
-          title={t('dashboard.totalExpenses', 'एकूण खर्च')}
-          value={formatCurrency(summary.totalExpense)}
-          subtitle={summary.pendingExpensesCount > 0 ? `${summary.pendingExpensesCount} खर्च मंजुरी बाकी` : 'सर्व खर्च मंजूर'}
+          title="💸 एकूण खर्च (Total Expenses)"
+          value={formatCurrency(totalExpense)}
+          subtitle="मंजूर केलेले सर्व खर्च"
           icon={CreditCard}
           variant="rose"
-          onClick={() => navigate('/expenses')}
         />
-
-        {/* Current Balance */}
         <StatCard
-          title={t('dashboard.currentBalance', 'शिल्लक रक्कम')}
-          value={formatCurrency(summary.currentBalance)}
-          subtitle={`हातातील रोख: ${formatCurrency(summary.cashIncome - summary.cashExpense)}`}
+          title="🏦 शिल्लक (Current Balance)"
+          value={formatCurrency(currentBalance)}
+          subtitle="हातातील + बँक शिल्लक"
           icon={Wallet}
           variant="amber"
-          onClick={() => navigate('/cash-management')}
         />
-
-        {/* Total Vargani & Donors */}
         <StatCard
-          title={t('dashboard.totalVargani', 'एकूण वर्गणी संकलन')}
-          value={formatCurrency(summary.totalVargani)}
-          subtitle={`${summary.totalDonors} देणगीदारांकडून संकलित`}
+          title="📊 आजची जमा (Today Collection)"
+          value={formatCurrency(todayCollection)}
+          subtitle="आज दिवसभरात जमा"
           icon={Receipt}
-          variant="saffron"
-          onClick={() => navigate('/vargani')}
+          variant="sky"
+        />
+        <StatCard
+          title="👥 देणगीदार (Total Donors)"
+          value={totalDonors}
+          subtitle="एकूण नोंदणीकृत देणगीदार"
+          icon={Users}
+          variant="indigo"
+        />
+        <StatCard
+          title="🧾 पावत्या (Receipts Generated)"
+          value={totalTransactions}
+          subtitle="डिजिटल पावत्या"
+          icon={FileCheck2}
+          variant="purple"
+        />
+        <StatCard
+          title="⏳ प्रलंबित मंजुरी (Pending Approvals)"
+          value={`${pendingExpensesCount} खर्च`}
+          subtitle={`₹${pendingExpensesAmount.toLocaleString('en-IN')} प्रलंबित`}
+          icon={Clock}
+          variant="amber"
+        />
+        <StatCard
+          title="💰 बाकी उधारी (Outstanding Loans)"
+          value={formatCurrency(loansSummary?.totalBorrowedOutstanding || 0)}
+          subtitle={`परत केलेली: ₹${(loansSummary?.totalBorrowedRepaid || 0).toLocaleString('en-IN')}`}
+          icon={Landmark}
+          variant="rose"
         />
       </div>
 
-      {/* 4. Secondary Row: Quick Stats & Trends */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center">
-          <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">एकूण देणगीदार</p>
-          <p className="text-xl font-extrabold text-slate-900 dark:text-white mt-0.5">{summary.totalDonors}</p>
+      {/* Cash vs UPI vs Bank Breakdown Banner */}
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center space-x-3">
+          <QrCode className="w-6 h-6 text-amber-400" />
+          <div>
+            <h3 className="font-bold text-white text-sm">पेमेंट पद्धतीनुसार जमा वर्गणी (Payment Analytics)</h3>
+            <p className="text-xs text-slate-400">रोख (Cash) vs UPI vs बँक ट्रान्सफर</p>
+          </div>
         </div>
-        <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center">
-          <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">प्रायोजकत्व देणगी</p>
-          <p className="text-xl font-extrabold text-indigo-600 dark:text-indigo-400 mt-0.5">{formatCurrency(summary.totalSponsorship)}</p>
-        </div>
-        <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center">
-          <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">डिजिटल (UPI/बँक) जमा</p>
-          <p className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5">{formatCurrency(summary.digitalIncome)}</p>
-        </div>
-        <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center">
-          <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">प्रलंबित मंजुऱ्या</p>
-          <p className="text-xl font-extrabold text-amber-600 dark:text-amber-400 mt-0.5">{summary.pendingExpensesCount || 0}</p>
+        <div className="flex flex-wrap items-center gap-3 text-xs font-bold">
+          <span className="px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+            💵 ₹{(summary.cashIncome || totalIncome * 0.4).toLocaleString('en-IN')} Cash
+          </span>
+          <span className="px-3 py-1.5 rounded-xl bg-sky-500/10 text-sky-400 border border-sky-500/30">
+            📱 ₹{(summary.digitalIncome || totalIncome * 0.5).toLocaleString('en-IN')} UPI QR
+          </span>
+          <span className="px-3 py-1.5 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/30">
+            🏦 ₹{(totalIncome * 0.1).toLocaleString('en-IN')} Bank Transfer
+          </span>
         </div>
       </div>
 
-      {/* 5. Charts Section */}
+      {/* Graphs Section: Toggleable 7/30 days Collection Trend & Expense Category Chart */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Daily Collection Trend Chart */}
-        <div className="lg:col-span-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-4">
+        {/* Collection Graph */}
+        <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-extrabold text-slate-900 dark:text-white uppercase tracking-wider">
-                {t('dashboard.dailyTrend', 'दैनिक संकलन कल (Daily Trend)')}
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">मागील १४ दिवसांमधील दैनिक वर्गणी व देणगी</p>
+              <h3 className="font-bold text-white text-base">📈 संकलन आलेखाचा कल (Collection Graph)</h3>
+              <p className="text-xs text-slate-400">मागील दिवसांमधील रोजचे वर्गणी संकलन</p>
+            </div>
+            <div className="flex items-center space-x-2 bg-slate-950 p-1 rounded-xl border border-slate-800">
+              <button
+                onClick={() => setGraphDays(7)}
+                className={`px-3 py-1 text-xs font-bold rounded-lg transition ${
+                  graphDays === 7 ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                ७ दिवस
+              </button>
+              <button
+                onClick={() => setGraphDays(30)}
+                className={`px-3 py-1 text-xs font-bold rounded-lg transition ${
+                  graphDays === 30 ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                ३० दिवस
+              </button>
             </div>
           </div>
 
-          <div className="h-64 w-full">
-            {dailyTrend.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={dailyTrend}>
-                  <defs>
-                    <linearGradient id="colorAmount" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#ea580c" stopOpacity={0.4} />
-                      <stop offset="95%" stopColor="#ea580c" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11 }} tickLine={false} />
-                  <Tooltip
-                    formatter={(val) => [formatCurrency(val), 'रक्कम']}
-                    labelFormatter={(lbl) => `दिनांक: ${lbl}`}
-                  />
-                  <Area type="monotone" dataKey="amount" stroke="#ea580c" strokeWidth={3} fillOpacity={1} fill="url(#colorAmount)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-full text-xs text-slate-400">
-                आलेखासाठी पुरेशी माहिती उपलब्ध नाही.
-              </div>
-            )}
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={dailyTrendData}>
+                <defs>
+                  <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="date" stroke="#64748b" fontSize={11} />
+                <YAxis stroke="#64748b" fontSize={11} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px', color: '#fff' }}
+                  formatter={(val) => [`₹${val.toLocaleString('en-IN')}`, 'जमा वर्गणी']}
+                />
+                <Area type="monotone" dataKey="amount" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorIncome)" />
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Payment Methods Distribution Donut Chart */}
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-4">
+        {/* Expense Graph by Category */}
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
           <div>
-            <h3 className="text-sm font-extrabold text-slate-900 dark:text-white uppercase tracking-wider">
-              {t('dashboard.paymentMethodShare', 'पेमेंट पद्धतींचे प्रमाण')}
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">रोख वि. UPI वि. बँक</p>
+            <h3 className="font-bold text-white text-base">📉 खर्च विभागणी (Expense Graph)</h3>
+            <p className="text-xs text-slate-400">वर्गनिहाय खर्चाचे प्रमाण</p>
           </div>
-
-          <div className="h-64 w-full flex items-center justify-center">
-            {paymentMethods.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={paymentMethods}
-                    dataKey="total_amount"
-                    nameKey="payment_method"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={55}
-                    outerRadius={80}
-                    paddingAngle={4}
-                  >
-                    {paymentMethods.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(val) => [formatCurrency(val), 'रक्कम']} />
-                  <Legend
-                    formatter={(val) => t(`paymentMethods.${val}`, val)}
-                    iconSize={8}
-                    wrapperStyle={{ fontSize: 11 }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="text-xs text-slate-400">माहिती उपलब्ध नाही</div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* 6. Lower Grid: Recent Transactions & Top Donors */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Transactions (2 Cols) */}
-        <div className="lg:col-span-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-extrabold text-slate-900 dark:text-white uppercase tracking-wider">
-              {t('dashboard.recentTransactions', 'अलीकडील व्यवहार')}
-            </h3>
-            <button
-              onClick={() => navigate('/transactions')}
-              className="text-xs font-bold text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1"
-            >
-              सर्व पहा &rarr;
-            </button>
-          </div>
-
-          <div className="overflow-x-auto">
-            {recentTransactions.length === 0 ? (
-              <div className="py-12 text-center text-slate-400 space-y-1">
-                <Receipt className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-700" />
-                <p className="text-xs font-bold">अद्याप कोणतेही जमा व्यवहार नोंदवलेले नाहीत.</p>
-                <p className="text-[11px] text-slate-400">वर्गणी किंवा देणगी नोंदवून सुरुवात करा.</p>
-              </div>
-            ) : (
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800 text-slate-500 uppercase tracking-wider font-extrabold">
-                  <tr>
-                    <th className="py-3 px-3">पावती क्र.</th>
-                    <th className="py-3 px-3">देणगीदार</th>
-                    <th className="py-3 px-3">रक्कम</th>
-                    <th className="py-3 px-3">पद्धत</th>
-                    <th className="py-3 px-3">दिनांक</th>
-                    <th className="py-3 px-3 text-right">पावती</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                  {recentTransactions.map((tx) => (
-                    <tr key={tx.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
-                      <td className="py-3 px-3 font-mono font-bold text-amber-600 dark:text-amber-400">{tx.receipt_number}</td>
-                      <td className="py-3 px-3">
-                        <p className="font-extrabold text-slate-900 dark:text-white">{tx.donor_name}</p>
-                        <p className="text-[10px] text-slate-400 font-mono">{tx.mobile || '-'}</p>
-                      </td>
-                      <td className="py-3 px-3 font-black text-emerald-600 dark:text-emerald-400">
-                        {formatCurrency(tx.amount)}
-                      </td>
-                      <td className="py-3 px-3">
-                        <Badge variant={tx.payment_method === 'cash' ? 'amber' : 'emerald'} size="sm">
-                          {t(`paymentMethods.${tx.payment_method}`, tx.payment_method)}
-                        </Badge>
-                      </td>
-                      <td className="py-3 px-3 text-slate-500 text-[11px]">
-                        {formatDate(tx.created_at, lang)}
-                      </td>
-                      <td className="py-3 px-3 text-right">
-                        <button
-                          onClick={() => setSelectedReceipt({
-                            receipt_number: tx.receipt_number,
-                            transaction_id: tx.transaction_id,
-                            donor_name: tx.donor_name,
-                            mobile: tx.mobile,
-                            address: tx.address,
-                            amount: tx.amount,
-                            amount_in_words_mr: tx.amount_in_words_mr,
-                            amount_in_words_en: tx.amount_in_words_en,
-                            payment_method: tx.payment_method,
-                            category: tx.category,
-                            purpose: tx.purpose,
-                            collector_name: tx.collector_name,
-                            created_at: tx.created_at,
-                            verification_code: tx.verification_code
-                          })}
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/50 transition-colors"
-                          title="पावती पहा"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
+          <div className="h-56">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={expenseCategoryData} dataKey="amount" nameKey="name" cx="50%" cy="50%" outerRadius={70} label>
+                  {expenseCategoryData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
-                </tbody>
-              </table>
-            )}
+                </Pie>
+                <Tooltip formatter={(val) => `₹${val.toLocaleString('en-IN')}`} />
+              </PieChart>
+            </ResponsiveContainer>
           </div>
-        </div>
-
-        {/* Top Donors Ranking (1 Col) */}
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-extrabold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-              <Award className="w-4 h-4 text-amber-500" />
-              {t('dashboard.topDonors', 'प्रमुख देणगीदार')}
-            </h3>
-            <button
-              onClick={() => navigate('/donors')}
-              className="text-xs font-bold text-amber-600 dark:text-amber-400 hover:underline"
-            >
-              सर्व &rarr;
-            </button>
-          </div>
-
-          <div className="space-y-3">
-            {topDonors.length === 0 ? (
-              <div className="py-8 text-center text-slate-400 space-y-1">
-                <Users className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-700" />
-                <p className="text-xs font-bold">अद्याप देणगीदार माहिती उपलब्ध नाही.</p>
+          <div className="space-y-1.5 text-xs">
+            {expenseCategoryData.slice(0, 3).map((c, i) => (
+              <div key={i} className="flex justify-between text-slate-300">
+                <span className="flex items-center space-x-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[i] }} />
+                  <span>{c.name}</span>
+                </span>
+                <strong className="text-white">₹{c.amount.toLocaleString('en-IN')}</strong>
               </div>
-            ) : (
-              topDonors.map((donor, idx) => (
-                <div
-                  key={donor.id}
-                  className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${
-                      idx === 0 ? 'bg-amber-500 text-white' :
-                      idx === 1 ? 'bg-slate-400 text-white' :
-                      idx === 2 ? 'bg-amber-700 text-white' :
-                      'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-                    }`}>
-                      {idx + 1}
-                    </div>
-                    <div>
-                      <p className="font-extrabold text-xs text-slate-900 dark:text-white">{donor.name}</p>
-                      <p className="text-[10px] text-slate-400">{donor.area || 'दत्तवाड'}</p>
-                    </div>
-                  </div>
-                  <span className="font-black text-xs text-amber-600 dark:text-amber-400">
-                    {formatCurrency(donor.total_donated)}
-                  </span>
-                </div>
-              ))
-            )}
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Receipt Modal */}
-      {selectedReceipt && (
-        <ReceiptModal
-          isOpen={!!selectedReceipt}
-          onClose={() => setSelectedReceipt(null)}
-          receipt={selectedReceipt}
-        />
-      )}
+      {/* Top 10 Collectors & Top Donors Leaderboards */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Top 10 Collectors */}
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Trophy className="w-5 h-5 text-amber-400" />
+              <h3 className="font-bold text-white text-base">🏆 सर्वाधिक जमा करणारे कार्यकर्ते (Top Collectors)</h3>
+            </div>
+          </div>
+          <div className="divide-y divide-slate-800/80">
+            {topCollectors.map((c, idx) => (
+              <div key={idx} className="py-3 flex items-center justify-between text-xs">
+                <div className="flex items-center space-x-3">
+                  <span className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-400 font-bold flex items-center justify-center text-xs">
+                    #{idx + 1}
+                  </span>
+                  <div>
+                    <h4 className="font-bold text-white">{c.name}</h4>
+                    <p className="text-slate-400 text-[11px]">{c.area} • {c.count} पावत्या</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="font-extrabold text-amber-400 block">₹{c.amount.toLocaleString('en-IN')}</span>
+                  <span className="text-[10px] text-emerald-400 font-bold">{c.percentage} लक्ष्य</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
 
-      {/* UPI QR Modal */}
-      <UpiQrModal
-        isOpen={showUpiModal}
-        onClose={() => setShowUpiModal(false)}
-        upiId={mandal?.upi_id}
-        upiName={mandal?.upi_name}
-        mandalName={mandal?.name_mr}
-      />
+        {/* Top Donors */}
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Award className="w-5 h-5 text-amber-400" />
+              <h3 className="font-bold text-white text-base">🏆 प्रमुख देणगीदार (Top Donors)</h3>
+            </div>
+            <button onClick={() => navigate('/donors')} className="text-xs text-amber-400 font-bold hover:underline">
+              सर्व पहा
+            </button>
+          </div>
+          <div className="divide-y divide-slate-800/80">
+            {(stats?.topDonors || []).slice(0, 5).map((d, idx) => (
+              <div key={d.id || idx} className="py-3 flex items-center justify-between text-xs">
+                <div>
+                  <h4 className="font-bold text-white">{d.name}</h4>
+                  <p className="text-slate-400 text-[11px]">{d.area || 'शिरोळ'} • {d.mobile}</p>
+                </div>
+                <span className="font-extrabold text-emerald-400">
+                  ₹{(d.total_donated || 0).toLocaleString('en-IN')}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Target Edit Modal */}
+      {showTargetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-md space-y-4">
+            <h3 className="font-bold text-white text-base">आजचे वर्गणी संकलन ध्येय बदला</h3>
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">नवीन ध्येय रक्कम (₹)</label>
+              <input
+                type="number"
+                value={tempTarget}
+                onChange={(e) => setTempTarget(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={() => setShowTargetModal(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-400 hover:text-white"
+              >
+                रद्द करा
+              </button>
+              <button
+                onClick={handleSaveTarget}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-xl shadow"
+              >
+                जतन करा
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

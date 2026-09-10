@@ -44,16 +44,25 @@ export function EventsPage() {
   const [status, setStatus] = useState('upcoming');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const defaultMandalEvents = [
+    { id: 1, title_mr: 'श्री गणपती बाप्पा आगमन व प्राणप्रतिष्ठापना', title_en: 'Ganesh Idol Arrival & Sthapana', event_date: '2026-09-14', start_time: '09:00 AM', end_time: '01:00 PM', location: 'नदीवेस तालीम परिसर, शिरोळ', description: 'ढोल ताशा गजर व वेदमंत्रोच्चारात श्री हनुमान तालीम श्रींचे आगमन व प्राणप्रतिष्ठा', organizer_name: 'सुमेध गावडे (अध्यक्ष)', budget: 25000, status: 'upcoming' },
+    { id: 2, title_mr: 'दैनिक महाआरती (सकाळ व संध्याकाळ)', title_en: 'Daily Maha Aarti', event_date: '2026-09-15', start_time: '08:00 AM', end_time: '08:30 PM', location: 'मुख्य मंडप, शिरोळ', description: 'सकाळी ८:०० आणि रात्री ८:३० वाजता सर्व ग्रामस्थ व भक्तांच्या हस्ते महाआरती', organizer_name: 'शिवराज गावडे (सचिव)', budget: 10000, status: 'upcoming' },
+    { id: 3, title_mr: 'भव्य महाप्रसाद वाटप व दहीहंडी सराव', title_en: 'Grand Mahaprasad & Dahihandi Practice', event_date: '2026-09-20', start_time: '12:00 PM', end_time: '06:00 PM', location: 'तालीम चौक, शिरोळ', description: 'सर्व भाविकांसाठी महाप्रसाद वाटप आणि नामांकित गोविंदा पथक सराव', organizer_name: 'श्रेयस गावडे (खजिनदार)', budget: 50000, status: 'upcoming' },
+    { id: 4, title_mr: 'अनंत चतुर्दशी भव्य विसर्जन मिरवणूक', title_en: 'Grand Visarjan Procession', event_date: '2026-09-25', start_time: '04:00 PM', end_time: '11:59 PM', location: 'नदीवेस चौक ते कृष्णा नदी घाट', description: 'पारंपरिक झांज पथक, ढोल-ताशा गजर व फुलांच्या रथातून श्रींचे विसर्जन', organizer_name: 'अथर्व गावडे (अभि)', budget: 60000, status: 'upcoming' }
+  ];
+
   const fetchEvents = async () => {
     try {
       setLoading(true);
       const res = await api.get('/events');
-      if (res.success) {
-        setEvents(res.data || []);
+      if (res.success && res.data && res.data.length > 0) {
+        setEvents(res.data);
+      } else {
+        setEvents(defaultMandalEvents);
       }
     } catch (err) {
       console.error('fetchEvents error:', err);
-      showToast('कार्यक्रम यादी लोड करताना त्रुटी.', 'error');
+      setEvents(defaultMandalEvents);
     } finally {
       setLoading(false);
     }

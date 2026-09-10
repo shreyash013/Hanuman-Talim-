@@ -92,7 +92,7 @@ export async function exportCsvData(req, res) {
       ]);
       throwIfError(mandalResult.error); throwIfError(incomeResult.error); throwIfError(expenseResult.error);
 
-      const mandalName = mandalResult.data?.name_mr || 'युवा स्पोर्ट्स गणेशोत्सव मंडळ, दत्तवाड';
+      const mandalName = mandalResult.data?.name_mr || 'श्री हनुमान तालीम मंडळ शिरोळ';
       const year = mandalResult.data?.festival_year || 2026;
       const incomeRows = incomeResult.data || [];
       const expenseRows = expenseResult.data || [];

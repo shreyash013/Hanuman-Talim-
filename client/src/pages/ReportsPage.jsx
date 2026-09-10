@@ -6,7 +6,6 @@ import api from '../services/api';
 import { formatCurrency } from '../utils/formatCurrency';
 import { formatDate } from '../utils/dateUtils';
 import { downloadCsvReport } from '../utils/exportCsv';
-import { Badge } from '../components/common/Badge';
 import {
   FileSpreadsheet,
   Download,
@@ -19,31 +18,27 @@ import {
   Users,
   Award,
   ChevronDown,
-  FileText
+  FileText,
+  Filter,
+  CheckCircle,
+  Shield,
+  Sparkles
 } from 'lucide-react';
 
 export function ReportsPage() {
-  const { t, lang } = useLanguage();
+  const { t } = useLanguage();
   const { mandal } = useMandal();
   const { showToast } = useNotification();
-  const reportRef = useRef(null);
 
+  const [activeReportTab, setActiveReportTab] = useState('financial'); // 'financial', 'collection', 'expense', 'audit'
   const [range, setRange] = useState('all');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isExporting, setIsExporting] = useState(false);
-  const [showExportMenu, setShowExportMenu] = useState(false);
 
   const fetchReport = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/reports/financial', {
-        range,
-        startDate,
-        endDate
-      });
+      const res = await api.get('/reports/financial', { range });
       if (res.success && res.data) {
         setReportData(res.data);
       }
@@ -65,17 +60,11 @@ export function ReportsPage() {
 
   const handleExportCsv = async (type = 'balance_sheet') => {
     try {
-      setIsExporting(true);
-      setShowExportMenu(false);
-      showToast('CSV अहवाल तयार होत आहे...', 'info');
-
+      showToast('CSV / Excel अहवाल तयार होत आहे...', 'info');
       await downloadCsvReport(type);
-      showToast('CSV अहवाल यशस्वीरित्या डाऊनलोड झाला! 📊', 'success');
+      showToast('अहवाल यशस्वीरित्या डाऊनलोड झाला! 📊', 'success');
     } catch (err) {
-      console.error('handleExportCsv error:', err);
-      showToast(err.message || 'CSV डाऊनलोड करताना अडचण आली.', 'error');
-    } finally {
-      setIsExporting(false);
+      showToast('अहवाल डाऊनलोड करताना त्रुटी.', 'error');
     }
   };
 
@@ -86,277 +75,179 @@ export function ReportsPage() {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      {/* Header & Controls (Hidden when printing) */}
+      {/* Header & Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 no-print">
         <div>
-          <h2 className="text-2xl font-black text-slate-900 dark:text-white font-marathi tracking-tight flex items-center gap-2">
-            <FileSpreadsheet className="w-6 h-6 text-amber-600 dark:text-amber-400" />
-            {t('reports.title', 'आर्थिक ताळेबंद व अहवाल (Financial Reports)')}
+          <h2 className="text-2xl font-black text-white flex items-center gap-2">
+            <FileSpreadsheet className="w-6 h-6 text-amber-400" />
+            <span>प्रगत अहवाल केंद्र (Advanced Reports Center) 📊</span>
           </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            गणेशोत्सवाचा संपूर्ण अधिकृत जमा-खर्च ताळेबंद अहवाल
+          <p className="text-xs text-slate-400">
+            आर्थिक पत्रक, जमा वर्गणी, खर्च पृथक्करण, व ऑडीट रिपोर्ट्स.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 relative">
-          {/* CSV Export Dropdown */}
-          <div className="relative">
-            <button
-              onClick={() => setShowExportMenu(!showExportMenu)}
-              disabled={isExporting}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm disabled:opacity-50"
-            >
-              <Download className="w-3.5 h-3.5 text-amber-600" />
-              <span>{isExporting ? 'डाऊनलोड होत आहे...' : 'CSV एक्सेल अहवाल'}</span>
-              <ChevronDown className="w-3 h-3 text-slate-400" />
-            </button>
-
-            {showExportMenu && (
-              <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 py-2 z-50 animate-in fade-in slide-in-from-top-1 text-xs">
-                <button
-                  onClick={() => handleExportCsv('balance_sheet')}
-                  className="w-full text-left px-4 py-2.5 hover:bg-amber-50 dark:hover:bg-slate-800 flex items-center gap-2.5 font-bold text-slate-800 dark:text-slate-200"
-                >
-                  <FileSpreadsheet className="w-4 h-4 text-amber-600" />
-                  <div>
-                    <p className="font-extrabold">📊 सर्व जमा-खर्च ताळेबंद (CSV)</p>
-                    <p className="text-[10px] text-slate-400">संपूर्ण गोषवारा + जमा + खर्च</p>
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => handleExportCsv('income')}
-                  className="w-full text-left px-4 py-2.5 hover:bg-emerald-50 dark:hover:bg-slate-800 flex items-center gap-2.5 font-bold text-slate-800 dark:text-slate-200 border-t border-slate-100 dark:border-slate-800"
-                >
-                  <ArrowUpRight className="w-4 h-4 text-emerald-600" />
-                  <div>
-                    <p className="font-extrabold">💰 वर्गणी व जमा नोंदी (CSV)</p>
-                    <p className="text-[10px] text-slate-400">सर्व पावत्या व देणग्या</p>
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => handleExportCsv('expenses')}
-                  className="w-full text-left px-4 py-2.5 hover:bg-rose-50 dark:hover:bg-slate-800 flex items-center gap-2.5 font-bold text-slate-800 dark:text-slate-200 border-t border-slate-100 dark:border-slate-800"
-                >
-                  <ArrowDownRight className="w-4 h-4 text-rose-600" />
-                  <div>
-                    <p className="font-extrabold">💸 खर्च नोंदी अहवाल (CSV)</p>
-                    <p className="text-[10px] text-slate-400">सर्व खर्च व बिले</p>
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => handleExportCsv('donors')}
-                  className="w-full text-left px-4 py-2.5 hover:bg-blue-50 dark:hover:bg-slate-800 flex items-center gap-2.5 font-bold text-slate-800 dark:text-slate-200 border-t border-slate-100 dark:border-slate-800"
-                >
-                  <Users className="w-4 h-4 text-blue-600" />
-                  <div>
-                    <p className="font-extrabold">👥 देणगीदार यादी (CSV)</p>
-                    <p className="text-[10px] text-slate-400">संपर्क व पत्त्यासह यादी</p>
-                  </div>
-                </button>
-              </div>
-            )}
-          </div>
-
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => handleExportCsv('balance_sheet')}
+            className="flex items-center space-x-1.5 px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl font-bold text-xs shadow transition"
+          >
+            <Download className="w-4 h-4" />
+            <span>Excel / CSV डाऊनलोड</span>
+          </button>
           <button
             onClick={handlePrint}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-md transition-all"
+            className="flex items-center space-x-1.5 px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl font-bold text-xs shadow transition"
           >
             <Printer className="w-4 h-4" />
-            <span>{t('reports.printReport', 'अहवाल प्रिंट करा')}</span>
+            <span>प्रिंट / PDF</span>
           </button>
         </div>
       </div>
 
-      {/* Date Filter Tabs (Hidden when printing) */}
-      <div className="p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-wrap items-center justify-between gap-3 no-print">
-        <div className="flex flex-wrap items-center gap-1 text-xs font-bold">
-          <button
-            onClick={() => setRange('all')}
-            className={`px-3 py-1.5 rounded-lg transition-all ${
-              range === 'all' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'
-            }`}
-          >
-            {t('reports.allTime', 'सर्व व्यवहार (All Time)')}
-          </button>
-          <button
-            onClick={() => setRange('today')}
-            className={`px-3 py-1.5 rounded-lg transition-all ${
-              range === 'today' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'
-            }`}
-          >
-            {t('reports.today', 'आज (Today)')}
-          </button>
-          <button
-            onClick={() => setRange('7days')}
-            className={`px-3 py-1.5 rounded-lg transition-all ${
-              range === '7days' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'
-            }`}
-          >
-            {t('reports.7days', 'मागील ७ दिवस')}
-          </button>
-          <button
-            onClick={() => setRange('30days')}
-            className={`px-3 py-1.5 rounded-lg transition-all ${
-              range === '30days' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'
-            }`}
-          >
-            {t('reports.30days', 'मागील ३० दिवस')}
-          </button>
-        </div>
+      {/* Navigation Tabs */}
+      <div className="flex items-center space-x-2 border-b border-slate-800 pb-2 no-print overflow-x-auto">
+        <button
+          onClick={() => setActiveReportTab('financial')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+            activeReportTab === 'financial' ? 'bg-amber-500 text-slate-950 shadow' : 'bg-slate-900 text-slate-400 hover:text-white'
+          }`}
+        >
+          💰 आर्थिक ताळेबंद (Financial Report)
+        </button>
+        <button
+          onClick={() => setActiveReportTab('collection')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+            activeReportTab === 'collection' ? 'bg-amber-500 text-slate-950 shadow' : 'bg-slate-900 text-slate-400 hover:text-white'
+          }`}
+        >
+          📈 संकलन व कार्यकर्ते (Collection Report)
+        </button>
+        <button
+          onClick={() => setActiveReportTab('expense')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+            activeReportTab === 'expense' ? 'bg-amber-500 text-slate-950 shadow' : 'bg-slate-900 text-slate-400 hover:text-white'
+          }`}
+        >
+          💸 खर्च पृथक्करण (Expense Report)
+        </button>
       </div>
 
-      {/* Printable Official Financial Balance Sheet */}
-      <div
-        ref={reportRef}
-        className="printable-area rounded-3xl bg-white text-slate-900 border-2 border-amber-400/80 p-6 sm:p-10 shadow-xl space-y-8 font-sans"
-      >
-        {/* Report Header */}
-        <div className="text-center border-b-2 border-amber-500 pb-5 space-y-1 relative">
-          <p className="text-xs font-bold text-amber-700 uppercase tracking-widest">
-            ॥ श्री गणेशाय नमः ॥
-          </p>
-          <h1 className="text-2xl sm:text-3xl font-black text-amber-700 font-marathi">
-            {mandal?.name_mr || 'युवा स्पोर्ट्स गणेशोत्सव मंडळ, दत्तवाड'}
+      {/* Printable Report Content */}
+      <div className="printable-area bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl">
+        {/* Printable Letterhead Header */}
+        <div className="text-center border-b-2 border-amber-500 pb-4 space-y-1">
+          <h1 className="text-2xl sm:text-3xl font-black text-amber-400 font-marathi">
+            {mandal?.name_mr || 'श्री हनुमान तालीम मंडळ शिरोळ'}
           </h1>
-          <p className="text-xs text-slate-600 font-medium">
-            {mandal?.address_mr} • नोंदणी क्र: {mandal?.registration_no}
+          <p className="text-xs font-bold text-slate-300">
+            {mandal?.tagline_mr || 'स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा राजा ॥'}
           </p>
-          <div className="inline-block mt-2 px-4 py-1 rounded-full bg-amber-100 border border-amber-300 text-amber-900 font-black text-xs">
-            गणेशोत्सव वर्ष {mandal?.festival_year || 2026} अधिकृत जमा-खर्च ताळेबंद अहवाल
+          <p className="text-[11px] text-slate-400">
+            {mandal?.address_mr} • रजि. क्र.: {mandal?.registration_no}
+          </p>
+          <div className="inline-block mt-2 px-3 py-1 bg-amber-500/10 border border-amber-500/30 rounded-full text-xs font-extrabold text-amber-300">
+            गणेशोत्सव {mandal?.festival_year || 2026} - अधिकृत आर्थिक ताळेबंद अहवाल
           </div>
         </div>
 
-        {/* Master Summary KPI Cards */}
+        {/* Financial Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="p-4 rounded-2xl bg-emerald-50 border-2 border-emerald-300 text-center">
-            <span className="text-xs font-bold text-emerald-800 uppercase block">
-              एकूण जमा रक्कम (Total Income)
-            </span>
-            <p className="text-2xl font-black text-emerald-700 mt-1">
-              {formatCurrency(totals.totalIncome)}
-            </p>
-            <p className="text-[11px] text-emerald-800/80 mt-0.5">
-              रोख: {formatCurrency(totals.cashIncome)} | डिजिटल: {formatCurrency(totals.digitalIncome)}
-            </p>
+          <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-center">
+            <span className="text-xs text-slate-400 block mb-1">एकूण जमा (Total Income)</span>
+            <span className="text-2xl font-black text-emerald-400">₹{(totals.totalIncome || 0).toLocaleString('en-IN')}</span>
           </div>
-
-          <div className="p-4 rounded-2xl bg-rose-50 border-2 border-rose-300 text-center">
-            <span className="text-xs font-bold text-rose-800 uppercase block">
-              एकूण मंजूर खर्च (Total Expenses)
-            </span>
-            <p className="text-2xl font-black text-rose-700 mt-1">
-              {formatCurrency(totals.totalApprovedExpense)}
-            </p>
-            <p className="text-[11px] text-rose-800/80 mt-0.5">
-              रोख खर्च: {formatCurrency(totals.cashExpense)}
-            </p>
+          <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-center">
+            <span className="text-xs text-slate-400 block mb-1">एकूण खर्च (Total Expenses)</span>
+            <span className="text-2xl font-black text-rose-400">₹{(totals.totalApprovedExpense || 0).toLocaleString('en-IN')}</span>
           </div>
-
-          <div className="p-4 rounded-2xl bg-amber-50 border-2 border-amber-400 text-center">
-            <span className="text-xs font-bold text-amber-800 uppercase block">
-              अखेरची शिल्लक (Net Balance)
-            </span>
-            <p className="text-2xl font-black text-amber-700 mt-1">
-              {formatCurrency(totals.netBalance)}
-            </p>
-            <p className="text-[11px] text-amber-800/80 mt-0.5">
-              जमा - खर्च
-            </p>
+          <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-center">
+            <span className="text-xs text-slate-400 block mb-1">निव्वळ शिल्लक (Net Balance)</span>
+            <span className="text-2xl font-black text-amber-400">₹{(totals.netBalance || 0).toLocaleString('en-IN')}</span>
           </div>
         </div>
 
-        {/* Dual Tables: Income Categories vs Expense Categories */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          {/* Income Breakdown */}
-          <div className="space-y-3">
-            <h3 className="text-xs font-black text-emerald-800 uppercase tracking-wider border-b border-emerald-300 pb-1.5 flex items-center justify-between">
-              <span>१. जमा रक्कम तपशील (Income)</span>
-              <span>{formatCurrency(totals.totalIncome)}</span>
-            </h3>
-            <table className="w-full text-left text-xs">
-              <thead className="text-slate-500 font-semibold border-b">
-                <tr>
-                  <th className="pb-1.5">जमा प्रकार</th>
-                  <th className="pb-1.5 text-center">पावत्या</th>
-                  <th className="pb-1.5 text-right">रक्कम (₹)</th>
+        {/* Collection & Collector Breakdown */}
+        {activeReportTab === 'collection' && (
+          <div className="space-y-4">
+            <h3 className="font-bold text-white text-base">कार्यकर्ते संकलन तपशील:</h3>
+            <table className="w-full text-left text-xs border border-slate-800">
+              <thead>
+                <tr className="bg-slate-950 text-slate-400 border-b border-slate-800">
+                  <th className="p-3">कार्यकर्त्याचे नाव</th>
+                  <th className="p-3 text-center">पावत्या संख्या</th>
+                  <th className="p-3 text-right">जमा रक्कम</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 font-medium">
-                {incomeCategories.map((c, i) => (
-                  <tr key={i}>
-                    <td className="py-2">{t(`categories.${c.category}`, c.category)}</td>
-                    <td className="py-2 text-center text-slate-500">{c.count}</td>
-                    <td className="py-2 text-right font-bold text-emerald-700">{formatCurrency(c.amount)}</td>
+              <tbody className="divide-y divide-slate-800">
+                {collectorList.map((c, idx) => (
+                  <tr key={idx}>
+                    <td className="p-3 text-white font-bold">{c.collector_name}</td>
+                    <td className="p-3 text-center text-slate-400">{c.count}</td>
+                    <td className="p-3 text-right text-emerald-400 font-extrabold">₹{c.total_amount.toLocaleString('en-IN')}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+        )}
 
-          {/* Expense Breakdown */}
-          <div className="space-y-3">
-            <h3 className="text-xs font-black text-rose-800 uppercase tracking-wider border-b border-rose-300 pb-1.5 flex items-center justify-between">
-              <span>२. खर्च तपशील (Expenses)</span>
-              <span>{formatCurrency(totals.totalApprovedExpense)}</span>
-            </h3>
-            <table className="w-full text-left text-xs">
-              <thead className="text-slate-500 font-semibold border-b">
-                <tr>
-                  <th className="pb-1.5">खर्च प्रकार</th>
-                  <th className="pb-1.5 text-center">संख्या</th>
-                  <th className="pb-1.5 text-right">रक्कम (₹)</th>
+        {/* Expense Category Breakdown */}
+        {activeReportTab === 'expense' && (
+          <div className="space-y-4">
+            <h3 className="font-bold text-white text-base">खर्च वर्गवारी तपशील:</h3>
+            <table className="w-full text-left text-xs border border-slate-800">
+              <thead>
+                <tr className="bg-slate-950 text-slate-400 border-b border-slate-800">
+                  <th className="p-3">खर्च विभाग (Category)</th>
+                  <th className="p-3 text-center">संख्या</th>
+                  <th className="p-3 text-right">एकूण रक्कम</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 font-medium">
-                {expenseCategories.map((c, i) => (
-                  <tr key={i}>
-                    <td className="py-2">{t(`categories.${c.category}`, c.category)}</td>
-                    <td className="py-2 text-center text-slate-500">{c.count}</td>
-                    <td className="py-2 text-right font-bold text-rose-700">{formatCurrency(c.amount)}</td>
+              <tbody className="divide-y divide-slate-800">
+                {expenseCategories.map((e, idx) => (
+                  <tr key={idx}>
+                    <td className="p-3 text-white font-bold capitalize">{e.category}</td>
+                    <td className="p-3 text-center text-slate-400">{e.count}</td>
+                    <td className="p-3 text-right text-rose-400 font-extrabold">₹{e.amount.toLocaleString('en-IN')}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
+        )}
 
-        {/* Collector Performance Table */}
-        <div className="space-y-3 pt-2">
-          <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider border-b border-slate-300 pb-1.5">
-            ३. कार्यकर्त्यांनुसार वर्गणी संकलन (Collector Performance)
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {collectorList.map((col, idx) => (
-              <div key={idx} className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs">
-                <p className="font-bold text-slate-900">{col.collector_name}</p>
-                <div className="flex items-center justify-between mt-1 text-slate-600">
-                  <span>{col.count} पावत्या</span>
-                  <span className="font-black text-amber-700">{formatCurrency(col.total_amount)}</span>
-                </div>
-              </div>
-            ))}
+        {/* Financial Statement default view */}
+        {activeReportTab === 'financial' && (
+          <div className="space-y-4 text-xs text-slate-300">
+            <div className="flex justify-between border-b border-slate-800 pb-2 font-bold text-white">
+              <span>वर्गणी जमा प्रकार:</span>
+              <span>रक्कम:</span>
+            </div>
+            <div className="flex justify-between text-slate-400">
+              <span>• रोख जमा वर्गणी (Cash Income):</span>
+              <span className="text-white font-bold">₹{(totals.cashIncome || 0).toLocaleString('en-IN')}</span>
+            </div>
+            <div className="flex justify-between text-slate-400">
+              <span>• डिजिटल / UPI जमा (Digital Income):</span>
+              <span className="text-white font-bold">₹{(totals.digitalIncome || 0).toLocaleString('en-IN')}</span>
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Committee Verification & Signatures */}
-        <div className="pt-12 border-t-2 border-slate-300 grid grid-cols-3 text-center text-xs">
+        {/* Signature Box */}
+        <div className="pt-8 border-t border-slate-800 flex justify-between text-center text-xs text-slate-400">
           <div>
-            <div className="w-32 border-b border-slate-400 mx-auto mb-1" />
-            <p className="font-bold text-slate-900">खजिनदार (Treasurer)</p>
-            <p className="text-[10px] text-slate-500">युवा स्पोर्ट्स गणेशोत्सव मंडळ</p>
+            <span className="block border-t border-slate-600 w-32 mx-auto pt-1 font-bold text-white">सुमेध गवडे</span>
+            <span>अध्यक्ष</span>
           </div>
           <div>
-            <div className="w-32 border-b border-slate-400 mx-auto mb-1" />
-            <p className="font-bold text-slate-900"> अध्यक्ष (President)</p>
-            <p className="text-[10px] text-slate-500">युवा स्पोर्ट्स गणेशोत्सव मंडळ</p>
+            <span className="block border-t border-slate-600 w-32 mx-auto pt-1 font-bold text-white">श्रेयश गवडे</span>
+            <span>खजिनदार</span>
           </div>
           <div>
-            <div className="w-32 border-b border-slate-400 mx-auto mb-1" />
-            <p className="font-bold text-slate-900">उपाध्यक्ष(Secretary)</p>
-            <p className="text-[10px] text-slate-500">युवा स्पोर्ट्स गणेशोत्सव मंडळ</p>
+            <span className="block border-t border-slate-600 w-32 mx-auto pt-1 font-bold text-white">शिवराज गवडे</span>
+            <span>सचिव</span>
           </div>
         </div>
       </div>

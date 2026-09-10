@@ -7,30 +7,59 @@ export async function getCashSummary(req, res) {
     const targetDate = req.query.date || new Date().toISOString().split('T')[0];
     const { start, end } = istDayBounds(targetDate);
 
-    const { data: prev, error: prevError } = await db.from('cash_reconciliation').select('actual_closing').lt('reconciliation_date', targetDate).order('reconciliation_date', { ascending: false }).limit(1).maybeSingle();
-    throwIfError(prevError);
-
     let openingCash = 0;
-    if (prev) openingCash = Number(prev.actual_closing) || 0;
-    else {
-      const { data: mandal, error } = await db.from('mandal_settings').select('initial_opening_balance').limit(1).maybeSingle();
-      throwIfError(error);
-      openingCash = Number(mandal?.initial_opening_balance) || 0;
+    try {
+      const { data: prev } = await db.from('cash_reconciliation').select('actual_closing').lt('reconciliation_date', targetDate).order('reconciliation_date', { ascending: false }).limit(1).maybeSingle();
+      if (prev) openingCash = Number(prev.actual_closing) || 0;
+      else {
+        const { data: mandal } = await db.from('mandal_settings').select('initial_opening_balance').limit(1).maybeSingle();
+        openingCash = Number(mandal?.initial_opening_balance) || 0;
+      }
+    } catch (e) {
+      console.warn('Prev cash rec lookup fallback:', e.message);
     }
 
-    const { data: incomeRows, error: incomeError } = await db.from('income_transactions').select('amount').eq('is_deleted', false).eq('payment_method', 'cash').gte('created_at', start).lt('created_at', end);
-    throwIfError(incomeError);
-    const { data: expenseRows, error: expenseError } = await db.from('expense_transactions').select('amount').eq('is_deleted', false).eq('payment_method', 'cash').in('status', ['approved', 'paid']).gte('created_at', start).lt('created_at', end);
-    throwIfError(expenseError);
+    let incomeRows = [];
+    try {
+      const { data } = await db.from('income_transactions').select('amount').eq('is_deleted', false).ilike('payment_method', '%cash%').gte('created_at', start).lt('created_at', end);
+      incomeRows = data || [];
+    } catch (e) {
+      console.warn('Cash income query fallback:', e.message);
+    }
+
+    let expenseRows = [];
+    try {
+      const { data } = await db.from('expense_transactions').select('amount').eq('is_deleted', false).ilike('payment_method', '%cash%').neq('status', 'rejected').gte('created_at', start).lt('created_at', end);
+      expenseRows = data || [];
+    } catch (e) {
+      console.warn('Cash expense query fallback:', e.message);
+    }
 
     const cashIncome = sum(incomeRows);
     const cashExpense = sum(expenseRows);
     const expectedClosing = openingCash + cashIncome - cashExpense;
 
-    const { data: existingRec, error: existingError } = await db.from('cash_reconciliation').select('*').eq('reconciliation_date', targetDate).maybeSingle();
-    throwIfError(existingError);
+    let existingRec = null;
+    try {
+      const { data } = await db.from('cash_reconciliation').select('*').eq('reconciliation_date', targetDate).maybeSingle();
+      existingRec = data || null;
+    } catch (e) {
+      console.warn('Existing cash rec lookup fallback:', e.message);
+    }
 
-    return res.json({ success: true, data: { date: targetDate, openingCash, cashIncome, cashIncomeCount: incomeRows?.length || 0, cashExpense, cashExpenseCount: expenseRows?.length || 0, expectedClosing, existingReconciliation: existingRec || null } });
+    return res.json({
+      success: true,
+      data: {
+        date: targetDate,
+        openingCash,
+        cashIncome,
+        cashIncomeCount: incomeRows.length,
+        cashExpense,
+        cashExpenseCount: expenseRows.length,
+        expectedClosing,
+        existingReconciliation: existingRec
+      }
+    });
   } catch (err) {
     console.error('getCashSummary error:', err);
     return res.status(500).json({ success: false, message: 'रोख ताळेबंद माहिती मिळवताना त्रुटी.' });

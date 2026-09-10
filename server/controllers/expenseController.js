@@ -10,7 +10,14 @@ function applyExpenseFilters(query, filters) {
     query = query.or(`description.ilike.%${s}%,paid_to.ilike.%${s}%,bill_number.ilike.%${s}%,expense_id.ilike.%${s}%`);
   }
   if (category) query = query.eq('category', category);
-  if (status) query = query.eq('status', status);
+  if (status) {
+    if (status.includes(',')) {
+      const statuses = status.split(',').map(s => s.trim()).filter(Boolean);
+      query = query.in('status', statuses);
+    } else {
+      query = query.eq('status', status);
+    }
+  }
   if (payment_method) query = query.eq('payment_method', payment_method);
   if (startDate) query = query.gte('created_at', istDayBounds(startDate).start);
   if (endDate) query = query.lt('created_at', istDayBounds(endDate).end);
@@ -62,19 +69,10 @@ export async function createExpense(req, res) {
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) return res.status(400).json({ success: false, message: 'कृपया वैध रक्कम भरा (Amount must be > 0).' });
     if (!category) return res.status(400).json({ success: false, message: 'खर्चाचा प्रवर्ग आवश्यक आहे / Expense category is required.' });
 
-    const isApprover = ['admin', 'treasurer'].includes(req.user?.role);
-    let status = 'pending';
-    let approvedByName = null;
-    let approvedById = null;
-    let approvedAt = null;
-    if (isApprover) {
-      status = requestedStatus && ['approved', 'paid', 'pending'].includes(requestedStatus) ? requestedStatus : 'approved';
-      if (['approved', 'paid'].includes(status)) {
-        approvedByName = req.user.name;
-        approvedById = req.user.id;
-        approvedAt = new Date().toISOString();
-      }
-    }
+    const status = 'pending';
+    const approvedByName = null;
+    const approvedById = null;
+    const approvedAt = null;
 
     const { count, error: countError } = await db.from('expense_transactions').select('*', { count: 'exact', head: true });
     throwIfError(countError);

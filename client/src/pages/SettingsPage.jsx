@@ -34,7 +34,7 @@ export function SettingsPage() {
     visarjan_date: '',
     upi_id: '',
     upi_name: '',
-    receipt_prefix: 'YUVA-2026-',
+    receipt_prefix: 'HANUMAN-2026-',
     initial_opening_balance: 0
   });
 
@@ -55,7 +55,7 @@ export function SettingsPage() {
         visarjan_date: mandal.visarjan_date ? mandal.visarjan_date.split('T')[0] : '',
         upi_id: mandal.upi_id || '',
         upi_name: mandal.upi_name || '',
-        receipt_prefix: mandal.receipt_prefix || 'YUVA-2026-',
+        receipt_prefix: mandal.receipt_prefix || 'HANUMAN-2026-',
         initial_opening_balance: mandal.initial_opening_balance !== undefined ? mandal.initial_opening_balance : 0
       });
     }
@@ -159,7 +159,7 @@ export function SettingsPage() {
                 name="address_mr"
                 value={formData.address_mr}
                 onChange={handleChange}
-                placeholder="युवा स्पोर्ट्स चौक, दत्तवाड | ४१६१०७ , महाराष्ट्र |"
+                placeholder="नदीवेस, शिरोळ, जि. कोल्हापूर | ४१६१०३"
                 className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs outline-none focus:ring-2 focus:ring-amber-500"
               />
             </div>
@@ -239,10 +239,10 @@ export function SettingsPage() {
                 name="receipt_prefix"
                 value={formData.receipt_prefix}
                 onChange={handleChange}
-                placeholder="YUVA-2026-"
+                placeholder="HANUMAN-2026-"
                 className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-bold outline-none focus:ring-2 focus:ring-amber-500"
               />
-              <p className="text-[10px] text-slate-400">या प्रीफिक्सनुसार पावती क्रमांक तयार होतील, उदा. YUVA-2026-000001</p>
+              <p className="text-[10px] text-slate-400">या प्रीफिक्सनुसार पावती क्रमांक तयार होतील, उदा. HANUMAN-2026-000001</p>
             </div>
 
             <div className="space-y-1 sm:col-span-3">
@@ -251,7 +251,6 @@ export function SettingsPage() {
               </label>
               <input
                 type="number"
-                min="0"
                 name="initial_opening_balance"
                 value={formData.initial_opening_balance}
                 onChange={handleChange}
@@ -290,7 +289,7 @@ export function SettingsPage() {
                 name="upi_name"
                 value={formData.upi_name}
                 onChange={handleChange}
-                placeholder="yuva sports ganeshotsav mandal, dattawad"
+                placeholder="Shri Hanuman Talim Mandal Shirol"
                 className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs outline-none focus:ring-2 focus:ring-amber-500"
               />
             </div>

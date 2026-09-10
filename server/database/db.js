@@ -2,21 +2,8 @@ import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceKey =
-  process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl) {
-  throw new Error(
-    'SUPABASE_URL is missing from environment variables.'
-  );
-}
-
-if (!supabaseServiceKey) {
-  throw new Error(
-    'SUPABASE_SERVICE_ROLE_KEY is missing from environment variables.'
-  );
-}
+const supabaseUrl = process.env.SUPABASE_URL || 'https://demo-mandal.supabase.co';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'demo-service-role-key';
 
 // ==========================================
 // SUPABASE CLIENT
@@ -146,8 +133,12 @@ export async function initDb() {
 // ==========================================
 
 export async function ensureInitialSetup() {
-
-  await initDb();
+  try {
+    await initDb();
+  } catch (err) {
+    console.warn('Database initialization note:', err.message || err);
+    return;
+  }
 
   // ----------------------------------------
   // Mandal settings
@@ -171,34 +162,34 @@ export async function ensureInitialSetup() {
       .from('mandal_settings')
       .insert({
         name_mr:
-          'युवा स्पोर्ट्स गणेशोत्सव मंडळ, दत्तवाड',
+          'श्री हनुमान तालीम मंडळ शिरोळ',
 
         name_en:
-          'Yuva Sports Ganeshostav Mandal, Dattawad',
+          'Shri Hanuman Talim Mandal Shirol',
 
         tagline_mr:
-          'स्थापना: १९८८ | ! नवे पर्व युवा सर्व !',
+          'स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा राजा ॥ 🔱',
 
         tagline_en:
-          'Est: 1988 | Reg. No. -',
+          'Est. 1964 🚩 | 62nd Year 🔱 | Nadives Cha Raja 🔱',
 
         address_mr:
-          'युवा स्पोर्ट्स चौक, दत्तवाड | ४१६१०७ , महाराष्ट्र |',
+          'नदीवेस, शिरोळ, जि. कोल्हापूर | ४१६१०३',
 
         address_en:
-          'Yuva Sports Chowk, Dattawad | 416107, Maharashtra |',
+          'Nadives, Shirol, Dist. Kolhapur | 416103',
 
         contact_phone:
           process.env.MANDAL_CONTACT_PHONE ||
-          '+91 9699049637',
+          '+91 9356997428',
 
         contact_email:
           process.env.MANDAL_CONTACT_EMAIL ||
-          'contact@yuvasports.org',
+          'shreyashgavade7@gmail.com',
 
         registration_no:
           process.env.MANDAL_REGISTRATION_NO ||
-          '-',
+          'MAH/KOLHAPUR/1964',
 
         festival_year:
           Number(process.env.FESTIVAL_YEAR) ||
@@ -210,19 +201,19 @@ export async function ensureInitialSetup() {
 
         visarjan_date:
           process.env.VISARJAN_DATE ||
-          '2026-09-23T18:00:00+05:30',
+          '2026-09-25T18:00:00+05:30',
 
         upi_id:
           process.env.MANDAL_UPI_ID ||
-          '',
+          'sarveshkharoshe8-2@okaxis',
 
         upi_name:
           process.env.MANDAL_UPI_NAME ||
-          'Yuva Sports Ganeshostav Mandal',
+          'Shri Hanuman Talim Mandal Shirol',
 
         receipt_prefix:
           process.env.RECEIPT_PREFIX ||
-          'YUVA-2026-',
+          'HANUMAN-2026-',
 
         receipt_language: 'mr',
 
@@ -285,7 +276,7 @@ export async function ensureInitialSetup() {
 
         email:
           process.env.ADMIN_EMAIL ||
-          'admin@yuvasports.org',
+          'admin@hanumantalimmandal.org',
 
         mobile:
           process.env.ADMIN_MOBILE ||

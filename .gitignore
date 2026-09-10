@@ -18,7 +18,8 @@ server/.env
 *.sqlite-wal
 *.db
 
-# Logs
+# Root temporary diagnostic scripts & logs
+/*.js
 *.log
 
 # OS

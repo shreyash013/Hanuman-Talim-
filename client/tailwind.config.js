@@ -23,8 +23,8 @@ export default {
         }
       },
       fontFamily: {
-        marathi: ['"Noto Sans Devanagari"', '"Yantramanav"', 'sans-serif'],
-        sans: ['Inter', '"Noto Sans Devanagari"', 'system-ui', 'sans-serif'],
+        marathi: ['"Tiro Devanagari Marathi"', '"Noto Sans Devanagari"', 'serif'],
+        sans: ['"Tiro Devanagari Marathi"', 'Inter', '"Noto Sans Devanagari"', 'sans-serif'],
       },
       boxShadow: {
         'festive': '0 10px 25px -5px rgba(230, 81, 0, 0.15), 0 8px 10px -6px rgba(230, 81, 0, 0.1)',

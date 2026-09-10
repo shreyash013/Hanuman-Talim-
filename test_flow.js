@@ -1,5 +1,5 @@
 async function testFlow() {
-  const baseUrl = 'https://yuva-sports.onrender.com/api';
+  const baseUrl = 'https://hanuman-talim-mandal.onrender.com/api';
   console.log('--- Testing Ganpati Mandal System Production Endpoints ---');
 
   // 1. Test Admin Login

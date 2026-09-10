@@ -29,6 +29,10 @@ import { SettingsPage } from './pages/SettingsPage';
 import { UsersManagementPage } from './pages/UsersManagementPage';
 import { PublicVerifyReceiptPage } from './pages/PublicVerifyReceiptPage';
 import { PublicDonationPage } from './pages/PublicDonationPage';
+import { PublicDevoteePortal } from './pages/PublicDevoteePortal';
+import { FestivalPlannerPage } from './pages/FestivalPlannerPage';
+import { VolunteerManagementPage } from './pages/VolunteerManagementPage';
+import { LoansPage } from './pages/LoansPage';
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -69,6 +73,7 @@ export function App() {
                   <Route path="/register" element={<RegisterPage />} />
                   <Route path="/verify-receipt/:receiptNumber?" element={<PublicVerifyReceiptPage />} />
                   <Route path="/donate" element={<PublicDonationPage />} />
+                  <Route path="/public" element={<PublicDevoteePortal />} />
 
                   {/* Protected Mandal App Routes */}
                   <Route
@@ -81,6 +86,8 @@ export function App() {
                   >
                     <Route index element={<Navigate to="/dashboard" replace />} />
                     <Route path="dashboard" element={<DashboardPage />} />
+                    <Route path="festival-planner" element={<FestivalPlannerPage />} />
+                    <Route path="volunteers" element={<VolunteerManagementPage />} />
                     <Route
                       path="vargani"
                       element={
@@ -126,6 +133,14 @@ export function App() {
                       element={
                         <ProtectedRoute allowedRoles={['admin', 'treasurer', 'secretary', 'volunteer']}>
                           <CashManagementPage />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="loans"
+                      element={
+                        <ProtectedRoute allowedRoles={['admin', 'treasurer', 'secretary']}>
+                          <LoansPage />
                         </ProtectedRoute>
                       }
                     />

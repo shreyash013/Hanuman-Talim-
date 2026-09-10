@@ -3,7 +3,8 @@
 @tailwind utilities;
 
 @layer base {
-  body {
+  body, html, input, button, select, textarea {
+    font-family: 'Tiro Devanagari Marathi', 'Noto Sans Devanagari', 'Inter', serif;
     @apply antialiased overflow-x-hidden;
   }
 }

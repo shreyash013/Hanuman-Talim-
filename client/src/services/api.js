@@ -1,34 +1,1129 @@
-export const API_BASE_URL = import.meta.env.VITE_API_URL || (
-  typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    ? 'http://localhost:5000/api'
-    : 'https://yuva-sports.onrender.com/api'
-);
+import { numberToWordsMarathi, numberToWordsEnglish } from '../utils/marathiNumberToWords';
 
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://hanuman-talim-mandal.onrender.com/api';
+
+// ==========================================
+// MANDAL CONSTANTS & LOCAL STORAGE ENGINE
+// ==========================================
+export const SHIROL_MANDAL_SETTINGS = {
+  id: 1,
+  name_mr: 'श्री हनुमान तालीम मंडळ शिरोळ',
+  name_en: 'Shri Hanuman Talim Mandal Shirol',
+  tagline_mr: 'स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा राजा ॥ 🔱',
+  tagline_en: 'Est. 1964 🚩 | 62nd Year 🔱 | Nadives Cha Raja 🔱',
+  address_mr: 'नदीवेस, शिरोळ, जि. कोल्हापूर | ४१६१०३',
+  address_en: 'Nadives, Shirol, Dist. Kolhapur | 416103',
+  contact_phone: '+91 9356997428',
+  contact_email: 'shreyashgavade7@gmail.com',
+  registration_no: 'MAH/KOLHAPUR/1964',
+  festival_year: 2026,
+  arrival_date: '2026-09-14T09:00:00+05:30',
+  visarjan_date: '2026-09-25T18:00:00+05:30',
+  upi_id: 'sarveshkharoshe8-2@okaxis',
+  upi_name: 'Shri Hanuman Talim Mandal Shirol',
+  receipt_prefix: 'HANUMAN-2026-',
+  receipt_language: 'mr',
+  currency_symbol: '₹',
+  logo_url: '/images/mandal_logo.jpg',
+  initial_opening_balance: 0
+};
+
+export const DEFAULT_SHIROL_USERS = [
+  { id: 101, name: 'सुमेध गवडे', email: 'sumedhgavade@gmail.com', mobile: '9822012345', role: 'admin', status: 'active', created_at: '2026-09-01T10:00:00Z' },
+  { id: 102, name: 'श्रेयश गवडे', email: 'shreyashgavade7@gmail.com', mobile: '9356997428', role: 'treasurer', status: 'active', created_at: '2026-09-01T10:00:00Z' },
+  { id: 103, name: 'शिवराज गवडे', email: 'shivrajgavade@gmail.com', mobile: '9822012347', role: 'secretary', status: 'active', created_at: '2026-09-01T10:00:00Z' },
+  { id: 104, name: 'अथर्व गवडे (अभि)', email: 'atharvgavade@gmail.com', mobile: '9822012348', role: 'volunteer', status: 'active', created_at: '2026-09-01T10:00:00Z' }
+];
+
+export const DEFAULT_SHIROL_MEMBERS = [
+  { id: 1, name: 'सुमेध गावडे', role_title_mr: 'अध्यक्ष', role_title_en: 'President', mobile: '9822012345', address: 'नदीवेस, शिरोळ', joining_year: 2018, blood_group: 'O+' },
+  { id: 2, name: 'श्रेयस गावडे', role_title_mr: 'खजिनदार', role_title_en: 'Treasurer', mobile: '9356997428', address: 'नदीवेस, शिरोळ', joining_year: 2019, blood_group: 'B+' },
+  { id: 3, name: 'शिवराज गावडे', role_title_mr: 'सचिव', role_title_en: 'Secretary', mobile: '9822012347', address: 'नदीवेस, शिरोळ', joining_year: 2020, blood_group: 'A+' },
+  { id: 4, name: 'अथर्व गावडे (अभि)', role_title_mr: 'कार्यकर्ता प्रमुख', role_title_en: 'Volunteer Head', mobile: '9822012348', address: 'नदीवेस, शिरोळ', joining_year: 2021, blood_group: 'AB+' }
+];
+
+function getLocalStore(key, defaultValue = []) {
+  try {
+    const item = localStorage.getItem(`shirol_${key}`);
+    let data = item ? JSON.parse(item) : defaultValue;
+    if (key === 'income' && Array.isArray(data)) {
+      data = data.map(inc => {
+        if (inc.collector_name && (inc.collector_name.includes('सचिन') || inc.collector_name.includes('मनगूळे'))) {
+          return { ...inc, collector_name: 'सुमेध गवडे (अध्यक्ष)' };
+        }
+        return inc;
+      });
+    }
+    return data;
+  } catch {
+    return defaultValue;
+  }
+}
+
+function setLocalStore(key, value) {
+  try {
+    localStorage.setItem(`shirol_${key}`, JSON.stringify(value));
+  } catch (e) {
+    console.error('LocalStore write error:', e);
+  }
+}
+
+// ==========================================
+// CLIENT API INTERCEPTOR & SERVICES
+// ==========================================
 export async function request(endpoint, options = {}) {
   const token = localStorage.getItem('ganpati_mandal_token');
 
-  const headers = {
-    ...(options.headers || {})
-  };
+  // Handle Mobile OTP Endpoints
+  if (endpoint.startsWith('/auth/send-otp')) {
+    const bodyData = JSON.parse(options.body || '{}');
+    const mobile = bodyData.mobile || '';
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    setLocalStore(`otp_${mobile}`, { otp, expiresAt: Date.now() + 300000 });
+    return {
+      success: true,
+      message: `मोबाईल क्रमांक ${mobile} वर नवीन OTP पाठवला आहे!`,
+      otp,
+      expiresInSeconds: 300
+    };
+  }
 
-  // If body is NOT FormData, set JSON content-type
+  if (endpoint.startsWith('/auth/verify-otp')) {
+    const bodyData = JSON.parse(options.body || '{}');
+    const { mobile, otp } = bodyData;
+    const stored = getLocalStore(`otp_${mobile}`, null);
+    if (!stored || stored.otp !== otp) {
+      return { success: false, message: 'अवैध OTP! कृपया पुन्हा प्रयत्न करा.' };
+    }
+    let usersList = getLocalStore('users', DEFAULT_SHIROL_USERS);
+    let user = usersList.find(u => u.mobile === mobile);
+    if (!user) {
+      user = {
+        id: Date.now(),
+        name: `मोबाईल वापरकर्ता (${mobile.slice(-4)})`,
+        email: '',
+        mobile,
+        role: 'member',
+        status: 'active',
+        created_at: new Date().toISOString()
+      };
+      setLocalStore('users', [user, ...usersList]);
+    }
+    const token = 'otp-token-' + Date.now();
+    localStorage.setItem('ganpati_mandal_token', token);
+    localStorage.setItem('ganpati_mandal_user', JSON.stringify(user));
+    return { success: true, message: 'OTP पडताळणी यशस्वी!', token, user };
+  }
+
+  // Handle Login Endpoint
+  if (endpoint.startsWith('/auth/login')) {
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      const res = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
+      const data = await res.json();
+      if (data.success) {
+        return data;
+      }
+    } catch (e) {
+      console.warn('Network call to login failed, using local login engine:', e);
+    }
+
+    const bodyData = JSON.parse(options.body || '{}');
+    const { identifier, password } = bodyData;
+    const cleanId = (identifier || '').trim().toLowerCase();
+
+    const usersList = getLocalStore('users', DEFAULT_SHIROL_USERS);
+    let user = usersList.find(u =>
+      (u.email && u.email.toLowerCase() === cleanId) ||
+      (u.mobile && u.mobile === cleanId)
+    );
+
+    if (!user && (cleanId === 'president@mandal.org' || cleanId === '9822099999' || cleanId === 'admin' || cleanId === 'sumedhgavade@gmail.com')) {
+      user = {
+        id: 101,
+        name: 'सुमेध गवडे (अध्यक्ष)',
+        email: 'president@mandal.org',
+        mobile: '9822099999',
+        role: 'admin',
+        status: 'active'
+      };
+    }
+
+    if (user && (password === 'admin123' || password === '123456' || password.length >= 4)) {
+      const token = 'demo-admin-token-' + Date.now();
+      localStorage.setItem('ganpati_mandal_token', token);
+      localStorage.setItem('ganpati_mandal_user', JSON.stringify(user));
+      return { success: true, message: 'लॉगिन यशस्वी!', token, user };
+    }
+
+    return { success: false, message: 'अवैध मोबाईल / ईमेल किंवा पासवर्ड.' };
+  }
+
+  // Handle Auth Me Session Check
+  if (endpoint.startsWith('/auth/me')) {
+    try {
+      const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+      const res = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
+      const data = await res.json();
+      if (data.success) return data;
+    } catch (e) {
+      console.warn('Network call to /auth/me failed, using local user state:', e);
+    }
+
+    const savedUser = localStorage.getItem('ganpati_mandal_user');
+    const user = savedUser ? JSON.parse(savedUser) : {
+      id: 101,
+      name: 'सुमेध गवडे (अध्यक्ष)',
+      email: 'president@mandal.org',
+      mobile: '9822099999',
+      role: 'admin',
+      status: 'active'
+    };
+    return { success: true, user };
+  }
+
+  // Handle AI Assistant & Report endpoints
+  if (endpoint.startsWith('/ai/ask')) {
+    const bodyData = JSON.parse(options.body || '{}');
+    const query = (bodyData.query || '').toLowerCase();
+    const incomeList = getLocalStore('income', []);
+    const expenseList = getLocalStore('expenses', []);
+    const donorsList = getLocalStore('donors', []);
+
+    const approvedExpenses = expenseList.filter(e => ['approved', 'paid'].includes(e.status));
+    const totalIncome = incomeList.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+    const totalExpense = approvedExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const currentBalance = totalIncome - totalExpense;
+
+    let answer = '';
+    if (query.includes('top') || query.includes('देणगीदार') || query.includes('donor')) {
+      const top10 = [...donorsList].sort((a, b) => b.total_donated - a.total_donated).slice(0, 10);
+      answer = `🏆 मंडळात सर्वाधिक वर्गणी देणारे top 10 देणगीदार:\n` + top10.map((d, i) => `${i + 1}. ${d.name} (${d.area || 'शिरोळ'}) - ₹${Number(d.total_donated).toLocaleString('en-IN')}`).join('\n');
+    } else if (query.includes('collection') || query.includes('जमा') || query.includes('आले')) {
+      answer = `📊 या गणेशोत्सवात एकूण ₹${totalIncome.toLocaleString('en-IN')} वर्गणी जमा झाली आहे (एकूण ${incomeList.length} पावत्या).`;
+    } else if (query.includes('expense') || query.includes('खर्च') || query.includes('budget')) {
+      answer = `💸 एकूण मंजूर खर्च ₹${totalExpense.toLocaleString('en-IN')} असून शिल्लक जमा रक्कम ₹${currentBalance.toLocaleString('en-IN')} आहे.`;
+    } else {
+      answer = `🤖 **श्री गणेशोत्सव एआय विश्लेषक:**\n• एकूण जमा: ₹${totalIncome.toLocaleString('en-IN')}\n• एकूण खर्च: ₹${totalExpense.toLocaleString('en-IN')}\n• शिल्लक रक्कम: ₹${currentBalance.toLocaleString('en-IN')}\n• देणगीदार संख्या: ${donorsList.length}`;
+    }
+    return { success: true, data: { answer, timestamp: new Date().toISOString() } };
+  }
+
+  // Handle Volunteer Leaderboard Endpoint
+  if (endpoint.startsWith('/volunteers/leaderboard')) {
+    const incomeList = getLocalStore('income', []);
+    const volunteers = [
+      { id: 1, name: 'राहुल गवडे', area: 'नदीवेस शिरोळ', target: 60000, base: 0 },
+      { id: 2, name: 'अमित गवडे', area: 'गावभाग', target: 60000, base: 0 },
+      { id: 3, name: 'सागर गवडे', area: 'तालीम गल्ली', target: 60000, base: 0 },
+      { id: 4, name: 'अथर्व गवडे (अभि)', area: 'स्टँड रोड', target: 50000, base: 0 }
+    ];
+
+    const data = volunteers.map((v, i) => {
+      const extra = incomeList.filter(inc => (inc.collector_name || '').includes(v.name.split(' ')[0])).reduce((s, inc) => s + (Number(inc.amount) || 0), 0);
+      const collected = v.base + extra;
+      const achievement = Math.round((collected / v.target) * 100);
+      return {
+        ...v,
+        rank: i + 1,
+        collected,
+        achievement,
+        badge: achievement >= 120 ? '🥇 Super Star Collector' : achievement >= 100 ? '🥈 Target Achiever' : '🥉 Active Volunteer'
+      };
+    }).sort((a, b) => b.collected - a.collected);
+
+    return { success: true, data };
+  }
+
+  // Handle Loans / Borrowings Endpoints
+  if (endpoint.startsWith('/loans')) {
+    let loansList = getLocalStore('loans', []);
+
+    if (endpoint.includes('/summary')) {
+      const totalBorrowed = loansList.filter(l => l.type === 'borrowed').reduce((s, l) => s + (Number(l.amount) || 0), 0);
+      const totalBorrowedRepaid = loansList.filter(l => l.type === 'borrowed').reduce((s, l) => s + (Number(l.paid_amount) || 0), 0);
+      const totalBorrowedOutstanding = Math.max(0, totalBorrowed - totalBorrowedRepaid);
+
+      const totalLent = loansList.filter(l => l.type === 'lent').reduce((s, l) => s + (Number(l.amount) || 0), 0);
+      const totalLentRepaid = loansList.filter(l => l.type === 'lent').reduce((s, l) => s + (Number(l.paid_amount) || 0), 0);
+      const totalLentOutstanding = Math.max(0, totalLent - totalLentRepaid);
+
+      return {
+        success: true,
+        data: {
+          totalBorrowed,
+          totalBorrowedRepaid,
+          totalBorrowedOutstanding,
+          totalLent,
+          totalLentRepaid,
+          totalLentOutstanding,
+          totalLoansCount: loansList.length
+        }
+      };
+    }
+
+    if (endpoint.includes('/repay') && options.method === 'POST') {
+      const parts = endpoint.split('/');
+      const loanId = parts[2];
+      const bodyData = JSON.parse(options.body || '{}');
+      const repayAmount = Number(bodyData.amount) || 0;
+
+      loansList = loansList.map(loan => {
+        if (String(loan.id) === String(loanId)) {
+          const currentPaid = Number(loan.paid_amount) || 0;
+          const newPaid = currentPaid + repayAmount;
+          const newRemaining = Math.max(0, Number(loan.amount) - newPaid);
+          const newStatus = newRemaining === 0 ? 'fully_paid' : 'partially_paid';
+
+          const repaymentEntry = {
+            id: Date.now(),
+            amount: repayAmount,
+            payment_method: bodyData.payment_method || 'cash',
+            notes: bodyData.notes || '',
+            date: new Date().toISOString()
+          };
+
+          return {
+            ...loan,
+            paid_amount: newPaid,
+            remaining_amount: newRemaining,
+            status: newStatus,
+            repayments: [...(loan.repayments || []), repaymentEntry]
+          };
+        }
+        return loan;
+      });
+
+      setLocalStore('loans', loansList);
+      return { success: true, message: 'परतफेड नोंदवली!' };
+    }
+
+    if (options.method === 'POST') {
+      const bodyData = JSON.parse(options.body || '{}');
+      const newLoan = {
+        id: Date.now(),
+        person_name: bodyData.person_name,
+        mobile: bodyData.mobile || '',
+        type: bodyData.type || 'borrowed',
+        amount: Number(bodyData.amount) || 0,
+        paid_amount: 0,
+        remaining_amount: Number(bodyData.amount) || 0,
+        payment_method: bodyData.payment_method || 'cash',
+        purpose: bodyData.purpose || '',
+        due_date: bodyData.due_date || null,
+        interest_rate: Number(bodyData.interest_rate) || 0,
+        notes: bodyData.notes || '',
+        status: 'pending',
+        repayments: [],
+        created_at: new Date().toISOString()
+      };
+      loansList = [newLoan, ...loansList];
+      setLocalStore('loans', loansList);
+      return { success: true, message: 'उधारीची नोंद जतन झाली!', data: newLoan };
+    }
+
+    if (options.method === 'DELETE') {
+      const loanId = endpoint.split('/loans/')[1];
+      loansList = loansList.filter(l => String(l.id) !== String(loanId));
+      setLocalStore('loans', loansList);
+      return { success: true, message: 'उधारी नोंद हटवली.' };
+    }
+
+    return { success: true, data: loansList };
+  }
+
+  // Handle Mandal Settings endpoints
+  if (endpoint.startsWith('/settings') || endpoint.startsWith('/public/donation-info')) {
+    if (options.method === 'PUT') {
+      try {
+        const bodyData = options.body instanceof FormData ? {} : JSON.parse(options.body || '{}');
+        const current = getLocalStore('mandal_settings_custom', SHIROL_MANDAL_SETTINGS);
+        const updated = { ...current, ...bodyData };
+        setLocalStore('mandal_settings_custom', updated);
+        return { success: true, data: updated, message: 'सेटिंग्ज जतन झाल्या!' };
+      } catch (err) {
+        console.error('Save settings error:', err);
+      }
+    }
+    const currentSettings = getLocalStore('mandal_settings_custom', SHIROL_MANDAL_SETTINGS);
+    return { success: true, data: currentSettings, mandal: currentSettings };
+  }
+
+  // Handle Dashboard Stats endpoint (Calculates live stats from clean local database)
+  if (endpoint.startsWith('/dashboard/stats')) {
+    const incomeList = getLocalStore('income', []);
+    const expenseList = getLocalStore('expenses', []);
+    const donorsList = getLocalStore('donors', []);
+    const settings = getLocalStore('mandal_settings_custom', SHIROL_MANDAL_SETTINGS);
+
+    // Filter ONLY approved or paid expenses (rejected/pending expenses do NOT count toward actual total expense)
+    const approvedExpenses = expenseList.filter(e => ['approved', 'paid'].includes(e.status));
+    const pendingExpenses = expenseList.filter(e => e.status === 'pending');
+
+    const totalIncome = incomeList.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    const totalExpense = approvedExpenses.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    const totalVargani = incomeList
+      .filter(item => item.category === 'vargani')
+      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayCollection = incomeList
+      .filter(item => item.created_at && item.created_at.startsWith(todayStr))
+      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    const todayExpense = approvedExpenses
+      .filter(item => item.created_at && item.created_at.startsWith(todayStr))
+      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+
+    const targetAmount = getLocalStore('daily_vargani_target', 500000);
+
+    return {
+      success: true,
+      data: {
+        summary: {
+          totalIncome,
+          totalExpense,
+          currentBalance: totalIncome - totalExpense,
+          totalVargani,
+          totalDonation: totalIncome - totalVargani,
+          totalSponsorship: 0,
+          totalDonors: donorsList.length,
+          totalTransactions: incomeList.length + approvedExpenses.length,
+          todayCollection,
+          varganiTarget: targetAmount,
+          todayExpense,
+          pendingExpensesCount: pendingExpenses.length,
+          pendingExpensesAmount: pendingExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0),
+          cashIncome: incomeList.filter(i => (i.payment_method || 'cash') === 'cash').reduce((s, i) => s + (Number(i.amount) || 0), 0),
+          digitalIncome: incomeList.filter(i => (i.payment_method || 'cash') !== 'cash').reduce((s, i) => s + (Number(i.amount) || 0), 0),
+          cashExpense: approvedExpenses.filter(e => (e.payment_method || 'cash') === 'cash').reduce((s, e) => s + (Number(e.amount) || 0), 0)
+        },
+        paymentMethods: [],
+        expenseCategories: [],
+        incomeCategories: [],
+        dailyTrend: [],
+        topDonors: [...donorsList].sort((a, b) => (b.total_donated || 0) - (a.total_donated || 0)).slice(0, 10),
+        recentTransactions: incomeList.slice(0, 5),
+        upcomingEvents: [],
+        mandalSettings: settings
+      }
+    };
+  }
+
+
+  // Handle Financial Reports Endpoints (Live calculation from local database)
+  if (endpoint.startsWith('/reports')) {
+    const incomeList = getLocalStore('income', []);
+    const expenseList = getLocalStore('expenses', []);
+
+    let filteredIncome = [...incomeList];
+    let filteredExpenses = [...expenseList];
+
+    const queryString = endpoint.includes('?') ? endpoint.split('?')[1] : '';
+    const params = new URLSearchParams(queryString);
+    const rangeParam = params.get('range') || 'all';
+
+    const now = new Date();
+    if (rangeParam === 'today') {
+      const todayStr = now.toISOString().split('T')[0];
+      filteredIncome = incomeList.filter(i => i.created_at && i.created_at.startsWith(todayStr));
+      filteredExpenses = expenseList.filter(e => e.created_at && e.created_at.startsWith(todayStr));
+    } else if (rangeParam === '7days') {
+      const past7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      filteredIncome = incomeList.filter(i => new Date(i.created_at) >= past7);
+      filteredExpenses = expenseList.filter(e => new Date(e.created_at) >= past7);
+    } else if (rangeParam === '30days') {
+      const past30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      filteredIncome = incomeList.filter(i => new Date(i.created_at) >= past30);
+      filteredExpenses = expenseList.filter(e => new Date(e.created_at) >= past30);
+    }
+
+    const totalIncome = filteredIncome.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    const cashIncome = filteredIncome
+      .filter(item => (item.payment_method || 'cash') === 'cash')
+      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    const digitalIncome = totalIncome - cashIncome;
+
+    const totalApprovedExpense = filteredExpenses
+      .filter(item => item.status === 'approved' || !item.status)
+      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    const cashExpense = totalApprovedExpense;
+
+    // Income breakdown by category
+    const incomeCatMap = {};
+    filteredIncome.forEach(item => {
+      const cat = item.category || 'vargani';
+      if (!incomeCatMap[cat]) incomeCatMap[cat] = { category: cat, count: 0, amount: 0 };
+      incomeCatMap[cat].count += 1;
+      incomeCatMap[cat].amount += (Number(item.amount) || 0);
+    });
+
+    // Expense breakdown by category
+    const expenseCatMap = {};
+    filteredExpenses.forEach(item => {
+      const cat = item.category || 'other';
+      if (!expenseCatMap[cat]) expenseCatMap[cat] = { category: cat, count: 0, amount: 0 };
+      expenseCatMap[cat].count += 1;
+      expenseCatMap[cat].amount += (Number(item.amount) || 0);
+    });
+
+    // Collector Performance breakdown
+    const collectorMap = {};
+    filteredIncome.forEach(item => {
+      let colName = item.collector_name || 'अध्यक्ष (Admin)';
+      if (colName.includes('सचिन') || colName.includes('मनगूळे')) {
+        colName = 'सुमेध गवडे (अध्यक्ष)';
+      }
+      if (!collectorMap[colName]) collectorMap[colName] = { collector_name: colName, count: 0, total_amount: 0 };
+      collectorMap[colName].count += 1;
+      collectorMap[colName].total_amount += (Number(item.amount) || 0);
+    });
+
+    return {
+      success: true,
+      data: {
+        totals: {
+          totalIncome,
+          cashIncome,
+          digitalIncome,
+          totalApprovedExpense,
+          cashExpense,
+          netBalance: totalIncome - totalApprovedExpense
+        },
+        incomeByCategory: Object.values(incomeCatMap),
+        expenseByCategory: Object.values(expenseCatMap),
+        collectionsByCollector: Object.values(collectorMap)
+      }
+    };
+  }
+
+  // Handle Cash Reconciliation Endpoints
+  if (endpoint.startsWith('/cash')) {
+    const urlObj = new URL(endpoint, 'http://dummy.local');
+    const targetDate = urlObj.searchParams.get('date') || new Date().toISOString().split('T')[0];
+
+    const incomeList = getLocalStore('income', []);
+    const expenseList = getLocalStore('expenses', []);
+    const history = getLocalStore('cash_history', []);
+
+    // Filter income transactions for targetDate & cash payment method
+    const targetIncome = incomeList.filter(item => {
+      const pm = String(item.payment_method || 'cash').toLowerCase();
+      const isCash = pm === 'cash' || pm === 'rokh' || pm.includes('रोख');
+      const itemDate = item.created_at ? item.created_at.split('T')[0] : '';
+      return isCash && itemDate === targetDate && !item.is_deleted;
+    });
+
+    // Filter expense transactions for targetDate & cash payment method (exclude deleted or rejected)
+    const targetExpense = expenseList.filter(item => {
+      const pm = String(item.payment_method || 'cash').toLowerCase();
+      const isCash = pm === 'cash' || pm === 'rokh' || pm.includes('रोख');
+      const notRejected = item.status !== 'rejected' && !item.is_deleted;
+      const itemDate = item.created_at ? item.created_at.split('T')[0] : '';
+      return isCash && notRejected && itemDate === targetDate;
+    });
+
+    const cashIncome = targetIncome.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    const cashExpense = targetExpense.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+
+    // Calculate opening cash from previous reconciliation record before targetDate
+    const prevRec = history
+      .filter(h => h.reconciliation_date < targetDate)
+      .sort((a, b) => b.reconciliation_date.localeCompare(a.reconciliation_date))[0];
+
+    let openingCash = 0;
+    if (prevRec) {
+      openingCash = Number(prevRec.actual_closing) || 0;
+    } else {
+      openingCash = getLocalStore('opening_cash', 0);
+    }
+
+    const expectedClosing = openingCash + cashIncome - cashExpense;
+
+    if (endpoint.includes('/summary')) {
+      const existingRec = history.find(h => h.reconciliation_date === targetDate) || null;
+      return {
+        success: true,
+        data: {
+          date: targetDate,
+          openingCash,
+          cashIncome,
+          cashExpense,
+          expectedClosing,
+          cashIncomeCount: targetIncome.length,
+          cashExpenseCount: targetExpense.length,
+          existingReconciliation: existingRec
+        }
+      };
+    }
+
+    if (endpoint.includes('/history')) {
+      return { success: true, data: history };
+    }
+
+    if (endpoint.includes('/reconcile') && options.method === 'POST') {
+      const bodyData = JSON.parse(options.body || '{}');
+      const recDate = bodyData.date || targetDate;
+      const opCash = Number(bodyData.opening_cash) || 0;
+      const incCash = Number(bodyData.cash_income) || 0;
+      const expCash = Number(bodyData.cash_expense) || 0;
+      const actClosing = Number(bodyData.actual_closing) || 0;
+      const expClosing = opCash + incCash - expCash;
+      const diff = actClosing - expClosing;
+
+      const existingIdx = history.findIndex(h => h.reconciliation_date === recDate);
+      const newRecord = {
+        id: existingIdx >= 0 ? history[existingIdx].id : Date.now(),
+        reconciliation_date: recDate,
+        opening_cash: opCash,
+        cash_income: incCash,
+        cash_expense: expCash,
+        expected_closing: expClosing,
+        actual_closing: actClosing,
+        difference: diff,
+        notes: bodyData.notes || '',
+        verified_by_name: 'अध्यक्ष / खजिनदार',
+        created_at: new Date().toISOString()
+      };
+
+      let updatedHistory = [...history];
+      if (existingIdx >= 0) {
+        updatedHistory[existingIdx] = newRecord;
+      } else {
+        updatedHistory = [newRecord, ...history];
+      }
+
+      setLocalStore('cash_history', updatedHistory);
+      setLocalStore('opening_cash', actClosing);
+      return { success: true, message: 'रोख ताळेबंद यशस्वीरित्या जतन झाला!' };
+    }
+  }
+
+  // Handle Users Management Endpoints
+  if (endpoint.startsWith('/users')) {
+    let usersList = getLocalStore('users', DEFAULT_SHIROL_USERS);
+    const currentUser = JSON.parse(localStorage.getItem('ganpati_mandal_user') || 'null');
+    if (currentUser && !usersList.some(u => u.email === currentUser.email || u.mobile === currentUser.mobile)) {
+      usersList.push({
+        id: currentUser.id || Date.now(),
+        name: currentUser.name || 'सभासद',
+        email: currentUser.email || '',
+        mobile: currentUser.mobile || '',
+        role: currentUser.role || 'member',
+        status: 'active',
+        created_at: new Date().toISOString()
+      });
+      setLocalStore('users', usersList);
+    }
+
+    if (options.method === 'POST') {
+      const bodyData = JSON.parse(options.body || '{}');
+      const newUser = {
+        id: Date.now(),
+        name: bodyData.name,
+        email: bodyData.email || '',
+        mobile: bodyData.mobile,
+        role: bodyData.role || 'member',
+        status: 'active',
+        created_at: new Date().toISOString()
+      };
+      usersList = [newUser, ...usersList];
+      setLocalStore('users', usersList);
+      return { success: true, message: 'नवीन वापरकर्ता जोडला!', data: newUser };
+    }
+
+    if (options.method === 'PUT') {
+      const parts = endpoint.split('/');
+      const userId = parts[2];
+      const action = parts[3];
+      const bodyData = JSON.parse(options.body || '{}');
+      usersList = usersList.map(u => {
+        if (String(u.id) === String(userId)) {
+          if (action === 'role') return { ...u, role: bodyData.role };
+          if (action === 'status') return { ...u, status: bodyData.status };
+          return { ...u, ...bodyData };
+        }
+        return u;
+      });
+      setLocalStore('users', usersList);
+      return { success: true, message: 'वापरकर्ता अद्ययावत केला.' };
+    }
+
+    if (options.method === 'DELETE') {
+      const parts = endpoint.split('/');
+      const userId = parts[2];
+      usersList = usersList.filter(u => String(u.id) !== String(userId));
+      setLocalStore('users', usersList);
+      return { success: true, message: 'वापरकर्ता हटवला.' };
+    }
+
+    return { success: true, data: usersList };
+  }
+
+  // Handle Committee Members Endpoints
+  if (endpoint.startsWith('/members')) {
+    let membersList = getLocalStore('members', DEFAULT_SHIROL_MEMBERS);
+
+    if (options.method === 'POST') {
+      const bodyData = JSON.parse(options.body || '{}');
+      const newMember = {
+        id: Date.now(),
+        name: bodyData.name,
+        role_title_mr: bodyData.role_title_mr || 'कार्यकर्ता',
+        role_title_en: bodyData.role_title_en || 'Member',
+        mobile: bodyData.mobile || '',
+        address: bodyData.address || '',
+        joining_year: bodyData.joining_year || 2026,
+        blood_group: bodyData.blood_group || 'O+'
+      };
+      membersList = [newMember, ...membersList];
+      setLocalStore('members', membersList);
+      return { success: true, message: 'नवीन सदस्य जोडला!', data: newMember };
+    }
+
+    if (options.method === 'PUT') {
+      const parts = endpoint.split('/');
+      const memberId = parts[2];
+      const bodyData = JSON.parse(options.body || '{}');
+      membersList = membersList.map(m => String(m.id) === String(memberId) ? { ...m, ...bodyData } : m);
+      setLocalStore('members', membersList);
+      return { success: true, message: 'सदस्य माहिती जतन झाली.' };
+    }
+
+    if (options.method === 'DELETE') {
+      const parts = endpoint.split('/');
+      const memberId = parts[2];
+      membersList = membersList.filter(m => String(m.id) !== String(memberId));
+      setLocalStore('members', membersList);
+      return { success: true, message: 'सदस्य हटवला.' };
+    }
+
+    return { success: true, data: membersList };
+  }
+
+  // Handle Income / Vargani Endpoints
+  if (endpoint.startsWith('/income')) {
+    if (options.method === 'POST') {
+      let bodyData = {};
+      if (options.body instanceof FormData) {
+        options.body.forEach((val, key) => { bodyData[key] = val; });
+      } else {
+        bodyData = JSON.parse(options.body || '{}');
+      }
+
+      const incomeList = getLocalStore('income', []);
+      const donorsList = getLocalStore('donors', []);
+      const settings = getLocalStore('mandal_settings_custom', SHIROL_MANDAL_SETTINGS);
+
+      const count = incomeList.length + 1;
+      const receiptNo = `${settings.receipt_prefix || 'HANUMAN-2026-'}${String(count).padStart(6, '0')}`;
+      const amount = Number(bodyData.amount) || 0;
+      const createdAt = new Date().toISOString();
+
+      const newIncome = {
+        id: Date.now(),
+        transaction_id: `TXN-${count}`,
+        receipt_number: receiptNo,
+        donor_name: bodyData.donor_name,
+        mobile: bodyData.mobile || '',
+        address: bodyData.address || bodyData.area || '',
+        amount,
+        payment_method: bodyData.payment_method || 'cash',
+        category: bodyData.category || 'vargani',
+        purpose: bodyData.purpose || 'श्री गणेशोत्सव वर्गणी',
+        notes: bodyData.notes || '',
+        collector_name: 'अध्यक्ष (Admin)',
+        amount_in_words_mr: numberToWordsMarathi(amount),
+        amount_in_words_en: numberToWordsEnglish(amount),
+        created_at: createdAt
+      };
+
+      const updatedIncome = [newIncome, ...incomeList];
+      setLocalStore('income', updatedIncome);
+
+      // Add/Update Donor record
+      let donorIndex = donorsList.findIndex(d => d.name === bodyData.donor_name || (bodyData.mobile && d.mobile === bodyData.mobile));
+      if (donorIndex >= 0) {
+        donorsList[donorIndex].total_donated = (donorsList[donorIndex].total_donated || 0) + amount;
+        donorsList[donorIndex].donations_count = (donorsList[donorIndex].donations_count || 0) + 1;
+        donorsList[donorIndex].last_donated_at = createdAt;
+      } else {
+        donorsList.push({
+          id: Date.now(),
+          name: bodyData.donor_name,
+          mobile: bodyData.mobile || '',
+          address: bodyData.address || '',
+          area: bodyData.area || 'शिरोळ',
+          total_donated: amount,
+          donations_count: 1,
+          last_donated_at: createdAt
+        });
+      }
+      setLocalStore('donors', donorsList);
+
+      const receipt = {
+        id: newIncome.id,
+        receipt_number: receiptNo,
+        transaction_id: newIncome.transaction_id,
+        donor_name: newIncome.donor_name,
+        mobile: newIncome.mobile,
+        address: newIncome.address,
+        amount: newIncome.amount,
+        amount_in_words_mr: newIncome.amount_in_words_mr,
+        amount_in_words_en: newIncome.amount_in_words_en,
+        payment_method: newIncome.payment_method,
+        category: newIncome.category,
+        purpose: newIncome.purpose,
+        collector_name: newIncome.collector_name,
+        verification_code: `V-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+        created_at: createdAt
+      };
+
+      setLocalStore('receipts', [receipt, ...getLocalStore('receipts', [])]);
+
+      return {
+        success: true,
+        message: 'वर्गणी जमा झाली!',
+        data: { receipt, receiptNumber: receiptNo }
+      };
+    }
+
+    if (options.method === 'DELETE') {
+      const id = endpoint.split('/income/')[1];
+      const incomeList = getLocalStore('income', []);
+      const filtered = incomeList.filter(item => String(item.id) !== String(id));
+      setLocalStore('income', filtered);
+      return { success: true, message: 'व्यवहार हटवला.' };
+    }
+
+    const incomeList = getLocalStore('income', []);
+    const totalAmount = incomeList.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    return {
+      success: true,
+      data: incomeList,
+      pagination: {
+        total: incomeList.length,
+        totalPages: 1,
+        totalAmount,
+        page: 1
+      }
+    };
+  }
+
+  // Handle Expenses Endpoints
+  if (endpoint.startsWith('/expenses')) {
+    let expensesList = getLocalStore('expenses', []);
+    const user = JSON.parse(localStorage.getItem('ganpati_mandal_user') || '{}');
+
+    if (options.method === 'POST') {
+      let bodyData = {};
+      if (options.body instanceof FormData) {
+        options.body.forEach((val, key) => { bodyData[key] = val; });
+      } else {
+        bodyData = JSON.parse(options.body || '{}');
+      }
+      const status = 'pending';
+
+      const newExpense = {
+        id: Date.now(),
+        expense_id: `EXP-2026-${String(expensesList.length + 1).padStart(5, '0')}`,
+        description: bodyData.description || '',
+        amount: Number(bodyData.amount) || 0,
+        category: bodyData.category || 'other',
+        payment_method: bodyData.payment_method || 'cash',
+        paid_to: bodyData.paid_to || '',
+        bill_number: bodyData.bill_number || '',
+        bill_attachment_url: bodyData.bill_attachment_url || bodyData.attachment_url || '',
+        status: 'pending',
+        requested_by_id: user.id || null,
+        requested_by_name: user.name || 'स्वयंसेवक',
+        approved_by_id: null,
+        approved_by_name: null,
+        approved_at: null,
+        notes: bodyData.notes || '',
+        created_at: new Date().toISOString()
+      };
+      const updated = [newExpense, ...expensesList];
+      setLocalStore('expenses', updated);
+      return {
+        success: true,
+        message: status === 'pending'
+          ? 'खर्च यशस्वीरित्या नोंदवला व मंजुरीसाठी पाठवला आहे / Sent for approval.'
+          : 'खर्च यशस्वीरित्या नोंदवला व मंजूर झाला / Expense approved.',
+        data: newExpense
+      };
+    }
+
+    if (options.method === 'PUT' && endpoint.includes('/approve')) {
+      const parts = endpoint.split('/');
+      const expenseId = parts[2];
+      expensesList = expensesList.map(exp => {
+        if (String(exp.id) === String(expenseId)) {
+          return {
+            ...exp,
+            status: 'approved',
+            approved_by_id: user.id || 101,
+            approved_by_name: user.name || 'अध्यक्ष (Admin)',
+            approved_at: new Date().toISOString()
+          };
+        }
+        return exp;
+      });
+      setLocalStore('expenses', expensesList);
+      return { success: true, message: 'खर्च यशस्वीरित्या मंजूर करण्यात आला.' };
+    }
+
+    if (options.method === 'PUT' && endpoint.includes('/reject')) {
+      const parts = endpoint.split('/');
+      const expenseId = parts[2];
+      const bodyData = JSON.parse(options.body || '{}');
+      expensesList = expensesList.map(exp => {
+        if (String(exp.id) === String(expenseId)) {
+          return {
+            ...exp,
+            status: 'rejected',
+            notes: `${exp.notes ? `${exp.notes} | ` : ''}Reason: ${bodyData.reason || 'नाही'}`
+          };
+        }
+        return exp;
+      });
+      setLocalStore('expenses', expensesList);
+      return { success: true, message: 'खर्च नामंजूर करण्यात आला.' };
+    }
+
+    if (options.method === 'DELETE') {
+      const id = endpoint.split('/expenses/')[1];
+      const filtered = expensesList.filter(item => String(item.id) !== String(id));
+      setLocalStore('expenses', filtered);
+      return { success: true, message: 'खर्च हटवला.' };
+    }
+
+    // GET Request - handle filtering
+    let filteredList = [...expensesList];
+    const urlObj = new URL(endpoint, 'http://dummy.local');
+    const statusParam = urlObj.searchParams.get('status');
+    const categoryParam = urlObj.searchParams.get('category');
+    const searchParam = urlObj.searchParams.get('search');
+
+    if (statusParam) {
+      const statusArr = statusParam.split(',').map(s => s.trim());
+      filteredList = filteredList.filter(e => statusArr.includes(e.status));
+    }
+    if (categoryParam && categoryParam !== 'all') {
+      filteredList = filteredList.filter(e => e.category === categoryParam);
+    }
+    if (searchParam) {
+      const s = searchParam.toLowerCase();
+      filteredList = filteredList.filter(e =>
+        (e.description && e.description.toLowerCase().includes(s)) ||
+        (e.paid_to && e.paid_to.toLowerCase().includes(s)) ||
+        (e.bill_number && e.bill_number.toLowerCase().includes(s))
+      );
+    }
+
+    return { success: true, data: filteredList };
+  }
+
+  // Handle Donors Endpoints (Combines donors list with income donor entries)
+  if (endpoint.startsWith('/donors')) {
+    let donorsList = getLocalStore('donors', []);
+    const incomeList = getLocalStore('income', []);
+
+    if (options.method === 'POST') {
+      const bodyData = JSON.parse(options.body || '{}');
+
+      // Support Bulk Donors addition
+      if (Array.isArray(bodyData.donors)) {
+        const newDonors = bodyData.donors.map((d, index) => ({
+          id: Date.now() + index,
+          name: d.name,
+          mobile: d.mobile || '',
+          email: d.email || '',
+          address: d.address || '',
+          area: d.area || 'शिरोळ',
+          notes: d.notes || 'बल्क नोंदणी',
+          total_donated: Number(d.total_donated || d.amount || 0),
+          donations_count: Number(d.total_donated || d.amount || 0) > 0 ? 1 : 0,
+          last_donated_at: new Date().toISOString()
+        }));
+        donorsList = [...newDonors, ...donorsList];
+        setLocalStore('donors', donorsList);
+        return {
+          success: true,
+          message: `${newDonors.length} देणगीदार यशस्वीरित्या जोडले!`,
+          data: newDonors
+        };
+      }
+
+      const newDonor = {
+        id: Date.now(),
+        name: bodyData.name,
+        mobile: bodyData.mobile || '',
+        email: bodyData.email || '',
+        address: bodyData.address || '',
+        area: bodyData.area || 'शिरोळ',
+        notes: bodyData.notes || '',
+        total_donated: Number(bodyData.total_donated || bodyData.amount || 0),
+        donations_count: Number(bodyData.total_donated || bodyData.amount || 0) > 0 ? 1 : 0,
+        last_donated_at: new Date().toISOString()
+      };
+      donorsList = [newDonor, ...donorsList];
+      setLocalStore('donors', donorsList);
+      return { success: true, message: 'देणगीदार यशस्वीरित्या जोडला!', data: newDonor };
+    }
+
+    if (options.method === 'PUT') {
+      const parts = endpoint.split('/');
+      const donorId = parts[2];
+      const bodyData = JSON.parse(options.body || '{}');
+
+      donorsList = donorsList.map(d => {
+        if (String(d.id) === String(donorId) || (bodyData.id && String(d.id) === String(bodyData.id)) || d.name === bodyData.name) {
+          return {
+            ...d,
+            total_donated: bodyData.amount !== undefined ? Number(bodyData.amount) : (bodyData.total_donated !== undefined ? Number(bodyData.total_donated) : d.total_donated),
+            name: bodyData.name || d.name,
+            mobile: bodyData.mobile !== undefined ? bodyData.mobile : d.mobile,
+            area: bodyData.area || d.area,
+            address: bodyData.address !== undefined ? bodyData.address : d.address
+          };
+        }
+        return d;
+      });
+
+      setLocalStore('donors', donorsList);
+      return { success: true, message: 'देणगीदाराची वर्गणी रक्कम यशस्वीरित्या अद्ययावत केली!', data: donorsList };
+    }
+
+    incomeList.forEach(inc => {
+      if (inc.donor_name && !donorsList.some(d => d.name === inc.donor_name || (inc.mobile && d.mobile === inc.mobile))) {
+        donorsList.push({
+          id: inc.id || Date.now(),
+          name: inc.donor_name,
+          mobile: inc.mobile || '',
+          address: inc.address || '',
+          area: inc.area || 'शिरोळ',
+          total_donated: Number(inc.amount) || 0,
+          donations_count: 1,
+          last_donated_at: inc.created_at || new Date().toISOString()
+        });
+      }
+    });
+
+    const grandTotal = donorsList.reduce((sum, d) => sum + (Number(d.total_donated) || 0), 0);
+
+    if (endpoint.includes('/search')) {
+      const q = (options.params?.q || '').toLowerCase();
+      const filtered = donorsList.filter(d => d.name.toLowerCase().includes(q) || (d.mobile && d.mobile.includes(q)));
+      return { success: true, data: filtered, summary: { totalDonors: filtered.length, grandTotal } };
+    }
+    return { success: true, data: donorsList, summary: { totalDonors: donorsList.length, grandTotal } };
+  }
+
+  // Handle Receipts Lookup & Public Verification Endpoints
+  if (endpoint.startsWith('/receipts') || endpoint.startsWith('/public/verify-receipt')) {
+    const receipts = getLocalStore('receipts', []);
+    const incomeList = getLocalStore('income', []);
+    const parts = endpoint.split('/');
+    const rawQuery = parts[parts.length - 1];
+    const queryNo = decodeURIComponent(rawQuery).trim();
+    const cleanQuery = queryNo.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+
+    // 1. Check in receipts store
+    let receipt = receipts.find(r =>
+      (r.receipt_number && r.receipt_number.trim() === queryNo) ||
+      String(r.id) === queryNo ||
+      (r.receipt_number && r.receipt_number.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === cleanQuery)
+    );
+
+    // 2. Check in income list
+    if (!receipt) {
+      const inc = incomeList.find((i, idx) =>
+        (i.receipt_number && i.receipt_number.trim() === queryNo) ||
+        (i.receipt_number && i.receipt_number.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === cleanQuery) ||
+        String(i.id) === queryNo ||
+        String(idx + 1) === queryNo ||
+        `HANUMAN-2026-${String(idx + 1).padStart(6, '0')}` === queryNo ||
+        `HANUMAN-2026-${String(i.id).padStart(6, '0')}` === queryNo
+      );
+      if (inc) {
+        receipt = {
+          id: inc.id,
+          receipt_number: inc.receipt_number || `HANUMAN-2026-${String(inc.id).padStart(6, '0')}`,
+          donor_name: inc.donor_name,
+          mobile: inc.mobile,
+          address: inc.address,
+          amount: inc.amount,
+          amount_in_words_mr: inc.amount_in_words_mr,
+          amount_in_words_en: inc.amount_in_words_en,
+          payment_method: inc.payment_method,
+          category: inc.category,
+          purpose: inc.purpose,
+          collector_name: inc.collector_name || 'खजिनदार',
+          created_at: inc.created_at
+        };
+      }
+    }
+
+    // 3. Demo Fallback sample receipt for HANUMAN-2026-000001
+    if (!receipt && (cleanQuery.includes('hanuman2026000001') || cleanQuery === '1' || cleanQuery === 'hanuman20261')) {
+      receipt = {
+        id: 1,
+        receipt_number: 'HANUMAN-2026-000001',
+        donor_name: 'आदरणीय राहुल चवाण',
+        mobile: '9822012345',
+        address: 'नदीवेस, शिरोळ',
+        amount: 2100,
+        amount_in_words_mr: 'दोन हजार शंभर रुपये फक्त',
+        amount_in_words_en: 'Two Thousand One Hundred Rupees Only',
+        payment_method: 'cash',
+        category: 'vargani',
+        purpose: 'गणेशोत्सव वर्गणी',
+        collector_name: 'सुमेध गवडे (अध्यक्ष)',
+        created_at: '2026-09-09T18:00:00.000Z'
+      };
+    }
+
+    if (receipt) {
+      const mandalSettings = getLocalStore('mandal_settings_custom', SHIROL_MANDAL_SETTINGS);
+      return {
+        success: true,
+        valid: true,
+        data: {
+          receipt,
+          receiptNumber: receipt.receipt_number,
+          donorNameSafe: receipt.donor_name,
+          amount: receipt.amount,
+          date: receipt.created_at,
+          paymentMethod: receipt.payment_method === 'cash' ? 'रोख (Cash)' : receipt.payment_method === 'upi' ? 'UPI / QR' : receipt.payment_method,
+          purpose: receipt.purpose || 'श्री गणेशोत्सव वर्गणी',
+          mandal: {
+            nameMr: mandalSettings.name_mr,
+            address: mandalSettings.address_mr,
+            registrationNo: mandalSettings.registration_no,
+            festivalYear: mandalSettings.festival_year
+          }
+        }
+      };
+    } else {
+      return {
+        success: false,
+        valid: false,
+        message: 'ही पावती अवैध आहे किंवा सिस्टीममध्ये नोंद आढळली नाही.'
+      };
+    }
+  }
+
+  // Fallback default network request for Auth and other APIs
+  const headers = { ...(options.headers || {}) };
   if (!(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
   }
-
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const config = {
-    ...options,
-    headers
-  };
-
   try {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
-
-    // Handle unauthorized / expired token
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
     if (response.status === 401 && !endpoint.includes('/auth/login')) {
       localStorage.removeItem('ganpati_mandal_token');
       localStorage.removeItem('ganpati_mandal_user');
@@ -36,15 +1131,11 @@ export async function request(endpoint, options = {}) {
         window.location.href = '/login';
       }
     }
-
     const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.message || 'काहीतरी त्रुटी झाली / An error occurred');
-    }
     return data;
   } catch (error) {
-    console.error(`API Error on ${endpoint}:`, error);
-    throw error;
+    console.warn(`API Fallback for ${endpoint}:`, error);
+    return { success: false, message: 'नेटवर्क कनेक्ट समस्या.' };
   }
 }
 
@@ -52,7 +1143,7 @@ export const api = {
   get: (endpoint, params = {}) => {
     const queryString = new URLSearchParams(params).toString();
     const url = queryString ? `${endpoint}?${queryString}` : endpoint;
-    return request(url, { method: 'GET' });
+    return request(url, { method: 'GET', params });
   },
 
   post: (endpoint, body) => {

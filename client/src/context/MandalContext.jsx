@@ -5,22 +5,24 @@ const MandalContext = createContext();
 
 export function MandalProvider({ children }) {
   const [mandal, setMandal] = useState({
-    name_mr: 'युवा स्पोर्ट्स गणेशोत्सव मंडळ, दत्तवाड',
-    name_en: 'Yuva Sports Ganeshostav Mandal, Dattawad',
-    tagline_mr: 'स्थापना: १९८८ | नोंदणी क्र. -',
-    address_mr: 'युवा स्पोर्ट्स चौक, दत्तवाड | ४१६१०७ , महाराष्ट्र |',
-    contact_phone: '+91 9699049637',
-    contact_email: 'sarveshkharoshe8@gmail.com',
-    registration_no: '-',
+    name_mr: 'श्री हनुमान तालीम मंडळ शिरोळ',
+    name_en: 'Shri Hanuman Talim Mandal Shirol',
+    tagline_mr: 'स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा राजा ॥ 🔱',
+    tagline_en: 'Est. 1964 🚩 | 62nd Year 🔱 | Nadives Cha Raja 🔱',
+    address_mr: 'नदीवेस, शिरोळ, जि. कोल्हापूर | ४१६१०३',
+    address_en: 'Nadives, Shirol, Dist. Kolhapur | 416103',
+    contact_phone: '+91 9356997428',
+    contact_email: 'shreyashgavade7@gmail.com',
+    registration_no: 'MAH/KOLHAPUR/1964',
     festival_year: 2026,
     arrival_date: '2026-09-14T09:00:00',
-    visarjan_date: '2026-09-23T18:00:00',
+    visarjan_date: '2026-09-25T18:00:00',
     upi_id: 'sarveshkharoshe8-2@okaxis',
-    upi_name: 'Sarvesh Kharoshe',
-    receipt_prefix: 'YUVA-2026-',
+    upi_name: 'Shri Hanuman Talim Mandal Shirol',
+    receipt_prefix: 'HANUMAN-2026-',
     receipt_language: 'mr',
     currency_symbol: '₹',
-    logo_url: 'D:\\yuva_sports\\client\\images\\51516212-976b-48e0-8f7d-e1f7108672e5.png'
+    logo_url: '/images/mandal_logo.jpg'
   });
 
   const [isLoading, setIsLoading] = useState(false);

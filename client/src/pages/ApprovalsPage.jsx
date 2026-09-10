@@ -174,10 +174,19 @@ export function ApprovalsPage() {
                   {exp.bill_attachment_url ? (
                     <button
                       onClick={() => setPreviewBillUrl(exp.bill_attachment_url)}
-                      className="flex items-center gap-1 text-xs font-bold text-amber-600 hover:underline"
+                      className="flex items-center gap-1.5 text-xs font-bold text-amber-600 dark:text-amber-400 hover:underline"
                     >
-                      <ImageIcon className="w-3.5 h-3.5" />
-                      <span>बिल फोटो पहा</span>
+                      {exp.bill_attachment_url.toLowerCase().includes('.pdf') || exp.bill_attachment_url.startsWith('data:application/pdf') ? (
+                        <>
+                          <FileText className="w-3.5 h-3.5 text-rose-500" />
+                          <span>PDF बिल पहा</span>
+                        </>
+                      ) : (
+                        <>
+                          <ImageIcon className="w-3.5 h-3.5" />
+                          <span>फोटो बिल पहा</span>
+                        </>
+                      )}
                     </button>
                   ) : (
                     <span className="text-[11px] text-slate-400">बिल जोडलेले नाही</span>
@@ -253,20 +262,51 @@ export function ApprovalsPage() {
         </form>
       </Modal>
 
-      {/* Bill Preview Modal */}
+      {/* Bill Attachment Preview Modal (Supports Image & PDF) */}
       <Modal
         isOpen={!!previewBillUrl}
         onClose={() => setPreviewBillUrl(null)}
-        title="बिल / पावती फोटो"
+        title="बिल / पावती पाहणी (Bill Attachment)"
         maxWidth="max-w-2xl"
       >
-        <div className="flex items-center justify-center p-2">
-          <img
-            src={previewBillUrl}
-            alt="Bill Preview"
-            className="max-h-[65vh] w-auto object-contain rounded-xl shadow-md border"
-          />
-        </div>
+        {previewBillUrl && (previewBillUrl.toLowerCase().includes('.pdf') || previewBillUrl.startsWith('data:application/pdf')) ? (
+          <div className="space-y-3 text-center p-2">
+            <div className="p-4 bg-slate-100 dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">
+              <FileText className="w-10 h-10 text-rose-500 mx-auto mb-2" />
+              <h4 className="font-bold text-slate-900 dark:text-white text-xs mb-1">PDF जोडणी (PDF Document)</h4>
+              <div className="flex justify-center space-x-2 mt-2">
+                <a
+                  href={previewBillUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl shadow transition"
+                >
+                  नवीन टॅबमध्ये उघडा
+                </a>
+                <a
+                  href={previewBillUrl}
+                  download="bill_attachment.pdf"
+                  className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs rounded-xl transition"
+                >
+                  डाउनलोड PDF
+                </a>
+              </div>
+            </div>
+            <iframe
+              src={previewBillUrl}
+              title="PDF Preview"
+              className="w-full h-[50vh] rounded-xl border border-slate-200 dark:border-slate-800"
+            />
+          </div>
+        ) : (
+          <div className="flex items-center justify-center p-2">
+            <img
+              src={previewBillUrl}
+              alt="Bill Preview"
+              className="max-h-[65vh] w-auto object-contain rounded-xl shadow-md border border-slate-200 dark:border-slate-800"
+            />
+          </div>
+        )}
       </Modal>
     </div>
   );

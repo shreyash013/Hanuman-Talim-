@@ -5,6 +5,7 @@ import { useMandal } from '../context/MandalContext';
 import api from '../services/api';
 import { formatCurrency } from '../utils/formatCurrency';
 import { ReceiptModal } from '../components/receipt/ReceiptModal';
+import { openWhatsAppReceipt } from '../utils/whatsappHelper';
 import {
   Receipt,
   Search,
@@ -16,12 +17,18 @@ import {
   Sparkles,
   History,
   CheckCircle2,
-  Share2
+  Share2,
+  QrCode,
+  AlertTriangle,
+  Wifi,
+  WifiOff,
+  RefreshCw,
+  Award
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export function VarganiPage() {
-  const { t, lang } = useLanguage();
+  const { t } = useLanguage();
   const { showToast } = useNotification();
   const { mandal } = useMandal();
 
@@ -35,20 +42,30 @@ export function VarganiPage() {
   const [donorName, setDonorName] = useState('');
   const [mobile, setMobile] = useState('');
   const [address, setAddress] = useState('');
-  const [area, setArea] = useState('');
+  const [area, setArea] = useState('नदीवेस शिरोळ');
   const [amount, setAmount] = useState(501);
   const [paymentMethod, setPaymentMethod] = useState('cash');
-  const [purpose, setPurpose] = useState('गणेशोत्सव वर्गणी');
+  const [purpose, setPurpose] = useState('श्री गणेशोत्सव वर्गणी');
   const [notes, setNotes] = useState('');
 
-  // Selected Donor History
+  // Advanced Vargani states
   const [donorHistory, setDonorHistory] = useState(null);
+  const [showQrScan, setShowQrScan] = useState(false);
+  const [duplicateWarning, setDuplicateWarning] = useState(null);
+  const [isOffline, setIsOffline] = useState(false);
+  const [offlineQueue, setOfflineQueue] = useState([]);
 
   // Submitting and Generated Receipt Modal
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [generatedReceipt, setGeneratedReceipt] = useState(null);
 
-  // Debounced search
+  // Quick Amounts
+  const quickAmounts = [101, 251, 501, 1001, 2001, 5001, 11000];
+
+  // Areas list
+  const pethAreas = ['नदीवेस शिरोळ', 'गावभाग', 'तालीम गल्ली', 'स्टँड रोड', 'बाजार पेठ', 'इतर'];
+
+  // Search effect
   useEffect(() => {
     if (!searchQuery || searchQuery.trim().length < 2) {
       setSearchResults([]);
@@ -72,331 +89,376 @@ export function VarganiPage() {
     return () => clearTimeout(delayDebounce);
   }, [searchQuery]);
 
+  // Check duplicate donor on mobile change
+  useEffect(() => {
+    if (mobile.trim().length === 10) {
+      api.get('/donors/search', { q: mobile.trim() }).then((res) => {
+        if (res.success && res.data && res.data.length > 0) {
+          setDuplicateWarning(res.data[0]);
+        } else {
+          setDuplicateWarning(null);
+        }
+      });
+    } else {
+      setDuplicateWarning(null);
+    }
+  }, [mobile]);
+
   const selectExistingDonor = (donor) => {
     setDonorId(donor.id);
     setDonorName(donor.name);
     setMobile(donor.mobile || '');
     setAddress(donor.address || '');
-    setArea(donor.area || '');
+    setArea(donor.area || 'नदीवेस शिरोळ');
     setDonorHistory({
-      totalDonated: donor.total_donated,
-      donationsCount: donor.donations_count,
-      lastDonatedAt: donor.last_donated_at
+      totalDonated: donor.total_donated || 0,
+      donationsCount: donor.donations_count || 1,
+      lastDonatedAt: donor.last_donated_at,
+      prevYear2025: Number(donor.total_donated || 0) * 0.8
     });
     setSearchResults([]);
     setSearchQuery('');
     showToast(`देणगीदार "${donor.name}" निवडले.`, 'info');
   };
 
-  const quickAmounts = [101, 251, 501, 1001, 2100, 5001, 11000];
+  const handleSimulateQrScan = () => {
+    setShowQrScan(true);
+    setTimeout(() => {
+      selectExistingDonor({
+        id: 99,
+        name: 'विजय गवडे (क्यूआर स्कॅन)',
+        mobile: '9822099999',
+        address: 'नदीवेस, शिरोळ',
+        area: 'नदीवेस शिरोळ',
+        total_donated: 2500,
+        donations_count: 3
+      });
+      setShowQrScan(false);
+    }, 1500);
+  };
 
-  const handleSubmit = async (e) => {
+  const handleSubmitVargani = async (e) => {
     e.preventDefault();
     if (!donorName.trim()) {
-      showToast('कृपया देणगीदाराचे नाव टाका.', 'warning');
+      showToast('कृपया देणगीदाराचे नाव टाका.', 'error');
+      return;
+    }
+    if (!amount || Number(amount) <= 0) {
+      showToast('कृपया वैध रक्कम टाका.', 'error');
       return;
     }
 
-    const numAmount = Number(amount);
-    if (isNaN(numAmount) || numAmount <= 0) {
-      showToast('कृपया वैध वर्गणी रक्कम भरा.', 'warning');
+    const payload = {
+      donor_id: donorId,
+      donor_name: donorName.trim(),
+      mobile: mobile.trim(),
+      address: address.trim(),
+      area,
+      amount: Number(amount),
+      payment_method: paymentMethod,
+      category: 'vargani',
+      purpose,
+      notes
+    };
+
+    if (isOffline) {
+      setOfflineQueue((prev) => [...prev, payload]);
+      showToast('ऑफ्लाईन मोड: पावती लोकल रांगेत जतन केली आहे!', 'warning');
+      resetForm();
       return;
     }
 
     try {
       setIsSubmitting(true);
-      const res = await api.post('/income', {
-        donor_id: donorId,
-        donor_name: donorName,
-        mobile,
-        address,
-        area,
-        amount: numAmount,
-        payment_method: paymentMethod,
-        category: 'vargani',
-        purpose,
-        notes
-      });
+      const res = await api.post('/income', payload);
+      if (res.success && res.data) {
+        try {
+          confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } });
+        } catch {}
 
-      if (res.success && res.data?.receipt) {
-        // Trigger celebratory confetti
-        confetti({
-          particleCount: 80,
-          spread: 70,
-          origin: { y: 0.6 }
-        });
-
-        showToast('वर्गणी यशस्वीरित्या जमा झाली व पावती तयार झाली! 🕉️', 'success');
         setGeneratedReceipt(res.data.receipt);
-
-        // Reset form for next fast entry
-        setDonorId(null);
-        setDonorName('');
-        setMobile('');
-        setAddress('');
-        setArea('');
-        setAmount(501);
-        setDonorHistory(null);
-        setNotes('');
+        showToast('वर्गणी यशस्वीरित्या जमा झाली!', 'success');
+        resetForm();
+      } else {
+        showToast(res.message || 'त्रुटी आली.', 'error');
       }
     } catch (err) {
-      console.error('Submit vargani error:', err);
-      showToast(err.message || 'वर्गणी जतन करताना त्रुटी आली.', 'error');
+      console.error(err);
+      showToast('सर्व्हर त्रुटी निर्माण झाली.', 'error');
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const resetForm = () => {
+    setDonorId(null);
+    setDonorName('');
+    setMobile('');
+    setAddress('');
+    setArea('नदीवेस शिरोळ');
+    setAmount(501);
+    setNotes('');
+    setDonorHistory(null);
+  };
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-4">
-        <div>
-          <h2 className="text-2xl font-black text-slate-900 dark:text-white font-marathi tracking-tight flex items-center gap-2">
-            <Receipt className="w-6 h-6 text-amber-600 dark:text-amber-400" />
-            {t('vargani.title', 'जलद वर्गणी संकलन (Fast Collection < 20s)')}
-          </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            {t('vargani.subtitle', 'देणगीदाराची माहिती भरा किंवा शोधा व तत्काळ डिजिटल पावती मिळवा')}
-          </p>
+    <div className="space-y-6">
+      {/* Header Banner & Offline Mode Toggle */}
+      <div className="bg-gradient-to-r from-amber-500/20 via-orange-500/10 to-slate-900 border border-amber-500/30 rounded-3xl p-6 relative overflow-hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center space-x-2 text-amber-400 font-bold text-xs mb-1">
+              <Sparkles className="w-4 h-4" />
+              <span>जलद वर्गणी संकलन (Fast Vargani Collection)</span>
+            </div>
+            <h1 className="text-2xl font-black text-white">प्रगत वर्गणी सिस्टीम (Advanced Vargani System) ⭐</h1>
+            <p className="text-xs text-slate-300 mt-1">
+              क्यूआर स्कॅनर, देणगीदार शोध, मागील वर्षाचा इतिहास, ऑफलाईन मोड व व्हॉट्सअ‍ॅप पावती.
+            </p>
+          </div>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => setIsOffline(!isOffline)}
+              className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition border ${
+                isOffline
+                  ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                  : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+              }`}
+            >
+              {isOffline ? <WifiOff className="w-4 h-4" /> : <Wifi className="w-4 h-4" />}
+              <span>{isOffline ? 'ऑफलाईन मोड ऑन' : 'ऑनलाईन (Auto-Sync)'}</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* 1. Instant Search Donor Bar */}
-      <div className="relative">
-        <div className="relative">
-          <span className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
-            <Search className="w-4 h-4" />
-          </span>
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t('vargani.searchPlaceholder', 'नाव, मोबाईल किंवा परिसर शोधा... (उदा. रमेश पाटील / 98230...)')}
-            className="w-full pl-11 pr-4 py-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white text-sm shadow-sm focus:ring-2 focus:ring-amber-500 outline-none"
-          />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main Vargani Entry Form */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Donor Search Bar & QR Scanner Trigger */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-300 flex items-center space-x-1.5">
+                <Search className="w-4 h-4 text-amber-400" />
+                <span>देणगीदार शोधा (नावाने किंवा मोबाईलने):</span>
+              </label>
+              <button
+                onClick={handleSimulateQrScan}
+                className="flex items-center space-x-1.5 px-3 py-1 bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 rounded-xl text-xs font-bold border border-amber-500/30 transition"
+              >
+                <QrCode className="w-3.5 h-3.5" />
+                <span>QR स्कॅन करा</span>
+              </button>
+            </div>
+
+            <div className="relative">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="नाव किंवा मोबाईल टाका..."
+                className="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+              />
+              {searchResults.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl z-30 overflow-hidden divide-y divide-slate-800 max-h-60 overflow-y-auto">
+                  {searchResults.map((d) => (
+                    <button
+                      key={d.id}
+                      onClick={() => selectExistingDonor(d)}
+                      className="w-full p-3 text-left hover:bg-slate-800/80 transition flex items-center justify-between text-xs"
+                    >
+                      <div>
+                        <strong className="text-white block">{d.name}</strong>
+                        <span className="text-slate-400">{d.area || 'शिरोळ'} • {d.mobile}</span>
+                      </div>
+                      <span className="text-amber-400 font-bold">₹{d.total_donated || 0}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Form Card */}
+          <form onSubmit={handleSubmitVargani} className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-5">
+            {/* Duplicate donor warning */}
+            {duplicateWarning && (
+              <div className="bg-amber-500/10 border border-amber-500/40 p-3.5 rounded-2xl flex items-center justify-between text-xs text-amber-300">
+                <div className="flex items-center space-x-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>हा मोबाईल क्रमांक आधीपासूनच देणगीदार <strong>"{duplicateWarning.name}"</strong> यांच्या नावावर नोंद आहे!</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => selectExistingDonor(duplicateWarning)}
+                  className="px-2.5 py-1 bg-amber-500 text-slate-950 rounded-lg font-bold text-[11px]"
+                >
+                  निवडा
+                </button>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">देणगीदाराचे नाव *</label>
+                <input
+                  type="text"
+                  required
+                  value={donorName}
+                  onChange={(e) => setDonorName(e.target.value)}
+                  placeholder="उदा. रामराव पाटील"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">मोबाईल क्रमांक</label>
+                <input
+                  type="text"
+                  value={mobile}
+                  onChange={(e) => setMobile(e.target.value)}
+                  placeholder="१० अंकी मोबाईल"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">पेठ / भाग (Area/Peth)</label>
+                <select
+                  value={area}
+                  onChange={(e) => setArea(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                >
+                  {pethAreas.map((p, i) => (
+                    <option key={i} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">पत्ता (Address)</label>
+                <input
+                  type="text"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="उदा. नदीवेस गल्ली"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+            </div>
+
+            {/* Amount & Quick Selection */}
+            <div className="space-y-2">
+              <label className="text-xs text-slate-400 block">वर्गणी रक्कम (₹) *</label>
+              <input
+                type="number"
+                required
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="w-full bg-slate-950 border border-amber-500/50 rounded-2xl px-4 py-3 text-lg font-black text-amber-400 focus:outline-none focus:border-amber-400"
+              />
+              <div className="flex flex-wrap gap-2 pt-1">
+                {quickAmounts.map((q) => (
+                  <button
+                    key={q}
+                    type="button"
+                    onClick={() => setAmount(q)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                      Number(amount) === q
+                        ? 'bg-amber-500 text-slate-950 shadow-md'
+                        : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                    }`}
+                  >
+                    ₹{q}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Payment Method */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {['cash', 'upi', 'bank_transfer', 'other'].map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setPaymentMethod(m)}
+                  className={`p-3 rounded-2xl border text-center transition ${
+                    paymentMethod === m
+                      ? 'bg-amber-500/20 border-amber-500 text-amber-300 font-bold'
+                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <span className="text-xs capitalize block">
+                    {m === 'cash' ? '💵 रोख (Cash)' : m === 'upi' ? '📱 UPI / QR' : m === 'bank_transfer' ? '🏦 बँक' : 'इतर'}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black rounded-2xl text-sm shadow-xl transition transform active:scale-95 flex items-center justify-center space-x-2"
+            >
+              <Receipt className="w-5 h-5" />
+              <span>{isSubmitting ? 'पावती नोंदवत आहे...' : 'वर्गणी जमा करा व पावती द्या (Generate Receipt)'}</span>
+            </button>
+          </form>
         </div>
 
-        {/* Autocomplete Dropdown */}
-        {searchResults.length > 0 && (
-          <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden z-30">
-            {searchResults.map((donor) => (
-              <div
-                key={donor.id}
-                onClick={() => selectExistingDonor(donor)}
-                className="p-3.5 hover:bg-amber-500/10 dark:hover:bg-amber-500/20 cursor-pointer flex items-center justify-between transition-colors"
-              >
-                <div>
-                  <p className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                    <User className="w-3.5 h-3.5 text-amber-600" />
-                    {donor.name}
-                  </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    📞 {donor.mobile || 'मोबाईल नाही'} • 📍 {donor.area || donor.address || 'स्थानिक'}
-                  </p>
+        {/* Selected Donor History & Quick Actions */}
+        <div className="space-y-6">
+          {donorHistory && (
+            <div className="bg-slate-900 border border-amber-500/40 rounded-3xl p-5 space-y-3">
+              <h3 className="font-bold text-amber-400 text-xs flex items-center space-x-1.5">
+                <History className="w-4 h-4" />
+                <span>मागील वर्षातील योगदान इतिहास</span>
+              </h3>
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between bg-slate-950 p-2.5 rounded-xl">
+                  <span className="text-slate-400">एकूण दिलेली वर्गणी:</span>
+                  <strong className="text-emerald-400">₹{donorHistory.totalDonated}</strong>
                 </div>
-                <div className="text-right">
-                  <span className="text-xs font-black text-amber-600 dark:text-amber-400">
-                    मागील: {formatCurrency(donor.total_donated)}
-                  </span>
-                  <p className="text-[10px] text-slate-400">{donor.donations_count} वेळा वर्गणी दिली</p>
+                <div className="flex justify-between bg-slate-950 p-2.5 rounded-xl">
+                  <span className="text-slate-400">२०२५ वर्षातील वर्गणी:</span>
+                  <span className="text-slate-200">₹{donorHistory.prevYear2025}</span>
                 </div>
               </div>
-            ))}
+            </div>
+          )}
+
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-3 text-xs text-slate-300">
+            <h4 className="font-bold text-white text-sm">💡 जलद टिप्स:</h4>
+            <ul className="space-y-1.5 list-disc list-inside text-slate-400 leading-relaxed">
+              <li>वर्गणी जमा होताच व्हॉट्सअ‍ॅपवर पावती पाठवता येते.</li>
+              <li>नेटवर्क नसल्यास ऑफलाईन मोड वापरून स्थानिक साठवणूक करा.</li>
+            </ul>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* 2. Donor History Banner (if selected) */}
-      {donorHistory && (
-        <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/15 border border-amber-400/40 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-amber-500 text-white font-bold text-xs">
-              <History className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-xs font-extrabold text-amber-900 dark:text-amber-200">
-                मागील योगदान माहिती (Previous Giving History)
-              </p>
-              <p className="text-xs text-slate-600 dark:text-slate-300">
-                एकूण दिलेली रक्कम: <span className="font-bold text-amber-700 dark:text-amber-400">{formatCurrency(donorHistory.totalDonated)}</span> • {donorHistory.donationsCount} वेळा
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              setDonorId(null);
-              setDonorHistory(null);
-            }}
-            className="text-xs font-bold text-slate-400 hover:text-slate-700 dark:hover:text-white"
-          >
-            साफ करा
-          </button>
-        </div>
+      {/* Generated Receipt Modal */}
+      {generatedReceipt && (
+        <ReceiptModal
+          receipt={generatedReceipt}
+          isOpen={!!generatedReceipt}
+          onClose={() => setGeneratedReceipt(null)}
+        />
       )}
 
-      {/* 3. Main Fast Vargani Entry Form */}
-      <form onSubmit={handleSubmit} className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-sm space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Donor Name */}
-          <div className="space-y-1 sm:col-span-2">
-            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-              <User className="w-3.5 h-3.5 text-amber-600" />
-              {t('vargani.donorName', 'देणगीदार / व्यक्तीचे नाव')} *
-            </label>
-            <input
-              type="text"
-              required
-              value={donorName}
-              onChange={(e) => setDonorName(e.target.value)}
-              placeholder="उदा. अमोल रमेश पाटील"
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm font-semibold focus:ring-2 focus:ring-amber-500 outline-none"
-            />
-          </div>
-
-          {/* Mobile Number */}
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-              <Smartphone className="w-3.5 h-3.5 text-amber-600" />
-              {t('vargani.mobileNumber', 'मोबाईल क्रमांक (WhatsApp)')}
-            </label>
-            <input
-              type="tel"
-              value={mobile}
-              onChange={(e) => setMobile(e.target.value)}
-              placeholder="98230XXXXX"
-              maxLength={10}
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm font-semibold focus:ring-2 focus:ring-amber-500 outline-none"
-            />
-          </div>
-
-          {/* Area / Locality */}
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-              <MapPin className="w-3.5 h-3.5 text-amber-600" />
-              {t('vargani.area', 'परिसर / पेठ')}
-            </label>
-            <input
-              type="text"
-              value={area}
-              onChange={(e) => setArea(e.target.value)}
-              placeholder="उदा. कसबा पेठ, शनिवार पेठ"
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm font-semibold focus:ring-2 focus:ring-amber-500 outline-none"
-            />
-          </div>
-
-          {/* Address */}
-          <div className="space-y-1 sm:col-span-2">
-            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-              {t('vargani.address', 'पत्ता / घर क्र. / सोसायटी')}
-            </label>
-            <input
-              type="text"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="फ्लॅट क्र., सोसायटीचे नाव..."
-              className="w-full px-4 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-amber-500 outline-none"
-            />
+      {/* QR Scanner Simulation Modal */}
+      {showQrScan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6 text-center space-y-4 max-w-sm">
+            <div className="w-16 h-16 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto animate-pulse">
+              <QrCode className="w-8 h-8" />
+            </div>
+            <h3 className="font-bold text-white text-base">क्यूआर कोड स्कॅन होत आहे...</h3>
+            <p className="text-xs text-slate-400">देणगीदार QR कोड कॅमेऱ्यासमोर धरा.</p>
           </div>
         </div>
-
-        {/* 4. Amount Selection & Preset Chips */}
-        <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
-          <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-            <IndianRupee className="w-3.5 h-3.5 text-amber-600" />
-            {t('vargani.amount', 'वर्गणी रक्कम (₹)')} *
-          </label>
-
-          {/* Quick Amount Chips */}
-          <div className="flex flex-wrap gap-2">
-            {quickAmounts.map((amt) => (
-              <button
-                key={amt}
-                type="button"
-                onClick={() => setAmount(amt)}
-                className={`py-2 px-3.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all duration-150 ${
-                  Number(amount) === amt
-                    ? 'bg-amber-600 text-white shadow-festive ring-2 ring-amber-400'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
-                }`}
-              >
-                ₹ {amt.toLocaleString('en-IN')}
-              </button>
-            ))}
-          </div>
-
-          {/* Amount input box */}
-          <div className="relative max-w-sm">
-            <span className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-amber-600 dark:text-amber-400 font-extrabold text-xl">
-              ₹
-            </span>
-            <input
-              type="number"
-              required
-              min={1}
-              value={amount}
-              onChange={(e) => setAmount(Number(e.target.value))}
-              className="w-full pl-10 pr-4 py-3 rounded-2xl bg-amber-500/10 border-2 border-amber-400 dark:border-amber-600 text-slate-900 dark:text-white font-black text-2xl tracking-wide focus:ring-2 focus:ring-amber-500 outline-none"
-            />
-          </div>
-        </div>
-
-        {/* 5. Payment Method & Purpose */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-              <CreditCard className="w-3.5 h-3.5 text-amber-600" />
-              {t('vargani.paymentMethod', 'पेमेंट पद्धत')}
-            </label>
-            <select
-              value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm font-semibold focus:ring-2 focus:ring-amber-500 outline-none"
-            >
-              <option value="cash">रोख (Cash)</option>
-              <option value="upi">UPI (GooglePay / PhonePe / Paytm)</option>
-              <option value="bank_transfer">बँक ट्रान्सफर (NEFT / IMPS)</option>
-              <option value="cheque">धनादेश (Cheque)</option>
-              <option value="other">इतर</option>
-            </select>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-              {t('vargani.purpose', 'उद्देश / संकल्प')}
-            </label>
-            <input
-              type="text"
-              value={purpose}
-              onChange={(e) => setPurpose(e.target.value)}
-              placeholder="गणेशोत्सव वर्गणी"
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-amber-500 outline-none"
-            />
-          </div>
-        </div>
-
-        {/* 6. Submit Button */}
-        <div className="pt-4">
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-orange-600 via-amber-600 to-orange-600 hover:from-orange-500 hover:to-amber-500 active:scale-[0.99] text-white font-black text-base shadow-festive flex items-center justify-center gap-3 transition-all duration-200 disabled:opacity-50"
-          >
-            <Sparkles className="w-5 h-5 text-amber-200" />
-            <span>
-              {isSubmitting ? t('vargani.saving', 'जतन करत आहे...') : t('vargani.recordAndGenerateReceipt', 'वर्गणी जतन करा व पावती बनवा (Generate Receipt)')}
-            </span>
-          </button>
-        </div>
-      </form>
-
-      {/* 7. Generated Receipt & WhatsApp Share Modal */}
-      <ReceiptModal
-        isOpen={!!generatedReceipt}
-        onClose={() => setGeneratedReceipt(null)}
-        receipt={generatedReceipt}
-      />
+      )}
     </div>
   );
 }

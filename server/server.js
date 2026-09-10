@@ -27,13 +27,13 @@ const defaultOrigins = [
   'http://127.0.0.1:3000',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
-  'https://yuva-sports.onrender.com'
+  'https://hanuman-talim-mandal.onrender.com'
 ];
 
 
 // Production frontend URLs can be added using:
 //
-//CLIENT_URL='https://yuva-sports.vercel.app'
+//CLIENT_URL='https://hanuman-talim-mandal.vercel.app'
 //
 // Multiple URLs:
 //
@@ -199,7 +199,7 @@ app.get(
       success: true,
 
       message:
-        'Yuva Sports Ganpati Mandal API is running',
+        'Shri Hanuman Talim Mandal Shirol API is running',
 
       api:
         '/api',
@@ -400,7 +400,7 @@ async function startServer() {
     );
 
     console.log(
-      'Initializing Yuva Sports Backend...'
+      'Initializing Shri Hanuman Talim Mandal Shirol Backend...'
     );
 
     console.log(
@@ -436,7 +436,7 @@ async function startServer() {
         );
 
         console.log(
-          'Yuva Sports Backend Started Successfully'
+          'Shri Hanuman Talim Mandal Shirol Backend Started Successfully'
         );
 
         console.log(
@@ -486,7 +486,7 @@ async function startServer() {
     );
 
     console.error(
-      'Failed to start Yuva Sports Backend'
+      'Failed to start Shri Hanuman Talim Mandal Shirol Backend'
     );
 
     console.error(

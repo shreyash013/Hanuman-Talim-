@@ -21,7 +21,9 @@ import {
   ShieldCheck,
   Settings,
   LogOut,
-  HeartHandshake
+  HeartHandshake,
+  Award,
+  Landmark
 } from 'lucide-react';
 
 export function Sidebar({ onCloseMobile }) {
@@ -47,11 +49,14 @@ export function Sidebar({ onCloseMobile }) {
     ...(isAdmin || isTreasurer ? [{ to: '/approvals', label: t('nav.approvals', 'खर्च मंजुरी'), icon: CheckSquare }] : []),
     ...(isPrivileged ? [
       { to: '/transactions', label: t('nav.transactions', 'व्यवहार इतिहास'), icon: History },
-      { to: '/cash-management', label: t('nav.cashManagement', 'रोख व्यवस्थापन'), icon: Wallet }
+      { to: '/cash-management', label: t('nav.cashManagement', 'रोख व्यवस्थापन'), icon: Wallet },
+      { to: '/loans', label: 'उधारी व्यवस्थापन (Loans)', icon: Landmark }
     ] : []),
     { to: '/digital-payments', label: t('nav.digitalPayments', 'UPI व पेमेंट QR'), icon: QrCode },
-    { to: '/donors', label: t('nav.donors', 'देणगीदार यादी'), icon: Users },
+    { to: '/donors', label: t('nav.donors', 'देणगीदार CRM'), icon: Users },
     { to: '/members', label: t('nav.members', 'मंडळ कार्यकर्ते'), icon: UserCheck },
+    { to: '/festival-planner', label: 'उत्सव प्लॅनर (Festival Planner)', icon: CalendarDays, highlight: true },
+    { to: '/volunteers', label: 'कार्यकर्ते लीडरबोर्ड (Volunteers)', icon: Award },
     { to: '/events', label: t('nav.events', 'उत्सव कार्यक्रम'), icon: CalendarDays },
     ...(isPrivileged ? [{ to: '/reports', label: t('nav.reports', 'आर्थिक अहवाल'), icon: FileSpreadsheet }] : []),
     ...(isAdmin ? [
@@ -59,6 +64,7 @@ export function Sidebar({ onCloseMobile }) {
       { to: '/audit-logs', label: t('nav.auditLogs', 'ऑडिट नोंदी'), icon: ShieldAlert },
       { to: '/settings', label: t('nav.settings', 'मंडळ सेटिंग्ज'), icon: Settings }
     ] : []),
+    { to: '/public', label: 'सार्वजनिक भाविक पोर्टल (/public)', icon: HeartHandshake, public: true },
     { to: '/donate', label: t('nav.publicDonation', 'सार्वजनिक देणगी पेज'), icon: HeartHandshake, public: true }
   ];
 
@@ -69,7 +75,7 @@ export function Sidebar({ onCloseMobile }) {
         <GanpatiLogo size="md" />
         <div className="overflow-hidden">
           <h2 className="font-extrabold text-sm text-slate-900 dark:text-white truncate font-marathi">
-            {mandal?.name_mr || 'युवा स्पोर्ट्स गणेशोत्सव मंडळ, दत्तवाड'}
+            {mandal?.name_mr || 'श्री हनुमान तालीम मंडळ शिरोळ'}
           </h2>
           <p className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold tracking-wider uppercase">
             {mandal?.festival_year ? `उत्सव ${mandal.festival_year}` : 'व्यवस्थापन प्रणाली'}

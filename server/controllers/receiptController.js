@@ -7,22 +7,22 @@ async function getMandal(select = '*') {
     const { data, error } = await db.from('mandal_settings').select(select).limit(1).maybeSingle();
     if (error) console.error('getMandal error:', error);
     return data || {
-      name_mr: 'युवा स्पोर्ट्स गणेशोत्सव मंडळ, दत्तवाड',
-      name_en: 'Yuva Sports Ganeshostav Mandal, Dattawad',
-      tagline_mr: 'स्थापना: १९८८ | ! नवे पर्व युवा सर्व !',
-      address_mr: 'युवा स्पोर्ट्स चौक, दत्तवाड | ४१६१०७ , महाराष्ट्र |',
-      contact_phone: '+91 9699049637',
-      registration_no: '-',
+      name_mr: 'श्री हनुमान तालीम मंडळ शिरोळ',
+      name_en: 'Shri Hanuman Talim Mandal Shirol',
+      tagline_mr: 'स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा राजा ॥ 🔱',
+      address_mr: 'नदीवेस, शिरोळ, जि. कोल्हापूर | ४१६१०३',
+      contact_phone: '+91 9356997428',
+      registration_no: 'MAH/KOLHAPUR/1964',
       festival_year: 2026
     };
   } catch (err) {
     return {
-      name_mr: 'युवा स्पोर्ट्स गणेशोत्सव मंडळ, दत्तवाड',
-      name_en: 'Yuva Sports Ganeshostav Mandal, Dattawad',
-      tagline_mr: 'स्थापना: १९८८ | ! नवे पर्व युवा सर्व !',
-      address_mr: 'युवा स्पोर्ट्स चौक, दत्तवाड | ४१६१०७ , महाराष्ट्र |',
-      contact_phone: '+91 9699049637',
-      registration_no: '-',
+      name_mr: 'श्री हनुमान तालीम मंडळ शिरोळ',
+      name_en: 'Shri Hanuman Talim Mandal Shirol',
+      tagline_mr: 'स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा राजा ॥ 🔱',
+      address_mr: 'नदीवेस, शिरोळ, जि. कोल्हापूर | ४१६१०३',
+      contact_phone: '+91 9356997428',
+      registration_no: 'MAH/KOLHAPUR/1964',
       festival_year: 2026
     };
   }

@@ -20,7 +20,7 @@
    - Autocomplete search by donor name, mobile number, or locality/peth.
    - Real-time display of previous contributions and lifetime donation totals.
    - Preset quick amount chips (₹101, ₹251, ₹501, ₹1,001, ₹2,100, ₹5,001, ₹11,000).
-   - Automatic unique receipt numbering (`YUVA-2026-000001`).
+   - Automatic unique receipt numbering (`HANUMAN-2026-000001`).
    - Celebratory confetti on successful collection!
 
 3. **Digital Receipt & WhatsApp Sharing**
@@ -204,13 +204,13 @@ When a vargani or donation receipt is generated, the system creates a formatted 
 
 युवा स्पोर्ट्स गणेशोत्सव मंडळ गणेशोत्सवासाठी आपण दिलेल्या वर्गणी/देणगीबद्दल मनःपूर्वक धन्यवाद!
 
-🧾 पावती क्र: YUVA-2026-000003
+🧾 पावती क्र: HANUMAN-2026-000003
 💰 रक्कम: ₹15,000
 📅 दिनांक: 20 ऑगस्ट 2026
 🎯 उद्देश: वार्षिक घरगुती वर्गणी
 
 🔗 आपली अधिकृत डिजिटल पावती येथे पहा:
-http://localhost:3000/verify-receipt/YUVA-2026-000003
+http://localhost:3000/verify-receipt/HANUMAN-2026-000003
 
 आपले सहकार्य आमच्यासाठी मोलाचे आहे.
 
@@ -228,7 +228,7 @@ Clicking **"WhatsApp वर पाठवा"** opens `https://wa.me/919823012345
 PORT=5000
 NODE_ENV=development
 JWT_SECRET=ganpati_bappa_morya_mandal_secure_jwt_secret_2026
-CLIENT_URL=http://yuva-sports.onrender.com
+CLIENT_URL=http://hanuman-talim-mandal.onrender.com
 DATABASE_URL=./database/ganpati_mandal.sqlite
 
 # Optional: Supabase / PostgreSQL Migration

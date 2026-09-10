@@ -50,6 +50,11 @@ export function Badge({ value, type = 'status', className = '' }) {
           label: t('paymentMethods.cheque', 'धनादेश (Cheque)'),
           bg: 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border-purple-300 dark:border-purple-800'
         };
+      case 'pending_udhar':
+        return {
+          label: '🚩 उधार / जमा बाकी',
+          bg: 'bg-amber-100 text-amber-900 dark:bg-amber-950/70 dark:text-amber-300 border-amber-400 dark:border-amber-800'
+        };
 
       // Categories
       default:

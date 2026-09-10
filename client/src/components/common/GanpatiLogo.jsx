@@ -23,18 +23,18 @@ export function GanpatiLogo({ size = 'md', className = '', glow = true, rounded 
     >
       {/* Royal Glow Aura */}
       {glow && (
-        <div className={`absolute -inset-1 ${roundedClass} bg-gradient-to-tr from-amber-600 via-orange-500 to-amber-300 opacity-60 blur-md group-hover:opacity-90 transition-opacity duration-300 pointer-events-none`} />
+        <div className="absolute -inset-1 rounded-full bg-gradient-to-tr from-amber-600 via-orange-500 to-amber-300 opacity-60 blur-md group-hover:opacity-90 transition-opacity duration-300 pointer-events-none" />
       )}
 
       {/* Emblem Frame */}
       <div
-        className={`relative w-full h-full ${roundedClass} overflow-hidden bg-gradient-to-b from-amber-950/90 via-slate-950 to-orange-950/90 border-2 border-amber-400/70 shadow-2xl flex items-center justify-center ring-1 ring-amber-300/40`}
+        className="relative w-full h-full rounded-full overflow-hidden bg-amber-500/20 border-2 border-amber-400 shadow-2xl flex items-center justify-center ring-2 ring-amber-400/50"
       >
         {!imgError ? (
           <img
             src={logoImg}
-            alt="युवा स्पोर्ट्स गणेशोत्सव मंडळ, दत्तवाड"
-            className="w-full h-full object-cover object-center transform transition-transform duration-500 group-hover:scale-110"
+            alt="श्री हनुमान तालीम मंडळ शिरोळ"
+            className="w-full h-full object-cover object-center rounded-full transform transition-transform duration-500 group-hover:scale-110"
             onError={() => setImgError(true)}
             loading="eager"
           />

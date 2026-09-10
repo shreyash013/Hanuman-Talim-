@@ -48,21 +48,21 @@ export async function seedDatabase(force = false) {
       contact_phone, contact_email, registration_no, festival_year,
       arrival_date, visarjan_date, upi_id, upi_name, receipt_prefix, receipt_language
     ) VALUES (
-      'युवा स्पोर्ट्स गणेशोत्सव मंडळ, दत्तवाड',
-      'Yuva Sports Ganeshostav Mandal, Dattawad',
-      'स्थापना: १९८८ | ! नवे पर्व युवा सर्व !',
-      'Est: 1988 | Reg. No. -',
-      'युवा स्पोर्ट्स चौक, दत्तवाड | ४१६१०७ , महाराष्ट्र |',
-      'Yuva Sports Chowk, Dattawad | 416107, Maharashtra |',
-      '+91 9699049637',
-      'sarveshkharoshe8@gmail.com',
-      'MAH/PUNE/1992/F-1024',
+      'श्री हनुमान तालीम मंडळ शिरोळ',
+      'Shri Hanuman Talim Mandal Shirol',
+      'स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा राजा ॥ 🔱',
+      'Est. 1964 🚩 | 62nd Year 🔱 | Nadives Cha Raja 🔱',
+      'नदीवेस, शिरोळ, जि. कोल्हापूर | ४१६१०३',
+      'Nadives, Shirol, Dist. Kolhapur | 416103',
+      '+91 9356997428',
+      'shreyashgavade7@gmail.com',
+      'MAH/KOLHAPUR/1964',
       2026,
-      '2026-09-15T09:00:00',
+      '2026-09-14T09:00:00',
       '2026-09-25T18:00:00',
       'sarveshkharoshe8-2@okaxis',
-      'Sarvesh Kharoshe',
-      'YUVA-2026-',
+      'Shri Hanuman Talim Mandal Shirol',
+      'HANUMAN-2026-',
       'mr'
     )
   `);
