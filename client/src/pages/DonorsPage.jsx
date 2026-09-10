@@ -16,7 +16,8 @@ import {
   IndianRupee,
   Clock,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Trash2
 } from 'lucide-react';
 
 export function DonorsPage() {
@@ -221,6 +222,26 @@ export function DonorsPage() {
       showToast(err.message || 'रक्कम बदलताना त्रुटी.', 'error');
     } finally {
       setIsSavingEdit(false);
+    }
+  };
+
+  // Delete Donor handler
+  const handleDeleteDonor = async (donor) => {
+    if (!window.confirm(`नक्की "${donor.name}" यांना देणगीदार यादीतून हटवायचे आहे का?`)) {
+      return;
+    }
+
+    try {
+      const res = await api.delete(`/donors/${donor.id}`);
+      if (res.success) {
+        showToast(`'${donor.name}' देणगीदार यशस्वीरित्या हटवला!`, 'success');
+        if (selectedDonorProfile && selectedDonorProfile.id === donor.id) {
+          setSelectedDonorProfile(null);
+        }
+        fetchDonors();
+      }
+    } catch (err) {
+      showToast(err.message || 'देणगीदार हटवताना त्रुटी.', 'error');
     }
   };
 
@@ -442,7 +463,7 @@ export function DonorsPage() {
                     )}
                   </td>
 
-                  <td className="p-4 text-right space-x-1.5">
+                  <td className="p-4 text-right space-x-1 flex items-center justify-end">
                     {/* Edit Target Amount Button */}
                     <button
                       onClick={() => openEditAmountModal(d)}
@@ -476,6 +497,15 @@ export function DonorsPage() {
                       className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[11px] font-bold border border-slate-700"
                     >
                       प्रोफाईल
+                    </button>
+
+                    {/* Delete Donor Button */}
+                    <button
+                      onClick={() => handleDeleteDonor(d)}
+                      className="p-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 rounded-lg text-[11px] font-bold border border-rose-500/30 transition"
+                      title="देणगीदार हटवा (Delete Donor)"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </td>
                 </tr>
@@ -740,6 +770,13 @@ export function DonorsPage() {
             </div>
 
             <div className="flex justify-end space-x-2 pt-2">
+              <button
+                onClick={() => handleDeleteDonor(selectedDonorProfile)}
+                className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold text-xs shadow flex items-center gap-1"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>हटवा</span>
+              </button>
               <button
                 onClick={() => {
                   setSelectedDonorProfile(null);

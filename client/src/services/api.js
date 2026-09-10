@@ -995,6 +995,14 @@ export async function request(endpoint, options = {}) {
       return { success: true, message: 'देणगीदाराची नक्की केलेली वर्गणी रक्कम यशस्वीरित्या अद्ययावत केली!', data: donorsList };
     }
 
+    if (options.method === 'DELETE') {
+      const parts = endpoint.split('/');
+      const donorId = parts[parts.length - 1];
+      donorsList = donorsList.filter(d => String(d.id) !== String(donorId));
+      setLocalStore('donors', donorsList);
+      return { success: true, message: 'देणगीदार यशस्वीरित्या हटवला!' };
+    }
+
     // Process & calculate paid amount by matching name/phone with income transactions
     const processedDonors = donorsList.map(d => {
       const matchingPayments = incomeList.filter(inc => {
