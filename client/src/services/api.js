@@ -962,8 +962,7 @@ export async function request(endpoint, options = {}) {
         address: bodyData.address || '',
         area: bodyData.area || 'शिरोळ',
         notes: bodyData.notes || '',
-        total_donated: Number(bodyData.total_donated || bodyData.amount || 0),
-        donations_count: Number(bodyData.total_donated || bodyData.amount || 0) > 0 ? 1 : 0,
+        target_amount: Number(bodyData.target_amount || bodyData.total_donated || bodyData.amount || 500),
         last_donated_at: new Date().toISOString()
       };
       donorsList = [newDonor, ...donorsList];
@@ -978,9 +977,11 @@ export async function request(endpoint, options = {}) {
 
       donorsList = donorsList.map(d => {
         if (String(d.id) === String(donorId) || (bodyData.id && String(d.id) === String(bodyData.id)) || d.name === bodyData.name) {
+          const newTarget = bodyData.target_amount !== undefined ? Number(bodyData.target_amount) : (bodyData.amount !== undefined ? Number(bodyData.amount) : (bodyData.total_donated !== undefined ? Number(bodyData.total_donated) : d.target_amount));
           return {
             ...d,
-            total_donated: bodyData.amount !== undefined ? Number(bodyData.amount) : (bodyData.total_donated !== undefined ? Number(bodyData.total_donated) : d.total_donated),
+            target_amount: newTarget,
+            total_donated: newTarget,
             name: bodyData.name || d.name,
             mobile: bodyData.mobile !== undefined ? bodyData.mobile : d.mobile,
             area: bodyData.area || d.area,
@@ -991,32 +992,85 @@ export async function request(endpoint, options = {}) {
       });
 
       setLocalStore('donors', donorsList);
-      return { success: true, message: 'देणगीदाराची वर्गणी रक्कम यशस्वीरित्या अद्ययावत केली!', data: donorsList };
+      return { success: true, message: 'देणगीदाराची नक्की केलेली वर्गणी रक्कम यशस्वीरित्या अद्ययावत केली!', data: donorsList };
     }
 
+    // Process & calculate paid amount by matching name/phone with income transactions
+    const processedDonors = donorsList.map(d => {
+      const matchingPayments = incomeList.filter(inc => {
+        if (inc.is_deleted) return false;
+        const nameMatch = inc.donor_name && d.name && (
+          inc.donor_name.trim().toLowerCase() === d.name.trim().toLowerCase() ||
+          inc.donor_name.trim().toLowerCase().includes(d.name.trim().toLowerCase()) ||
+          d.name.trim().toLowerCase().includes(inc.donor_name.trim().toLowerCase())
+        );
+        const mobileMatch = d.mobile && inc.mobile && (
+          d.mobile.replace(/\D/g, '') === inc.mobile.replace(/\D/g, '') && d.mobile.replace(/\D/g, '').length >= 10
+        );
+        return nameMatch || mobileMatch;
+      });
+
+      const paid_amount = matchingPayments.reduce((sum, inc) => sum + (Number(inc.amount) || 0), 0);
+      const target_amount = Number(d.target_amount || d.total_donated || 500);
+      const pending_amount = Math.max(0, target_amount - paid_amount);
+      const donations_count = matchingPayments.length;
+
+      let status = 'unpaid';
+      if (paid_amount >= target_amount && target_amount > 0) {
+        status = 'paid';
+      } else if (paid_amount > 0) {
+        status = 'partial';
+      }
+
+      return {
+        ...d,
+        target_amount,
+        paid_amount,
+        pending_amount,
+        donations_count,
+        status,
+        matchingPayments
+      };
+    });
+
+    // Check income records that are not in donorsList
     incomeList.forEach(inc => {
-      if (inc.donor_name && !donorsList.some(d => d.name === inc.donor_name || (inc.mobile && d.mobile === inc.mobile))) {
-        donorsList.push({
+      if (inc.donor_name && !processedDonors.some(d => d.name.trim().toLowerCase() === inc.donor_name.trim().toLowerCase() || (inc.mobile && d.mobile && d.mobile.replace(/\D/g, '') === inc.mobile.replace(/\D/g, '')))) {
+        const paid_amount = Number(inc.amount) || 0;
+        processedDonors.push({
           id: inc.id || Date.now(),
           name: inc.donor_name,
           mobile: inc.mobile || '',
           address: inc.address || '',
           area: inc.area || 'शिरोळ',
-          total_donated: Number(inc.amount) || 0,
+          target_amount: paid_amount,
+          paid_amount: paid_amount,
+          pending_amount: 0,
           donations_count: 1,
+          status: 'paid',
           last_donated_at: inc.created_at || new Date().toISOString()
         });
       }
     });
 
-    const grandTotal = donorsList.reduce((sum, d) => sum + (Number(d.total_donated) || 0), 0);
+    const totalTarget = processedDonors.reduce((sum, d) => sum + (Number(d.target_amount) || 0), 0);
+    const totalPaid = processedDonors.reduce((sum, d) => sum + (Number(d.paid_amount) || 0), 0);
+    const totalPending = processedDonors.reduce((sum, d) => sum + (Number(d.pending_amount) || 0), 0);
+
+    const summary = {
+      totalDonors: processedDonors.length,
+      totalTarget,
+      totalPaid,
+      totalPending,
+      grandTotal: totalPaid
+    };
 
     if (endpoint.includes('/search')) {
       const q = (options.params?.q || '').toLowerCase();
-      const filtered = donorsList.filter(d => d.name.toLowerCase().includes(q) || (d.mobile && d.mobile.includes(q)));
-      return { success: true, data: filtered, summary: { totalDonors: filtered.length, grandTotal } };
+      const filtered = processedDonors.filter(d => d.name.toLowerCase().includes(q) || (d.mobile && d.mobile.includes(q)));
+      return { success: true, data: filtered, summary };
     }
-    return { success: true, data: donorsList, summary: { totalDonors: donorsList.length, grandTotal } };
+    return { success: true, data: processedDonors, summary };
   }
 
   // Handle Receipts Lookup & Public Verification Endpoints

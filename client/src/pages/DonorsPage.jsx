@@ -13,7 +13,10 @@ import {
   Send,
   HeartHandshake,
   Pencil,
-  IndianRupee
+  IndianRupee,
+  Clock,
+  CheckCircle,
+  AlertCircle
 } from 'lucide-react';
 
 export function DonorsPage() {
@@ -24,7 +27,8 @@ export function DonorsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [areaFilter, setAreaFilter] = useState('all');
-  const [summary, setSummary] = useState({ totalDonors: 0, grandTotal: 0 });
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [summary, setSummary] = useState({ totalDonors: 0, totalTarget: 0, totalPaid: 0, totalPending: 0, grandTotal: 0 });
 
   // Single Add Donor Modal
   const [showAddModal, setShowAddModal] = useState(false);
@@ -62,7 +66,7 @@ export function DonorsPage() {
       const res = await api.get('/donors', { search });
       if (res.success) {
         setDonors(res.data || []);
-        setSummary(res.summary || { totalDonors: 0, grandTotal: 0 });
+        setSummary(res.summary || { totalDonors: 0, totalTarget: 0, totalPaid: 0, totalPending: 0, grandTotal: 0 });
       }
     } catch (err) {
       console.error('fetchDonors error:', err);
@@ -92,7 +96,7 @@ export function DonorsPage() {
         email: email.trim(),
         address: address.trim(),
         area: area.trim() || 'शिरोळ',
-        total_donated: Number(singleAmount) || 0,
+        target_amount: Number(singleAmount) || 500,
         notes: notes.trim()
       });
 
@@ -150,7 +154,7 @@ export function DonorsPage() {
           name,
           mobile: phone,
           area: bulkDefaultArea || 'नदीवेस शिरोळ',
-          total_donated: Number(bulkFixedAmount) || 500
+          target_amount: Number(bulkFixedAmount) || 500
         });
       }
     });
@@ -182,14 +186,14 @@ export function DonorsPage() {
     }
   };
 
-  // Open Edit Amount Modal
+  // Open Edit Target Amount Modal
   const openEditAmountModal = (donor) => {
     setEditingDonor(donor);
-    setEditAmountValue(donor.total_donated || 500);
+    setEditAmountValue(donor.target_amount || donor.total_donated || 500);
     setShowEditAmountModal(true);
   };
 
-  // Save Edit Amount
+  // Save Edit Target Amount
   const handleSaveIndividualAmount = async (e) => {
     e.preventDefault();
     if (!editingDonor) return;
@@ -204,11 +208,11 @@ export function DonorsPage() {
       const res = await api.put(`/donors/${editingDonor.id}`, {
         id: editingDonor.id,
         name: editingDonor.name,
-        total_donated: newAmt
+        target_amount: newAmt
       });
 
       if (res.success) {
-        showToast(`'${editingDonor.name}' यांची वर्गणी रक्कम ₹${newAmt} जतन झाली!`, 'success');
+        showToast(`'${editingDonor.name}' यांची नक्की केलेली वर्गणी ₹${newAmt} अद्ययावत केली!`, 'success');
         setShowEditAmountModal(false);
         setEditingDonor(null);
         fetchDonors();
@@ -222,22 +226,23 @@ export function DonorsPage() {
 
   const filteredDonors = donors.filter((d) => {
     if (areaFilter !== 'all' && (d.area || 'शिरोळ') !== areaFilter) return false;
+    if (statusFilter !== 'all' && (d.status || 'unpaid') !== statusFilter) return false;
     return true;
   });
 
   // WhatsApp Thank You Message
   const sendWhatsAppThankYou = (donor) => {
-    const text = `नमस्कार *${donor.name}* जी! 🚩\n\nश्री हनुमान तालीम मंडळ शिरोळ (वर्ष ६२ वे) गणेशोत्सवासाठी दिलेल्या ₹${donor.total_donated || 500} वर्गणीबद्दल मंडळ आपले मनःपूर्वक आभार मानत आहे! 🙏\n\n- श्री हनुमान तालीम मंडळ शिरोळ (नदीवेस चा राजा)`;
+    const text = `नमस्कार *${donor.name}* जी! 🚩\n\nश्री हनुमान तालीम मंडळ शिरोळ (वर्ष ६२ वे) गणेशोत्सवासाठी दिलेल्या ₹${donor.paid_amount || donor.target_amount || 500} वर्गणीबद्दल मंडळ आपले मनःपूर्वक आभार मानत आहे! 🙏\n\n- श्री हनुमान तालीम मंडळ शिरोळ (नदीवेस चा राजा)`;
     const phone = (donor.mobile || '').replace(/[^0-9]/g, '');
     window.open(`https://api.whatsapp.com/send?phone=${phone.length === 10 ? '91' + phone : phone}&text=${encodeURIComponent(text)}`, '_blank');
   };
 
-  // WhatsApp Reminder Message with Direct UPI Payment Link
-  const sendWhatsAppReminder = (donor, amount = 500) => {
-    const payAmount = amount || 500;
+  // WhatsApp Reminder Message with Target, Paid, Pending and Direct Payment Link
+  const sendWhatsAppReminder = (donor) => {
+    const payAmount = donor.pending_amount > 0 ? donor.pending_amount : (donor.target_amount || 500);
     const upiPayLink = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(upiName)}&am=${payAmount}&cu=INR&tn=${encodeURIComponent('Ganesh Festival Vargani ' + payAmount)}`;
 
-    const text = `🚩 *सस्नेह नमस्कार ${donor.name} जी!* 🚩\n\nश्री हनुमान तालीम मंडळ शिरोळ (६२ वा गणेशोत्सव) साठी आपली ठरवलेली वर्गणी रक्कम: *₹${payAmount}* आहे. 🙏\n\nगूगल पे (GPay) / फोनपे (PhonePe) / पेटीएम (Paytm) वरून १-क्लिकमध्ये वर्गणी जमा करण्यासाठी खालील लिंकवर क्लिक करा:\n${upiPayLink}\n\nकिंवा मंडळ UPI ID: *${upiId}*\n\nआपल्या सहकार्याची अपेक्षा आहे!\nसंपर्क: +91 9356997428\n- श्री हनुमान तालीम मंडळ शिरोळ 🚩`;
+    const text = `🚩 *सस्नेह नमस्कार ${donor.name} जी!* 🚩\n\nश्री हनुमान तालीम मंडळ शिरोळ (६२ वा गणेशोत्सव) साठी आपली नक्की केलेली वर्गणी रक्कम:\n• नक्की केलेली वर्गणी: *₹${(donor.target_amount || 500).toLocaleString('en-IN')}*\n• जमा वर्गणी: *₹${(donor.paid_amount || 0).toLocaleString('en-IN')}*\n• शिल्लक बाकी: *₹${(donor.pending_amount || 0).toLocaleString('en-IN')}* 🙏\n\nगूगल पे (GPay) / फोनपे (PhonePe) / पेटीएम (Paytm) वरून १-क्लिकमध्ये शिल्लक वर्गणी जमा करण्यासाठी खालील लिंकवर क्लिक करा:\n${upiPayLink}\n\nकिंवा मंडळ UPI ID: *${upiId}*\n\nआपल्या सहकार्याची अपेक्षा आहे!\nसंपर्क: +91 9356997428\n- श्री हनुमान तालीम मंडळ शिरोळ 🚩`;
 
     const phone = (donor.mobile || '').replace(/[^0-9]/g, '');
     window.open(`https://api.whatsapp.com/send?phone=${phone.length === 10 ? '91' + phone : phone}&text=${encodeURIComponent(text)}`, '_blank');
@@ -247,16 +252,16 @@ export function DonorsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Top Banner */}
+      {/* Top Header Banner */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-2 text-amber-400 font-bold text-xs mb-1">
             <HeartHandshake className="w-4 h-4" />
-            <span>देणगीदार व्यवस्थापन (Donor CRM & Bulk Vargani)</span>
+            <span>देणगीदार व्यवस्थापन (Donor CRM & Auto Vargani Reconcilation)</span>
           </div>
-          <h1 className="text-2xl font-black text-white">देणगीदार व नागरिक यादी (Donors List)</h1>
+          <h1 className="text-2xl font-black text-white">देणगीदार व वर्गणी यादी (Donors & Vargani Tracker)</h1>
           <p className="text-xs text-slate-400 mt-1">
-            एकूण {summary.totalDonors} देणगीदार • एकूण जमा वर्गणी: ₹{summary.grandTotal.toLocaleString('en-IN')}
+            नावाच्या जुळवणीनुसार (Name Matching) आपोआप जमा व बाकी वर्गणीचे गणनापत्र
           </p>
         </div>
         <div className="flex items-center space-x-2.5 flex-wrap">
@@ -278,7 +283,39 @@ export function DonorsPage() {
         </div>
       </div>
 
-      {/* Search & Area Filter Bar */}
+      {/* 4 Summary Stats Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+        <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+          <span className="text-slate-400 block mb-1 font-semibold">एकूण देणगीदार</span>
+          <div className="flex items-center space-x-2">
+            <Users className="w-5 h-5 text-amber-400" />
+            <span className="text-xl font-black text-white">{summary.totalDonors} जण</span>
+          </div>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+          <span className="text-slate-400 block mb-1 font-semibold">नक्की केलेली वर्गणी (Target)</span>
+          <div className="flex items-center space-x-1 font-black text-xl text-amber-400">
+            <span>₹{(summary.totalTarget || 0).toLocaleString('en-IN')}</span>
+          </div>
+        </div>
+
+        <div className="bg-slate-900 border border-emerald-500/30 p-4 rounded-2xl bg-emerald-950/20">
+          <span className="text-emerald-400 block mb-1 font-semibold">एकूण जमा वर्गणी (Paid)</span>
+          <div className="flex items-center space-x-1 font-black text-xl text-emerald-400">
+            <span>₹{(summary.totalPaid || 0).toLocaleString('en-IN')}</span>
+          </div>
+        </div>
+
+        <div className="bg-slate-900 border border-rose-500/30 p-4 rounded-2xl bg-rose-950/20">
+          <span className="text-rose-400 block mb-1 font-semibold">एकूण शिल्लक बाकी (Pending)</span>
+          <div className="flex items-center space-x-1 font-black text-xl text-rose-400">
+            <span>₹{(summary.totalPending || 0).toLocaleString('en-IN')}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Search & Area & Status Filter Bar */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="relative w-full sm:w-80">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
@@ -290,24 +327,41 @@ export function DonorsPage() {
             className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
           />
         </div>
-        <div className="flex items-center space-x-2 text-xs">
-          <span className="text-slate-400">भाग (Area):</span>
-          <select
-            value={areaFilter}
-            onChange={(e) => setAreaFilter(e.target.value)}
-            className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-bold"
-          >
-            <option value="all">सर्व भाग</option>
-            <option value="नदीवेस शिरोळ">नदीवेस शिरोळ</option>
-            <option value="गावभाग">गावभाग</option>
-            <option value="तालीम गल्ली">तालीम गल्ली</option>
-            <option value="स्टँड रोड">स्टँड रोड</option>
-            <option value="इतर">इतर</option>
-          </select>
+
+        <div className="flex items-center space-x-4 text-xs flex-wrap gap-2">
+          <div className="flex items-center space-x-1.5">
+            <span className="text-slate-400">स्थिती (Status):</span>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-bold"
+            >
+              <option value="all">सर्व</option>
+              <option value="paid">✓ पूर्ण जमा</option>
+              <option value="partial">⏳ अंशतः जमा</option>
+              <option value="unpaid">❌ जमा बाकी</option>
+            </select>
+          </div>
+
+          <div className="flex items-center space-x-1.5">
+            <span className="text-slate-400">भाग (Area):</span>
+            <select
+              value={areaFilter}
+              onChange={(e) => setAreaFilter(e.target.value)}
+              className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-bold"
+            >
+              <option value="all">सर्व भाग</option>
+              <option value="नदीवेस शिरोळ">नदीवेस शिरोळ</option>
+              <option value="गावभाग">गावभाग</option>
+              <option value="तालीम गल्ली">तालीम गल्ली</option>
+              <option value="स्टँड रोड">स्टँड रोड</option>
+              <option value="इतर">इतर</option>
+            </select>
+          </div>
         </div>
       </div>
 
-      {/* Donors Table */}
+      {/* Donors & Vargani Calculation Table */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
@@ -316,8 +370,10 @@ export function DonorsPage() {
                 <th className="p-4">देणगीदाराचे नाव</th>
                 <th className="p-4">मोबाईल</th>
                 <th className="p-4">भाग (Area)</th>
-                <th className="p-4 text-right">रक्कम (वर्गणी)</th>
-                <th className="p-4 text-center">संख्या</th>
+                <th className="p-4 text-right">नक्की वर्गणी (Target)</th>
+                <th className="p-4 text-right">जमा वर्गणी (Paid)</th>
+                <th className="p-4 text-right">बाकी (Pending)</th>
+                <th className="p-4 text-center">स्थिती (Status)</th>
                 <th className="p-4 text-right">कृती (Actions)</th>
               </tr>
             </thead>
@@ -330,34 +386,68 @@ export function DonorsPage() {
                   </td>
                   <td className="p-4 text-slate-300 font-mono">{d.mobile || '-'}</td>
                   <td className="p-4 text-slate-300">{d.area || 'शिरोळ'}</td>
+
+                  {/* Target Amount */}
                   <td className="p-4 text-right">
-                    <div className="inline-flex items-center space-x-1.5 font-extrabold text-amber-400">
-                      <span>₹{(d.total_donated || 500).toLocaleString('en-IN')}</span>
+                    <div className="inline-flex items-center space-x-1 font-extrabold text-amber-400">
+                      <span>₹{(d.target_amount || d.total_donated || 500).toLocaleString('en-IN')}</span>
                       <button
                         onClick={() => openEditAmountModal(d)}
                         className="p-1 text-slate-400 hover:text-amber-300 bg-slate-800/80 hover:bg-slate-800 rounded-lg transition"
-                        title="वैयक्तिक वर्गणी रक्कम बदला"
+                        title="नक्की केलेली वर्गणी बदला"
                       >
-                        <Pencil className="w-3.5 h-3.5" />
+                        <Pencil className="w-3 h-3" />
                       </button>
                     </div>
                   </td>
-                  <td className="p-4 text-center text-slate-400">{d.donations_count || 1}</td>
+
+                  {/* Paid Amount */}
+                  <td className="p-4 text-right font-black text-emerald-400">
+                    ₹{(d.paid_amount || 0).toLocaleString('en-IN')}
+                    {d.donations_count > 0 && (
+                      <span className="block text-[10px] text-slate-400 font-normal">
+                        ({d.donations_count} पावत्या)
+                      </span>
+                    )}
+                  </td>
+
+                  {/* Pending Amount */}
+                  <td className="p-4 text-right font-black text-rose-400">
+                    ₹{(d.pending_amount || 0).toLocaleString('en-IN')}
+                  </td>
+
+                  {/* Status Badge */}
+                  <td className="p-4 text-center">
+                    {d.status === 'paid' ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        <CheckCircle className="w-3 h-3" /> पूर्ण जमा
+                      </span>
+                    ) : d.status === 'partial' ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        <Clock className="w-3 h-3" /> अंशतः जमा
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                        <AlertCircle className="w-3 h-3" /> जमा बाकी
+                      </span>
+                    )}
+                  </td>
+
                   <td className="p-4 text-right space-x-1.5">
-                    {/* Edit Amount Button */}
+                    {/* Edit Target Amount Button */}
                     <button
                       onClick={() => openEditAmountModal(d)}
-                      className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-lg text-[11px] font-bold border border-amber-500/40"
+                      className="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-lg text-[11px] font-bold border border-amber-500/40"
                       title="या देणगीदाराची वर्गणी रक्कम बदला"
                     >
-                      ✏️ रक्कम
+                      ✏️ वर्गणी
                     </button>
 
-                    {/* WhatsApp Reminder with Direct Link */}
+                    {/* WhatsApp Reminder */}
                     <button
-                      onClick={() => sendWhatsAppReminder(d, d.total_donated || 500)}
-                      className="px-2.5 py-1 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 rounded-lg text-[11px] font-bold border border-sky-500/30"
-                      title="रिमाइंडर मेसेज व ५०० रु लिंक पाठवा"
+                      onClick={() => sendWhatsAppReminder(d)}
+                      className="px-2 py-1 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 rounded-lg text-[11px] font-bold border border-sky-500/30"
+                      title="बाकी वर्गणी भरण्यासाठी रिमाइंडर मेसेज व लिंक पाठवा"
                     >
                       🔔 रिमाइंडर
                     </button>
@@ -365,7 +455,7 @@ export function DonorsPage() {
                     {/* Thank you button */}
                     <button
                       onClick={() => sendWhatsAppThankYou(d)}
-                      className="px-2.5 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded-lg text-[11px] font-bold border border-emerald-500/30"
+                      className="px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded-lg text-[11px] font-bold border border-emerald-500/30"
                       title="व्हॉट्सअ‍ॅप आभार संदेश"
                     >
                       आभार 🙏
@@ -383,7 +473,7 @@ export function DonorsPage() {
               ))}
               {filteredDonors.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="text-center py-8 text-slate-500">
+                  <td colSpan="8" className="text-center py-8 text-slate-500">
                     कोणतेही देणगीदार आढळले नाहीत.
                   </td>
                 </tr>
@@ -394,13 +484,13 @@ export function DonorsPage() {
       </div>
 
       {/* ========================================================== */}
-      {/* 1. EDIT INDIVIDUAL AMOUNT MODAL (वैयक्तिक रक्कम बदला)        */}
+      {/* 1. EDIT INDIVIDUAL AMOUNT MODAL                             */}
       {/* ========================================================== */}
       <Modal
         isOpen={showEditAmountModal}
         onClose={() => setShowEditAmountModal(false)}
-        title="✏️ देणगीदाराची वर्गणी रक्कम बदला (Change Individual Amount)"
-        subtitle={`${editingDonor?.name || ''} यांची वर्गणी बदलून नवीन रक्कम अपडेट करा`}
+        title="✏️ देणगीदाराची नक्की वर्गणी रक्कम बदला (Change Target Amount)"
+        subtitle={`${editingDonor?.name || ''} यांची नक्की वर्गणी अद्ययावत करा`}
         maxWidth="max-w-md"
       >
         <form onSubmit={handleSaveIndividualAmount} className="space-y-4 text-xs">
@@ -412,7 +502,7 @@ export function DonorsPage() {
 
           <div>
             <label className="text-slate-300 font-bold block mb-1">
-              💰 नवीन वर्गणी रक्कम (New Donation Amount in ₹) *
+              💰 नक्की वर्गणी रक्कम (Target Vargani Amount in ₹) *
             </label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-amber-400 font-extrabold text-base">₹</span>
@@ -454,7 +544,7 @@ export function DonorsPage() {
                     : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
                 }`}
               >
-                सानुकूल (Custom)
+                सानुकूल
               </button>
             </div>
           </div>
@@ -479,7 +569,7 @@ export function DonorsPage() {
       </Modal>
 
       {/* ========================================================== */}
-      {/* 2. BULK DONOR ADDITION MODAL (एकाच वेळी अनेक देणगीदार जोडा)  */}
+      {/* 2. BULK DONOR ADDITION MODAL                                */}
       {/* ========================================================== */}
       <Modal
         isOpen={showBulkModal}
@@ -492,7 +582,7 @@ export function DonorsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
             <div>
               <label className="text-amber-400 font-bold block mb-1">
-                💰 ठरवलेली वर्गणी रक्कम (Fixed Amount per Donor) *
+                💰 नक्की वर्गणी रक्कम (Target Amount per Donor) *
               </label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 font-bold">₹</span>
@@ -541,7 +631,7 @@ export function DonorsPage() {
               className="w-full bg-slate-950 border border-slate-700 rounded-2xl p-3 text-white font-mono text-xs focus:outline-none focus:border-amber-500 leading-relaxed"
             />
             <p className="text-[11px] text-slate-400 mt-1">
-              💡 टीप: तुम्ही Excel किंवा WhatsApp मधील नावांची यादी जशीच्या तशी येथे पेस्ट करू शकता. (Format: नाव, मोबाईल किंवा फक्त नाव)
+              💡 टीप: तुम्ही Excel किंवा WhatsApp मधील नावांची यादी जशीच्या तशी येथे पेस्ट करू शकता.
             </p>
           </div>
 
@@ -550,14 +640,14 @@ export function DonorsPage() {
             <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800 space-y-2">
               <div className="flex items-center justify-between text-xs font-bold text-emerald-400 border-b border-slate-800 pb-2">
                 <span>✓ एकूण ओळखलेले देणगीदार: {parsedBulkList.length} जण</span>
-                <span>प्रत्येकाची वर्गणी: ₹{bulkFixedAmount || 500}</span>
+                <span>प्रत्येकाची नक्की वर्गणी: ₹{bulkFixedAmount || 500}</span>
               </div>
               <div className="max-h-36 overflow-y-auto space-y-1 text-[11px] font-mono">
                 {parsedBulkList.map((item, idx) => (
                   <div key={idx} className="flex justify-between items-center bg-slate-900/80 px-2.5 py-1 rounded-lg text-slate-300">
                     <span className="font-bold text-white">{idx + 1}. {item.name}</span>
                     <span className="text-slate-400">{item.mobile || 'मोबाईल नाही'} • {item.area}</span>
-                    <span className="text-amber-400 font-bold">₹{item.total_donated}</span>
+                    <span className="text-amber-400 font-bold">₹{item.target_amount}</span>
                   </div>
                 ))}
               </div>
@@ -582,7 +672,7 @@ export function DonorsPage() {
               <span>
                 {isBulkSubmitting
                   ? 'जतन होत आहे...'
-                  : `सर्व ${parsedBulkList.length} देणगीदार जतन करा (₹${(parsedBulkList.length * (Number(bulkFixedAmount) || 500)).toLocaleString('en-IN')})`}
+                  : `सर्व ${parsedBulkList.length} देणगीदार जतन करा (एकूण ₹${(parsedBulkList.length * (Number(bulkFixedAmount) || 500)).toLocaleString('en-IN')})`}
               </span>
             </button>
           </div>
@@ -610,33 +700,31 @@ export function DonorsPage() {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className="grid grid-cols-3 gap-3 text-xs">
               <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800">
-                <span className="text-slate-400 block mb-0.5">एकूण वर्गणी</span>
-                <div className="flex items-center justify-between">
-                  <span className="text-base font-black text-amber-400">
-                    ₹{(selectedDonorProfile.total_donated || 500).toLocaleString('en-IN')}
-                  </span>
-                  <button
-                    onClick={() => {
-                      setSelectedDonorProfile(null);
-                      openEditAmountModal(selectedDonorProfile);
-                    }}
-                    className="text-[10px] text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded font-bold border border-amber-500/30"
-                  >
-                    ✏️ रक्कम बदला
-                  </button>
-                </div>
+                <span className="text-slate-400 block mb-0.5">नक्की वर्गणी (Target)</span>
+                <span className="text-base font-black text-amber-400">
+                  ₹{(selectedDonorProfile.target_amount || selectedDonorProfile.total_donated || 500).toLocaleString('en-IN')}
+                </span>
               </div>
               <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800">
-                <span className="text-slate-400 block mb-0.5">पावत्या संख्या</span>
-                <span className="text-base font-black text-white">{selectedDonorProfile.donations_count || 1} पावत्या</span>
+                <span className="text-emerald-400 block mb-0.5">जमा वर्गणी (Paid)</span>
+                <span className="text-base font-black text-emerald-400">
+                  ₹{(selectedDonorProfile.paid_amount || 0).toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800">
+                <span className="text-rose-400 block mb-0.5">बाकी (Pending)</span>
+                <span className="text-base font-black text-rose-400">
+                  ₹{(selectedDonorProfile.pending_amount || 0).toLocaleString('en-IN')}
+                </span>
               </div>
             </div>
 
             <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800/80 space-y-2 text-xs">
-              <h4 className="font-bold text-white">इतिहास व माहिती:</h4>
+              <h4 className="font-bold text-white">इतिहास व पावती माहिती:</h4>
               <p className="text-slate-300">पत्ता: {selectedDonorProfile.address || 'नाही'}</p>
+              <p className="text-slate-300">जमा पावत्या: {selectedDonorProfile.donations_count || 0} पावत्या</p>
               <p className="text-slate-300">
                 शेवटची वर्गणी तारीख: {selectedDonorProfile.last_donated_at ? formatDate(selectedDonorProfile.last_donated_at) : 'अलीकडे'}
               </p>
@@ -650,10 +738,10 @@ export function DonorsPage() {
                 }}
                 className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl font-bold text-xs shadow"
               >
-                ✏️ रक्कम बदला
+                ✏️ नक्की वर्गणी बदला
               </button>
               <button
-                onClick={() => sendWhatsAppReminder(selectedDonorProfile, selectedDonorProfile.total_donated || 500)}
+                onClick={() => sendWhatsAppReminder(selectedDonorProfile)}
                 className="px-3.5 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 rounded-xl font-bold text-xs shadow"
               >
                 🔔 रिमाइंडर पाठवा
@@ -722,7 +810,7 @@ export function DonorsPage() {
           </div>
 
           <div>
-            <label className="text-amber-400 block mb-1 font-bold">ठरवलेली वर्गणी रक्कम (Donation Amount)</label>
+            <label className="text-amber-400 block mb-1 font-bold">नक्की केलेली वर्गणी रक्कम (Target Amount)</label>
             <input
               type="number"
               value={singleAmount}
