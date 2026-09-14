@@ -45,7 +45,7 @@ ${verificationUrl}
 }
 
 /**
- * Directly opens WhatsApp Web or App with pre-filled message
+ * Directly opens WhatsApp Web or App with pre-filled message targeted to registered mobile
  */
 export function openWhatsAppReceipt(receipt, mandal, autoSend = true) {
   const rawMobile = receipt.mobile ? receipt.mobile.replace(/\D/g, '') : '';
@@ -55,7 +55,7 @@ export function openWhatsAppReceipt(receipt, mandal, autoSend = true) {
   let targetUrl = '';
   if (rawMobile && rawMobile.length >= 10) {
     const formattedNum = rawMobile.length === 10 ? `91${rawMobile}` : rawMobile;
-    targetUrl = `https://wa.me/${formattedNum}?text=${encodedText}`;
+    targetUrl = `https://api.whatsapp.com/send?phone=${formattedNum}&text=${encodedText}`;
   } else {
     targetUrl = `https://api.whatsapp.com/send?text=${encodedText}`;
   }
@@ -67,13 +67,13 @@ export function openWhatsAppReceipt(receipt, mandal, autoSend = true) {
 }
 
 /**
- * Generates a high-res HTML canvas element from receipt DOM ref
+ * Generates an ultra high-definition (HD 3x) HTML canvas element from receipt DOM ref
  */
 export async function generateReceiptCanvas(receiptElement) {
   if (!receiptElement) throw new Error('Receipt element not found');
 
   return await html2canvas(receiptElement, {
-    scale: 2,
+    scale: 3, // Ultra HD High Resolution (3x Pixel Density)
     useCORS: true,
     logging: false,
     backgroundColor: '#ffffff',
@@ -138,46 +138,17 @@ export async function copyReceiptImageToClipboard(receiptElement) {
 }
 
 /**
- * Shares the receipt Image or PDF file directly via Web Share API (Mobile WhatsApp file attach).
- * On desktop (where file sharing via web is restricted), downloads the file and opens WhatsApp.
+ * Shares HD Receipt image or PDF directly to donor's registered WhatsApp number
  */
 export async function shareReceiptFile(receiptElement, receipt, mandal, format = 'image') {
-  const canvas = await generateReceiptCanvas(receiptElement);
-  const receiptNo = receipt?.receipt_number || receipt?.receiptNo || 'Receipt';
-  const fileName = `Receipt_${receiptNo}.${format === 'pdf' ? 'pdf' : 'png'}`;
-
-  let file;
   if (format === 'pdf') {
-    const pdf = new jsPDF('p', 'mm', 'a5');
-    const imgData = canvas.toDataURL('image/png');
-    const imgWidth = 148;
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
-    pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
-    const pdfBlob = pdf.output('blob');
-    file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+    await downloadReceiptPdf(receiptElement, receipt);
   } else {
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-    file = new File([blob], fileName, { type: 'image/png' });
+    await downloadReceiptImage(receiptElement, receipt);
   }
-
-  const shareData = {
-    files: [file],
-    title: `Digital Receipt - ${receiptNo}`,
-    text: `🚩 ${mandal?.name_mr || 'श्री हनुमान तालीम मंडळ शिरोळ'} - पावती क्रमांक: ${receiptNo}`
-  };
-
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    await navigator.share(shareData);
-    return 'shared';
-  } else {
-    // Desktop fallback: Download file & open text WhatsApp link
-    if (format === 'pdf') {
-      await downloadReceiptPdf(receiptElement, receipt);
-    } else {
-      await downloadReceiptImage(receiptElement, receipt);
-    }
-    openWhatsAppReceipt(receipt, mandal, true);
-    return 'downloaded_and_opened';
-  }
+  
+  // Directly open WhatsApp targeted to donor's mobile number
+  openWhatsAppReceipt(receipt, mandal, true);
+  return 'downloaded_and_opened';
 }
 

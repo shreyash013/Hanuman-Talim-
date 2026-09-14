@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { useNotification } from '../context/NotificationContext';
 import { useMandal } from '../context/MandalContext';
+import logoImg from '../assets/logo.png';
+import phonepeQrImg from '../assets/phonepe_qr.jpg';
 import api from '../services/api';
 import { formatCurrency } from '../utils/formatCurrency';
 import { ReceiptModal } from '../components/receipt/ReceiptModal';
@@ -404,11 +406,31 @@ export function VarganiPage() {
                   }`}
                 >
                   <span className="text-xs capitalize block">
-                    {m === 'cash' ? '💵 रोख (Cash)' : m === 'upi' ? '📱 UPI / QR' : m === 'bank_transfer' ? '🏦 बँक' : 'इतर'}
+                    {m === 'cash' ? '💵 रोख (Cash)' : m === 'upi' ? '📱 UPI / PhonePe' : m === 'bank_transfer' ? '🏦 बँक' : 'इतर'}
                   </span>
                 </button>
               ))}
             </div>
+
+            {/* PhonePe QR Code Scanner Preview when UPI is selected */}
+            {paymentMethod === 'upi' && (
+              <div className="p-4 bg-slate-950 border border-emerald-500/50 rounded-2xl text-center space-y-3">
+                <div className="flex items-center justify-center gap-1.5 text-emerald-400 text-xs font-bold">
+                  <QrCode className="w-4 h-4" />
+                  <span>PhonePe अधिकृत स्कॅनर (+91 9699572617)</span>
+                </div>
+                <div className="p-2 bg-white rounded-xl max-w-[200px] mx-auto overflow-hidden">
+                  <img
+                    src={phonepeQrImg}
+                    alt="PhonePe Payment QR"
+                    className="w-full h-auto rounded-lg object-contain"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  भाविकाला हा क्यूआर स्कॅन करायला सांगा किंवा <strong>+91 9699572617 (9699572617@ybl)</strong> वर पे करायला सांगा.
+                </p>
+              </div>
+            )}
 
             {/* Submit Button */}
             <button

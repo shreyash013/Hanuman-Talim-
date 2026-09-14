@@ -19,7 +19,7 @@ export const SHIROL_MANDAL_SETTINGS = {
   festival_year: 2026,
   arrival_date: '2026-09-14T09:00:00+05:30',
   visarjan_date: '2026-09-25T18:00:00+05:30',
-  upi_id: 'sarveshkharoshe8-2@okaxis',
+  upi_id: '9699572617@ybl',
   upi_name: 'Shri Hanuman Talim Mandal Shirol',
   receipt_prefix: 'HANUMAN-2026-',
   receipt_language: 'mr',
@@ -74,112 +74,88 @@ function setLocalStore(key, value) {
 export async function request(endpoint, options = {}) {
   const token = localStorage.getItem('ganpati_mandal_token');
 
-  // Handle Mobile OTP Endpoints
-  if (endpoint.startsWith('/auth/send-otp')) {
-    const bodyData = JSON.parse(options.body || '{}');
-    const mobile = bodyData.mobile || '';
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    setLocalStore(`otp_${mobile}`, { otp, expiresAt: Date.now() + 300000 });
-    return {
-      success: true,
-      message: `मोबाईल क्रमांक ${mobile} वर नवीन OTP पाठवला आहे!`,
-      otp,
-      expiresInSeconds: 300
-    };
-  }
-
-  if (endpoint.startsWith('/auth/verify-otp')) {
-    const bodyData = JSON.parse(options.body || '{}');
-    const { mobile, otp } = bodyData;
-    const stored = getLocalStore(`otp_${mobile}`, null);
-    if (!stored || stored.otp !== otp) {
-      return { success: false, message: 'अवैध OTP! कृपया पुन्हा प्रयत्न करा.' };
-    }
-    let usersList = getLocalStore('users', DEFAULT_SHIROL_USERS);
-    let user = usersList.find(u => u.mobile === mobile);
-    if (!user) {
-      user = {
-        id: Date.now(),
-        name: `मोबाईल वापरकर्ता (${mobile.slice(-4)})`,
-        email: '',
-        mobile,
-        role: 'member',
-        status: 'active',
-        created_at: new Date().toISOString()
-      };
-      setLocalStore('users', [user, ...usersList]);
-    }
-    const token = 'otp-token-' + Date.now();
-    localStorage.setItem('ganpati_mandal_token', token);
-    localStorage.setItem('ganpati_mandal_user', JSON.stringify(user));
-    return { success: true, message: 'OTP पडताळणी यशस्वी!', token, user };
-  }
-
-  // Handle Login Endpoint
-  if (endpoint.startsWith('/auth/login')) {
+  // Network-First: Try live central backend API first for cross-device sync
+  if (API_BASE_URL && !endpoint.startsWith('/auth/send-otp') && !endpoint.startsWith('/auth/verify-otp')) {
     try {
-      const headers = { 'Content-Type': 'application/json' };
+      const headers = { ...(options.headers || {}) };
+      if (!(options.body instanceof FormData)) {
+        headers['Content-Type'] = 'application/json';
+      }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const res = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
-      const data = await res.json();
-      if (data.success) {
-        return data;
+      if (res.status === 401 && !endpoint.includes('/auth/login')) {
+        localStorage.removeItem('ganpati_mandal_token');
+        localStorage.removeItem('ganpati_mandal_user');
+      }
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.success !== false) {
+          return data;
+        }
       }
     } catch (e) {
-      console.warn('Network call to login failed, using local login engine:', e);
+      console.warn(`Live API call to ${endpoint} unreachable, using local store engine:`, e);
     }
+  }
 
+  // Handle Login Endpoint (Local Engine Fallback)
+  if (endpoint.startsWith('/auth/login')) {
     const bodyData = JSON.parse(options.body || '{}');
     const { identifier, password } = bodyData;
     const cleanId = (identifier || '').trim().toLowerCase();
 
+    // 1. President Authority Account
+    if (cleanId === 'president@mandal.org' || cleanId === 'admin@ganeshmandal.org' || cleanId === '9822099999' || cleanId === 'admin') {
+      if (password === 'admin123' || password === '123456') {
+        const user = { id: 101, name: 'सुमेध गवडे (अध्यक्ष)', email: 'president@mandal.org', mobile: '9822099999', role: 'admin', status: 'active' };
+        const token = 'demo-admin-token-' + Date.now();
+        localStorage.setItem('ganpati_mandal_token', token);
+        localStorage.setItem('ganpati_mandal_user', JSON.stringify(user));
+        return { success: true, message: 'अध्यक्ष (President) म्हणून लॉगिन!', token, user };
+      }
+    }
+
+    // 2. Treasurer Authority Account
+    if (cleanId === 'treasurer@mandal.org' || cleanId === 'treasurer@ganeshmandal.org' || cleanId === '9822022222' || cleanId === 'treasurer') {
+      if (password === 'treasurer123' || password === '123456') {
+        const user = { id: 102, name: 'मयुर बागल (खजिनदार)', email: 'treasurer@mandal.org', mobile: '9822022222', role: 'treasurer', status: 'active' };
+        const token = 'demo-treasurer-token-' + Date.now();
+        localStorage.setItem('ganpati_mandal_token', token);
+        localStorage.setItem('ganpati_mandal_user', JSON.stringify(user));
+        return { success: true, message: 'खजिनदार (Treasurer) म्हणून लॉगिन!', token, user };
+      }
+    }
+
+    // 3. Member User from local store
     const usersList = getLocalStore('users', DEFAULT_SHIROL_USERS);
     let user = usersList.find(u =>
       (u.email && u.email.toLowerCase() === cleanId) ||
       (u.mobile && u.mobile === cleanId)
     );
 
-    if (!user && (cleanId === 'president@mandal.org' || cleanId === '9822099999' || cleanId === 'admin' || cleanId === 'sumedhgavade@gmail.com')) {
-      user = {
-        id: 101,
-        name: 'सुमेध गवडे (अध्यक्ष)',
-        email: 'president@mandal.org',
-        mobile: '9822099999',
-        role: 'admin',
-        status: 'active'
-      };
-    }
-
     if (user && (password === 'admin123' || password === '123456' || password.length >= 4)) {
-      const token = 'demo-admin-token-' + Date.now();
+      const token = 'user-token-' + Date.now();
       localStorage.setItem('ganpati_mandal_token', token);
       localStorage.setItem('ganpati_mandal_user', JSON.stringify(user));
-      return { success: true, message: 'लॉगिन यशस्वी!', token, user };
+      return { success: true, message: 'सभासद लॉगिन यशस्वी!', token, user };
     }
 
     return { success: false, message: 'अवैध मोबाईल / ईमेल किंवा पासवर्ड.' };
   }
 
-  // Handle Auth Me Session Check
+  // Handle Auth Me Session Check (Local Engine Fallback)
   if (endpoint.startsWith('/auth/me')) {
-    try {
-      const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
-      const res = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
-      const data = await res.json();
-      if (data.success) return data;
-    } catch (e) {
-      console.warn('Network call to /auth/me failed, using local user state:', e);
-    }
-
     const savedUser = localStorage.getItem('ganpati_mandal_user');
-    const user = savedUser ? JSON.parse(savedUser) : {
-      id: 101,
-      name: 'सुमेध गवडे (अध्यक्ष)',
-      email: 'president@mandal.org',
-      mobile: '9822099999',
-      role: 'admin',
-      status: 'active'
-    };
-    return { success: true, user };
+    if (savedUser) {
+      try {
+        const user = JSON.parse(savedUser);
+        return { success: true, user };
+      } catch (e) {}
+    }
+    return { success: false, message: 'लॉगिन केलेले नाही' };
   }
 
   // Handle AI Assistant & Report endpoints
@@ -1172,12 +1148,12 @@ export async function request(endpoint, options = {}) {
       }
     }
 
-    // 3. Demo Fallback sample receipt for HANUMAN-2026-000001
-    if (!receipt && (cleanQuery.includes('hanuman2026000001') || cleanQuery === '1' || cleanQuery === 'hanuman20261')) {
+    // 3. Demo Fallback sample receipts
+    if (!receipt && (cleanQuery.includes('hanuman2026000001') || cleanQuery === '1')) {
       receipt = {
         id: 1,
         receipt_number: 'HANUMAN-2026-000001',
-        donor_name: 'आदरणीय राहुल चवाण',
+        donor_name: 'आदरणीय राहुल चव्हाण',
         mobile: '9822012345',
         address: 'नदीवेस, शिरोळ',
         amount: 2100,
@@ -1188,6 +1164,24 @@ export async function request(endpoint, options = {}) {
         purpose: 'गणेशोत्सव वर्गणी',
         collector_name: 'सुमेध गवडे (अध्यक्ष)',
         created_at: '2026-09-09T18:00:00.000Z'
+      };
+    }
+
+    if (!receipt && (cleanQuery.includes('hanuman2026000002') || cleanQuery === '2' || cleanQuery === '000002')) {
+      receipt = {
+        id: 2,
+        receipt_number: 'HANUMAN-2026-000002',
+        donor_name: 'निखिल गवडे (Nikhil Gavade)',
+        mobile: '9823012345',
+        address: 'नदीवेस, शिरोळ',
+        amount: 5000,
+        amount_in_words_mr: 'पाच हजार रुपये फक्त',
+        amount_in_words_en: 'Five Thousand Rupees Only',
+        payment_method: 'upi',
+        category: 'vargani',
+        purpose: 'श्री गणेशोत्सव वर्गणी / देणगी',
+        collector_name: 'सुमेध गवडे (अध्यक्ष)',
+        created_at: '2026-09-14T10:00:00.000Z'
       };
     }
 

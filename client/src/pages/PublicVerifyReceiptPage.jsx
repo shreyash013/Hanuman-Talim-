@@ -71,9 +71,9 @@ export function PublicVerifyReceiptPage() {
     <div className="min-h-screen bg-gradient-to-br from-amber-950 via-orange-950 to-slate-950 text-slate-100 flex flex-col justify-between p-4 sm:p-6 font-sans">
       {/* Top Header */}
       <header className="max-w-xl mx-auto w-full flex items-center justify-between py-2">
-        <Link to="/" className="flex items-center gap-2 text-xs font-bold text-amber-400 hover:underline">
+        <Link to="/login" className="flex items-center gap-2 text-xs font-bold text-amber-400 hover:underline">
           <ArrowLeft className="w-4 h-4" />
-          <span>मुख्य पृष्ठ / डॅशबोर्ड</span>
+          <span>लॉगिन / मुख्य डॅशबोर्ड</span>
         </Link>
         <span className="text-xs font-bold text-slate-400">अधिकृत पडताळणी पोर्टल</span>
       </header>

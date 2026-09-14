@@ -118,14 +118,14 @@ export function ReceiptModal({ isOpen, onClose, receipt }) {
         {/* Action Buttons Bar */}
         <div className="p-4 rounded-2xl bg-amber-500/10 dark:bg-slate-800/80 border border-amber-500/30 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            {/* Primary Mobile Share Button */}
+            {/* Primary Mobile Direct WhatsApp Share Button */}
             <button
               disabled={isSharing}
               onClick={() => handleShareImageOrPdf('image')}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs sm:text-sm shadow-md transition-all transform hover:-translate-y-0.5 disabled:opacity-50"
             >
               <MessageCircle className="w-4 h-4 fill-current" />
-              <span>{isSharing ? 'तयार होत आहे...' : 'WhatsApp वर इमेज पावती पाठवा'}</span>
+              <span>{isSharing ? 'HD इमेज तयार होत आहे...' : 'WhatsApp वर HD पावती पाठवा'}</span>
             </button>
 
             <div className="flex flex-wrap items-center gap-2">

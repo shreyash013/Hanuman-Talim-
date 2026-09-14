@@ -91,7 +91,7 @@ export function App() {
                     <Route
                       path="vargani"
                       element={
-                        <ProtectedRoute allowedRoles={['admin', 'treasurer', 'secretary', 'volunteer']}>
+                        <ProtectedRoute allowedRoles={['admin', 'treasurer', 'secretary', 'volunteer', 'member']}>
                           <VarganiPage />
                         </ProtectedRoute>
                       }
@@ -99,7 +99,7 @@ export function App() {
                     <Route
                       path="income"
                       element={
-                        <ProtectedRoute allowedRoles={['admin', 'treasurer', 'secretary', 'volunteer']}>
+                        <ProtectedRoute allowedRoles={['admin', 'treasurer', 'secretary', 'volunteer', 'member']}>
                           <IncomePage />
                         </ProtectedRoute>
                       }
@@ -107,7 +107,7 @@ export function App() {
                     <Route
                       path="expenses"
                       element={
-                        <ProtectedRoute allowedRoles={['admin', 'treasurer', 'secretary', 'volunteer']}>
+                        <ProtectedRoute allowedRoles={['admin', 'treasurer', 'secretary', 'volunteer', 'member']}>
                           <ExpensesPage />
                         </ProtectedRoute>
                       }
@@ -123,7 +123,7 @@ export function App() {
                     <Route
                       path="transactions"
                       element={
-                        <ProtectedRoute allowedRoles={['admin', 'treasurer', 'secretary', 'volunteer']}>
+                        <ProtectedRoute allowedRoles={['admin', 'treasurer', 'secretary', 'volunteer', 'member']}>
                           <TransactionsPage />
                         </ProtectedRoute>
                       }
@@ -131,7 +131,7 @@ export function App() {
                     <Route
                       path="cash-management"
                       element={
-                        <ProtectedRoute allowedRoles={['admin', 'treasurer', 'secretary', 'volunteer']}>
+                        <ProtectedRoute allowedRoles={['admin', 'treasurer', 'secretary', 'volunteer', 'member']}>
                           <CashManagementPage />
                         </ProtectedRoute>
                       }

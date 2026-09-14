@@ -20,6 +20,8 @@ import {
   Send
 } from 'lucide-react';
 
+import phonepeQrImg from '../assets/phonepe_qr.jpg';
+
 export function PublicDonationPage() {
   const [mandalInfo, setMandalInfo] = useState(null);
   const [events, setEvents] = useState([]);
@@ -51,8 +53,8 @@ export function PublicDonationPage() {
     fetchPublicData();
   }, []);
 
-  const upiId = mandalInfo?.upi_id || 'ganeshmandal@sbi';
-  const upiName = mandalInfo?.upi_name || 'Shree Ganesh Mitra Mandal Trust';
+  const upiId = mandalInfo?.upi_id || '9699572617@ybl';
+  const upiName = mandalInfo?.upi_name || 'Shri Hanuman Talim Mandal Shirol';
 
   const upiUri = amount > 0
     ? `upi://pay?pa=${upiId}&pn=${encodeURIComponent(upiName)}&am=${amount}&cu=INR&tn=${encodeURIComponent(purpose)}`
@@ -186,9 +188,13 @@ export function PublicDonationPage() {
               </div>
             </div>
 
-            {/* QR Box */}
-            <div className="p-4 bg-white rounded-2xl border-2 border-amber-400 shadow-festive inline-block mx-auto">
-              <QRCodeSVG value={upiUri} size={200} level="H" />
+            {/* PhonePe QR Scanner Box */}
+            <div className="p-2 bg-slate-950 rounded-2xl border-2 border-amber-400/80 shadow-lg inline-block max-w-[260px] mx-auto overflow-hidden">
+              <img
+                src={phonepeQrImg}
+                alt="PhonePe Payment Scanner QR"
+                className="w-full h-auto rounded-xl object-contain"
+              />
             </div>
 
             <div className="inline-block px-4 py-1 rounded-full bg-emerald-950 text-emerald-300 font-black text-sm border border-emerald-500/40">

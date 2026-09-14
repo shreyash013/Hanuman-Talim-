@@ -21,6 +21,8 @@ import {
   Receipt
 } from 'lucide-react';
 
+import phonepeQrImg from '../assets/phonepe_qr.jpg';
+
 export function DigitalPaymentsPage() {
   const { t } = useLanguage();
   const { mandal } = useMandal();
@@ -50,7 +52,7 @@ export function DigitalPaymentsPage() {
     loadStats();
   }, []);
 
-  const upiId = mandal?.upi_id || 'sarveshkharoshe8-2@okaxis';
+  const upiId = mandal?.upi_id || '9699572617@ybl';
   const upiName = mandal?.upi_name || 'Shri Hanuman Talim Mandal Shirol';
 
   const upiUri = amount > 0
@@ -90,7 +92,7 @@ export function DigitalPaymentsPage() {
             <span>डिजिटल पेमेंट व युपीआय क्यूआर (Complete Digital Payment System) 💳</span>
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            NPCI अधिकृत UPI QR कोड, UTR संदर्भ पडताळणी व रोजचे पेमेंट सेटलमेंट.
+            PhonePe, Google Pay, Paytm अधिकृत QR स्कॅनर व UTR संदर्भ पडताळणी.
           </p>
         </div>
 
@@ -113,41 +115,40 @@ export function DigitalPaymentsPage() {
         </div>
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
           <div>
-            <span className="text-slate-400 block mb-1">📱 UPI / QR (Digital)</span>
+            <span className="text-slate-400 block mb-1">📱 PhonePe / UPI (Digital)</span>
             <span className="text-xl font-extrabold text-sky-400">₹{Number(paymentStats.digitalIncome).toLocaleString('en-IN')}</span>
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-        {/* Left: Interactive QR Code Standee Card */}
-        <div className="rounded-3xl bg-slate-900 border-4 border-amber-500 p-6 shadow-2xl text-center space-y-4">
+        {/* Left 1: Official PhonePe Payment Scanner Card */}
+        <div className="rounded-3xl bg-slate-900 border-4 border-emerald-500 p-6 shadow-2xl text-center space-y-4">
           <div className="space-y-1">
-            <p className="text-xs font-bold text-amber-400 uppercase tracking-widest">
-              ॥ श्री गणेशाय नमः ॥
-            </p>
-            <h3 className="text-xl font-black text-amber-400">
+            <span className="inline-block px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[11px] font-black rounded-full">
+              ✓ PhonePe अधिकृत पेमेंट स्कॅनर (+91 9699572617)
+            </span>
+            <h3 className="text-lg font-black text-white font-marathi">
               {mandal?.name_mr || 'श्री हनुमान तालीम मंडळ शिरोळ'}
             </h3>
             <p className="text-xs text-slate-400">
-              {mandal?.address_mr}
+              कोणत्याही UPI ॲपवरून स्कॅन करून वर्गणी जमा करा
             </p>
           </div>
 
-          {/* QR Code Container */}
-          <div className="p-4 bg-white rounded-2xl border-2 border-amber-400 shadow-festive inline-block mx-auto">
-            <QRCodeSVG value={upiUri} size={210} level="H" />
-          </div>
-
-          <div className="space-y-1 text-xs">
-            <p className="font-bold text-white">स्कॅन करून वर्गणी जमा करा</p>
-            <p className="text-slate-400 text-[11px]">Google Pay, PhonePe, Paytm, BHIM द्वारे स्वीकार्य</p>
+          {/* Uploaded PhonePe QR Scanner Image Display */}
+          <div className="p-2 bg-slate-950 rounded-2xl border-2 border-emerald-500/60 shadow-lg inline-block max-w-[280px] mx-auto overflow-hidden">
+            <img
+              src={phonepeQrImg}
+              alt="PhonePe Payment Scanner QR"
+              className="w-full h-auto rounded-xl object-contain"
+            />
           </div>
 
           <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800 flex items-center justify-between text-xs">
             <div className="text-left">
-              <span className="text-slate-400 text-[10px] block">UPI ID:</span>
-              <strong className="text-amber-400 font-mono text-xs">{upiId}</strong>
+              <span className="text-slate-400 text-[10px] block">UPI / PhonePe Number:</span>
+              <strong className="text-amber-400 font-mono text-xs">+91 9699572617 ({upiId})</strong>
             </div>
             <button
               onClick={handleCopyUpi}

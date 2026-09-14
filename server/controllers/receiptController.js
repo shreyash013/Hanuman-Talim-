@@ -165,31 +165,34 @@ export async function verifyPublicReceipt(req, res) {
 
     let receipt = null;
 
-    // 1. Try receipts table by receipt_number
-    const { data: byNum } = await db.from('receipts').select('*').eq('receipt_number', rawIdentifier).maybeSingle();
-    if (byNum) {
-      receipt = byNum;
+    const cleanQuery = rawIdentifier.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+
+    // 1. Try receipts table by receipt_number (case-insensitive ilike)
+    const { data: byNumArr } = await db.from('receipts').select('*').ilike('receipt_number', `%${rawIdentifier}%`).limit(1);
+    if (byNumArr && byNumArr.length > 0) {
+      receipt = byNumArr[0];
     }
 
     // 2. Try receipts table by verification_code
     if (!receipt) {
-      const { data: byCode } = await db.from('receipts').select('*').eq('verification_code', rawIdentifier).maybeSingle();
-      if (byCode) {
-        receipt = byCode;
+      const { data: byCodeArr } = await db.from('receipts').select('*').ilike('verification_code', `%${rawIdentifier}%`).limit(1);
+      if (byCodeArr && byCodeArr.length > 0) {
+        receipt = byCodeArr[0];
       }
     }
 
     // 3. Fallback to income_transactions
     if (!receipt) {
       const safeId = safeSearchTerm(rawIdentifier);
-      const { data: tx } = await db.from('income_transactions')
+      const { data: txArr } = await db.from('income_transactions')
         .select('*')
-        .or(`receipt_number.eq.${rawIdentifier},transaction_id.eq.${rawIdentifier},receipt_number.ilike.%${safeId}%,transaction_id.ilike.%${safeId}%`)
+        .or(`receipt_number.ilike.%${safeId}%,transaction_id.ilike.%${safeId}%`)
         .eq('is_deleted', false)
-        .maybeSingle();
+        .order('created_at', { ascending: false })
+        .limit(1);
 
-      if (tx) {
-        receipt = constructReceiptFromTx(tx);
+      if (txArr && txArr.length > 0) {
+        receipt = constructReceiptFromTx(txArr[0]);
       }
     }
 

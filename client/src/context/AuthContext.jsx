@@ -16,13 +16,13 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     try {
       const savedUser = localStorage.getItem('ganpati_mandal_user');
-      return savedUser ? JSON.parse(savedUser) : DEFAULT_ADMIN;
+      return savedUser ? JSON.parse(savedUser) : null;
     } catch {
-      return DEFAULT_ADMIN;
+      return null;
     }
   });
 
-  const [token, setToken] = useState(() => localStorage.getItem('ganpati_mandal_token') || 'demo-admin-token');
+  const [token, setToken] = useState(() => localStorage.getItem('ganpati_mandal_token') || null);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -34,9 +34,13 @@ export function AuthProvider({ children }) {
             let fetchedUser = res.user;
             if (fetchedUser && (fetchedUser.email === 'president@mandal.org' || fetchedUser.email === 'admin@ganeshmandal.org')) {
               fetchedUser = { ...fetchedUser, role: 'admin' };
+            } else if (fetchedUser && (fetchedUser.email === 'treasurer@mandal.org' || fetchedUser.email === 'treasurer@ganeshmandal.org')) {
+              fetchedUser = { ...fetchedUser, role: 'treasurer' };
             }
             setUser(fetchedUser);
             localStorage.setItem('ganpati_mandal_user', JSON.stringify(fetchedUser));
+          } else {
+            logout();
           }
         } catch {
           logout();

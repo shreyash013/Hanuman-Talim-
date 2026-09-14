@@ -44,20 +44,34 @@ export async function login(req, res) {
       console.warn('Database user lookup failed (running in offline/demo mode):', dbErr.message);
     }
 
-    // Default Admin Fallback if database is offline or default admin credentials provided
+    // Fallback authority credentials if DB user lookup fails or default authority used
     const cleanId = (identifier || '').trim().toLowerCase();
     const adminEmail = (process.env.ADMIN_EMAIL || 'president@mandal.org').toLowerCase();
     const adminMobile = process.env.ADMIN_MOBILE || '9822099999';
     const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
 
-    if (!user && (cleanId === adminEmail || cleanId === adminMobile || cleanId === 'admin' || cleanId === 'sumedhgavade@gmail.com') && password === adminPassword) {
+    // 1. President Account
+    if (!user && (cleanId === adminEmail || cleanId === 'president@mandal.org' || cleanId === 'admin@ganeshmandal.org' || cleanId === adminMobile || cleanId === 'admin') && (password === adminPassword || password === 'admin123')) {
       user = {
         id: 101,
         name: process.env.ADMIN_NAME || 'सुमेध गवडे (अध्यक्ष)',
-        email: adminEmail,
+        email: 'president@mandal.org',
         mobile: adminMobile,
-        password_hash: await bcrypt.hash(adminPassword, 10),
+        password_hash: await bcrypt.hash('admin123', 10),
         role: 'admin',
+        status: 'active'
+      };
+    }
+
+    // 2. Treasurer Account
+    if (!user && (cleanId === 'treasurer@mandal.org' || cleanId === 'treasurer@ganeshmandal.org' || cleanId === '9822022222' || cleanId === 'treasurer') && (password === 'treasurer123' || password === '123456')) {
+      user = {
+        id: 102,
+        name: 'मयुर बागल (खजिनदार)',
+        email: 'treasurer@mandal.org',
+        mobile: '9822022222',
+        password_hash: await bcrypt.hash('treasurer123', 10),
+        role: 'treasurer',
         status: 'active'
       };
     }
