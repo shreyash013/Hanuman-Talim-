@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">श्री हनुमान तालीम मंडळ</string>
+    <string name="title_activity_main">श्री हनुमान तालीम मंडळ</string>
+    <string name="package_name">com.hanumantalim.mandal</string>
+    <string name="custom_url_scheme">com.hanumantalim.mandal</string>
+</resources>
