@@ -27,13 +27,9 @@ jobs:
       - name: Install dependencies & build Vite app
         run: |
           cd client
-          npm ci || npm install
+          npm install
           npm run build
-
-      - name: Sync Capacitor Android
-        run: |
-          cd client
-          npx cap sync android
+          npx cap copy android
 
       - name: Build Debug APK with Gradle
         run: |
