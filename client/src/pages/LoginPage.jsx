@@ -71,7 +71,7 @@ export function LoginPage() {
                 required
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
-                placeholder="उदा. 9822012345 किंवा president@mandal.org"
+                placeholder="मोबाईल क्र. किंवा ईमेल टाका"
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
               />
             </div>
@@ -108,16 +108,6 @@ export function LoginPage() {
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>
-
-        {/* Info Box for Authorities */}
-        <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-300 space-y-1">
-          <p className="font-bold flex items-center gap-1 text-white">
-            <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-            <span>अधिकारी / पदाधिकारी लॉगिन माहिती:</span>
-          </p>
-          <p>• <strong>अध्यक्ष (President):</strong> president@mandal.org / admin123</p>
-          <p>• <strong>खजिनदार (Treasurer):</strong> treasurer@mandal.org / treasurer123</p>
-        </div>
 
         {/* Devotee / Public Links */}
         <div className="pt-2 text-center text-xs text-slate-400 border-t border-slate-800 space-y-2">
