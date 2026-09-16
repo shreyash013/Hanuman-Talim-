@@ -141,13 +141,49 @@ export async function copyReceiptImageToClipboard(receiptElement) {
  * Shares HD Receipt image or PDF directly to donor's registered WhatsApp number
  */
 export async function shareReceiptFile(receiptElement, receipt, mandal, format = 'image') {
+  if (!receiptElement) throw new Error('Receipt element not found');
+  const receiptNo = receipt?.receipt_number || receipt?.receiptNo || 'Receipt';
+
   if (format === 'pdf') {
     await downloadReceiptPdf(receiptElement, receipt);
-  } else {
-    await downloadReceiptImage(receiptElement, receipt);
+    openWhatsAppReceipt(receipt, mandal, true);
+    return 'downloaded_and_opened';
   }
-  
-  // Directly open WhatsApp targeted to donor's mobile number
+
+  const canvas = await generateReceiptCanvas(receiptElement);
+
+  // Try Web Share API (native image share on mobile Chrome / Safari / Android)
+  if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
+    try {
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      if (blob) {
+        const file = new File([blob], `Receipt_${receiptNo}.png`, { type: 'image/png' });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: `डिजिटल वर्गणी पावती - ${receiptNo}`,
+            text: `🚩 श्री हनुमान तालीम मंडळ शिरोळ - देणगी पावती (${receipt.donor_name || ''})`,
+            files: [file]
+          });
+          return 'shared';
+        }
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        console.warn('Native share failed, falling back to download & WhatsApp opening:', err);
+      } else {
+        return 'aborted';
+      }
+    }
+  }
+
+  // Desktop or unsupported share fallback: Copy to clipboard + Download PNG + Open WhatsApp
+  try {
+    await copyReceiptImageToClipboard(receiptElement);
+  } catch (e) {
+    // Ignore clipboard errors
+  }
+
+  await downloadReceiptImage(receiptElement, receipt);
   openWhatsAppReceipt(receipt, mandal, true);
   return 'downloaded_and_opened';
 }
