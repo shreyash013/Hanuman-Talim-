@@ -1,3 +1,5 @@
+import { numberToWordsMarathi, numberToWordsEnglish } from '../utils/marathiNumberToWords';
+
 export const getActiveApiUrl = () => {
   if (typeof window !== 'undefined') {
     const custom = localStorage.getItem('shirol_custom_api_url');
@@ -1126,8 +1128,13 @@ export async function request(endpoint, options = {}) {
     };
 
     if (endpoint.includes('/search')) {
-      const q = (options.params?.q || '').toLowerCase();
-      const filtered = processedDonors.filter(d => d.name.toLowerCase().includes(q) || (d.mobile && d.mobile.includes(q)));
+      const urlObj = new URL(endpoint, 'http://dummy.local');
+      const q = (options.params?.q || urlObj.searchParams.get('q') || '').toLowerCase();
+      const filtered = processedDonors.filter(d =>
+        (d.name && d.name.toLowerCase().includes(q)) ||
+        (d.mobile && d.mobile.includes(q)) ||
+        (d.area && d.area.toLowerCase().includes(q))
+      );
       return { success: true, data: filtered, summary };
     }
     return { success: true, data: processedDonors, summary };

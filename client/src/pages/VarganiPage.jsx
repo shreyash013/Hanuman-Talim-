@@ -100,6 +100,8 @@ export function VarganiPage() {
         } else {
           setDuplicateWarning(null);
         }
+      }).catch((err) => {
+        console.warn('Duplicate mobile check failed quietly:', err);
       });
     } else {
       setDuplicateWarning(null);
@@ -141,6 +143,8 @@ export function VarganiPage() {
 
   const handleSubmitVargani = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     if (!donorName.trim()) {
       showToast('कृपया देणगीदाराचे नाव टाका.', 'error');
       return;
@@ -190,11 +194,11 @@ export function VarganiPage() {
 
         resetForm();
       } else {
-        showToast(res.message || 'त्रुटी आली.', 'error');
+        showToast(res.message || 'त्रुटी आली. कृपया पुन्हा प्रयत्न करा.', 'error');
       }
     } catch (err) {
-      console.error(err);
-      showToast('सर्व्हर त्रुटी निर्माण झाली.', 'error');
+      console.error('Vargani Submit error:', err);
+      showToast(err?.message || 'सर्व्हर त्रुटी निर्माण झाली. कृपया पुन्हा प्रयत्न करा.', 'error');
     } finally {
       setIsSubmitting(false);
     }
