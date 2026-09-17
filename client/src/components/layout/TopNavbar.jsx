@@ -8,14 +8,12 @@ import {
   Moon,
   Sun,
   ChevronDown,
-  Bot,
-  RefreshCw
+  Bot
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { GanpatiLogo } from '../common/GanpatiLogo';
 import { NotificationDropdown } from '../common/NotificationDropdown';
 import { AiFinancialAssistantModal } from '../ai/AiFinancialAssistantModal';
-import { SyncCenterModal } from '../sync/SyncCenterModal';
 
 export function TopNavbar({ onOpenMobileMenu }) {
   const { lang, setLang, t } = useLanguage();
@@ -24,7 +22,6 @@ export function TopNavbar({ onOpenMobileMenu }) {
   const { mandal } = useMandal();
 
   const [showAiModal, setShowAiModal] = useState(false);
-  const [showSyncModal, setShowSyncModal] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
 
   const languages = [
@@ -62,16 +59,6 @@ export function TopNavbar({ onOpenMobileMenu }) {
 
       {/* Right Controls */}
       <div className="flex items-center gap-2 sm:gap-3">
-        {/* Device Sync Button */}
-        <button
-          onClick={() => setShowSyncModal(true)}
-          className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 rounded-xl font-bold text-xs transition-all active:scale-95 shadow-xs"
-          title="मोबाईल - लॅपटॉप डेटा सिंक केंद्र (Device Sync)"
-        >
-          <RefreshCw className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 animate-spin-slow" />
-          <span className="hidden sm:inline">डिव्हाइस सिंक</span>
-        </button>
-
         {/* AI Assistant Button */}
         <button
           onClick={() => setShowAiModal(true)}
@@ -87,9 +74,6 @@ export function TopNavbar({ onOpenMobileMenu }) {
 
         {/* AI Assistant Modal */}
         <AiFinancialAssistantModal isOpen={showAiModal} onClose={() => setShowAiModal(false)} />
-
-        {/* Sync Center Modal */}
-        <SyncCenterModal isOpen={showSyncModal} onClose={() => setShowSyncModal(false)} />
 
         {/* Language Selector Dropdown */}
         <div className="relative">

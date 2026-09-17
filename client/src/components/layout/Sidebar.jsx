@@ -37,7 +37,7 @@ export function Sidebar({ onCloseMobile }) {
     navigate('/login');
   };
 
-  const isPrivileged = isAdmin || isTreasurer || isSecretary || isVolunteer || isMember || !!user;
+  const isPrivileged = isAdmin || isTreasurer || isSecretary || isVolunteer;
 
   const navItems = [
     { to: '/dashboard', label: t('nav.dashboard', 'डॅशबोर्ड'), icon: LayoutDashboard, exact: true },

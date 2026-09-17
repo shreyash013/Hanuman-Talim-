@@ -37,7 +37,8 @@ import {
   Building,
   DollarSign,
   FileCheck2,
-  Landmark
+  Landmark,
+  HeartHandshake
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -138,6 +139,162 @@ export function DashboardPage() {
       showToast('आजचे ध्येय (Target) अद्ययावत झाले!', 'success');
     }
   };
+
+  const isMemberView = user?.role === 'member';
+
+  if (isMemberView) {
+    return (
+      <div className="space-y-6">
+        {/* Header Greeting & Festival Countdown */}
+        <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white rounded-3xl p-6 sm:p-7 relative overflow-hidden shadow-festive border border-amber-400/40">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+            <div>
+              <div className="flex items-center space-x-2 text-amber-200 font-extrabold text-xs mb-1">
+                <Sparkles className="w-4 h-4 text-amber-200" />
+                <span>{mandal?.name_mr || 'श्री हनुमान तालीम मंडळ शिरोळ'} • सदस्य डॅशबोर्ड</span>
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-black text-white font-marathi tracking-tight drop-shadow-sm">
+                जय देव जय देव, जय मंगलमूर्ती! 🚩
+              </h1>
+              <p className="text-xs sm:text-sm text-amber-100/90 mt-1 font-medium">
+                सस्नेह नमस्कार, <strong className="text-white font-bold">{user?.name}</strong>! श्री हनुमान तालीम मंडळात आपले हार्दिक स्वागत आहे.
+              </p>
+            </div>
+            <div className="shrink-0 bg-black/25 backdrop-blur-md p-4 rounded-2xl border border-white/20">
+              <span className="text-[11px] font-black text-amber-200 block mb-2 text-center lg:text-left">
+                गणपती आगमन काउंटडाऊन 🗓️
+              </span>
+              <CountdownTimer targetDate={mandal?.arrival_date || '2026-09-14T09:00:00+05:30'} compact={true} />
+            </div>
+          </div>
+        </div>
+
+        {/* Member Quick Services / Navigation Grid */}
+        <div className="space-y-3">
+          <h2 className="text-lg font-black text-slate-900 dark:text-white font-marathi">
+            सेवा व उपयुक्त लिंक्स (Member Services) 🌟
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div
+              onClick={() => navigate('/donate')}
+              className="bg-white dark:bg-slate-900 border border-amber-500/30 rounded-3xl p-5 shadow-sm hover:shadow-md transition cursor-pointer flex items-center space-x-4 group"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/15 text-amber-500 flex items-center justify-center font-bold group-hover:scale-110 transition-transform">
+                <HeartHandshake className="w-6 h-6 text-amber-500" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm group-hover:text-amber-500 transition-colors">
+                  डिजिटल देणगी द्या (Online Donation)
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">ऑनलाइन देणगी जमा करा व त्वरित पावती मिळवा</p>
+              </div>
+            </div>
+
+            <div
+              onClick={() => navigate('/digital-payments')}
+              className="bg-white dark:bg-slate-900 border border-amber-500/30 rounded-3xl p-5 shadow-sm hover:shadow-md transition cursor-pointer flex items-center space-x-4 group"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 text-emerald-500 flex items-center justify-center font-bold group-hover:scale-110 transition-transform">
+                <QrCode className="w-6 h-6 text-emerald-500" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm group-hover:text-emerald-500 transition-colors">
+                  UPI व QR कोड
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">थेट मंडळ बँक / UPI QR स्कॅन करा</p>
+              </div>
+            </div>
+
+            <div
+              onClick={() => navigate('/festival-planner')}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition cursor-pointer flex items-center space-x-4 group"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-indigo-500/15 text-indigo-500 flex items-center justify-center font-bold group-hover:scale-110 transition-transform">
+                <CalendarDays className="w-6 h-6 text-indigo-500" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm group-hover:text-indigo-500 transition-colors">
+                  उत्सव प्लॅनर व कार्यक्रम
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">गणेशोत्सवाचे सर्व कार्यक्रम व वेळापत्रक</p>
+              </div>
+            </div>
+
+            <div
+              onClick={() => navigate('/donors')}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition cursor-pointer flex items-center space-x-4 group"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-purple-500/15 text-purple-500 flex items-center justify-center font-bold group-hover:scale-110 transition-transform">
+                <Users className="w-6 h-6 text-purple-500" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm group-hover:text-purple-500 transition-colors">
+                  देणगीदार यादी (Donors Directory)
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">मंडळाच्या सर्व देणगीदारांची नामावली</p>
+              </div>
+            </div>
+
+            <div
+              onClick={() => navigate('/volunteers')}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition cursor-pointer flex items-center space-x-4 group"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/15 text-amber-500 flex items-center justify-center font-bold group-hover:scale-110 transition-transform">
+                <Award className="w-6 h-6 text-amber-500" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm group-hover:text-amber-500 transition-colors">
+                  कार्यकर्ते लीडरबोर्ड
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">उत्सवातील प्रमुख कार्यकर्ते व गुणवंत</p>
+              </div>
+            </div>
+
+            <div
+              onClick={() => navigate('/public')}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition cursor-pointer flex items-center space-x-4 group"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-rose-500/15 text-rose-500 flex items-center justify-center font-bold group-hover:scale-110 transition-transform">
+                <Sparkles className="w-6 h-6 text-rose-500" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm group-hover:text-rose-500 transition-colors">
+                  सार्वजनिक भाविक पोर्टल
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">लाइव्ह आरती, फोटो गॅलरी व माहिती</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Public Top Donors Leaderboard Preview */}
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Award className="w-5 h-5 text-amber-400" />
+              <h3 className="font-bold text-white text-base">🏆 प्रमुख देणगीदार (Top Donors)</h3>
+            </div>
+            <button onClick={() => navigate('/donors')} className="text-xs text-amber-400 font-bold hover:underline">
+              सर्व पहा
+            </button>
+          </div>
+          <div className="divide-y divide-slate-800/80">
+            {(stats?.topDonors || []).slice(0, 5).map((d, idx) => (
+              <div key={d.id || idx} className="py-3 flex items-center justify-between text-xs">
+                <div>
+                  <h4 className="font-bold text-white">{d.name}</h4>
+                  <p className="text-slate-400 text-[11px]">{d.area || 'शिरोळ'}</p>
+                </div>
+                <span className="font-extrabold text-emerald-400">
+                  ₹{(d.total_donated || 0).toLocaleString('en-IN')}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

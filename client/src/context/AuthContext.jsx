@@ -12,11 +12,54 @@ const DEFAULT_ADMIN = {
   status: 'active'
 };
 
+function formatUserRoleAndName(u) {
+  if (!u) return null;
+  const email = (u.email || '').toLowerCase().trim();
+  const mobile = (u.mobile || '').trim();
+  const name = u.name || '';
+
+  // Check if Treasurer
+  if (email === 'shreyashgavade7@gmail.com' || email === 'treasurer@mandal.org' || email === 'treasurer@ganeshmandal.org' || u.role === 'treasurer' || name.includes('मयुर') || name.includes('बागल') || name.includes('Mayur')) {
+    return {
+      ...u,
+      id: u.id || 102,
+      name: 'श्रेयश गवडे (खजिनदार)',
+      email: email || 'shreyashgavade7@gmail.com',
+      mobile: mobile || '9356997428',
+      role: 'treasurer',
+      status: 'active'
+    };
+  }
+
+  // Check if Adhyaksh / Admin
+  if (email === 'sumedhgavade@gmail.com' || email === 'president@mandal.org' || email === 'admin@ganeshmandal.org' || u.role === 'admin' || name.includes('सचिन') || name.includes('सुमेध')) {
+    return {
+      ...u,
+      id: u.id || 101,
+      name: 'सुमेध गवडे (अध्यक्ष)',
+      email: email || 'sumedhgavade@gmail.com',
+      mobile: mobile || '9822099999',
+      role: 'admin',
+      status: 'active'
+    };
+  }
+
+  return {
+    ...u,
+    role: u.role || 'member'
+  };
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     try {
       const savedUser = localStorage.getItem('ganpati_mandal_user');
-      return savedUser ? JSON.parse(savedUser) : null;
+      const parsed = savedUser ? JSON.parse(savedUser) : null;
+      const formatted = formatUserRoleAndName(parsed);
+      if (formatted && JSON.stringify(formatted) !== savedUser) {
+        localStorage.setItem('ganpati_mandal_user', JSON.stringify(formatted));
+      }
+      return formatted;
     } catch {
       return null;
     }
@@ -31,19 +74,14 @@ export function AuthProvider({ children }) {
         try {
           const res = await api.get('/auth/me');
           if (res.success && res.user) {
-            let fetchedUser = res.user;
-            if (fetchedUser && (fetchedUser.email === 'president@mandal.org' || fetchedUser.email === 'admin@ganeshmandal.org')) {
-              fetchedUser = { ...fetchedUser, role: 'admin' };
-            } else if (fetchedUser && (fetchedUser.email === 'treasurer@mandal.org' || fetchedUser.email === 'treasurer@ganeshmandal.org')) {
-              fetchedUser = { ...fetchedUser, role: 'treasurer' };
-            }
-            setUser(fetchedUser);
-            localStorage.setItem('ganpati_mandal_user', JSON.stringify(fetchedUser));
+            const formattedUser = formatUserRoleAndName(res.user);
+            setUser(formattedUser);
+            localStorage.setItem('ganpati_mandal_user', JSON.stringify(formattedUser));
           } else {
-            logout();
+            // Keep local formatted user if offline
           }
         } catch {
-          logout();
+          // Keep local formatted user if offline
         }
       }
       setIsLoading(false);
@@ -56,10 +94,7 @@ export function AuthProvider({ children }) {
     try {
       const res = await api.post('/auth/login', { identifier, password });
       if (res.success && res.token) {
-        let loggedUser = res.user;
-        if (loggedUser && (loggedUser.email === 'president@mandal.org' || loggedUser.email === 'admin@ganeshmandal.org')) {
-          loggedUser = { ...loggedUser, role: 'admin' };
-        }
+        const loggedUser = formatUserRoleAndName(res.user);
         setToken(res.token);
         setUser(loggedUser);
         localStorage.setItem('ganpati_mandal_token', res.token);
