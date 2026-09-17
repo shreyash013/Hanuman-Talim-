@@ -184,13 +184,7 @@ export function VarganiPage() {
 
         const createdReceipt = res.data.receipt;
         setGeneratedReceipt(createdReceipt);
-        showToast('वर्गणी यशस्वीरित्या जमा झाली!', 'success');
-
-        // Auto-share receipt directly to the entered mobile number via WhatsApp
-        if (createdReceipt?.mobile || mobile.trim()) {
-          const receiptToShare = createdReceipt || { ...payload, mobile: mobile.trim() };
-          openWhatsAppReceipt(receiptToShare, mandal, true);
-        }
+        showToast('वर्गणी यशस्वीरित्या जमा झाली! पावती पॉप-अपमधून फोटो पाठवा.', 'success');
 
         resetForm();
       } else {
