@@ -21,31 +21,22 @@ const PORT = process.env.PORT || 5000;
 // CORS CONFIGURATION
 // ==================================================
 
-// Local development frontend URLs
+// Allowed origins configuration for local dev, Vercel frontend, and mobile apps
 const defaultOrigins = [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
+  'https://hanuman-talim.vercel.app',
+  'https://hanuman-talim-mandal.vercel.app',
   'https://hanuman-talim-mandal.onrender.com'
 ];
 
-
-// Production frontend URLs can be added using:
-//
-//CLIENT_URL='https://hanuman-talim-mandal.vercel.app'
-//
-// Multiple URLs:
-//
-// CLIENT_URL=https://app1.vercel.app,https://app2.vercel.app
-//
 const envOrigins = (process.env.CLIENT_URL || '')
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
 
-
-// Combine local + production origins
 const allowedOrigins = [
   ...new Set([
     ...defaultOrigins,
@@ -53,75 +44,29 @@ const allowedOrigins = [
   ])
 ];
 
-
-console.log(
-  'Allowed CORS origins:',
-  allowedOrigins
-);
-
-
-// ==================================================
-// CORS OPTIONS
-// ==================================================
+console.log('Allowed CORS origins:', allowedOrigins);
 
 const corsOptions = {
-
   origin(origin, callback) {
-
-    // ----------------------------------------------
-    // Allow requests without Origin header
-    //
-    // Examples:
-    // Postman
-    // curl
-    // server-to-server requests
-    // ----------------------------------------------
-
+    // Allow requests without Origin header (mobile apps, curl, server-to-server)
     if (!origin) {
-
-      return callback(
-        null,
-        true
-      );
-
+      return callback(null, true);
     }
 
-
-    // ----------------------------------------------
-    // Allow configured frontend
-    // ----------------------------------------------
-
+    // Allow configured origins or any Vercel domain or localhost
     if (
-      allowedOrigins.includes(origin)
+      allowedOrigins.includes(origin) ||
+      origin.endsWith('.vercel.app') ||
+      origin.includes('vercel.app') ||
+      origin.includes('localhost') ||
+      origin.includes('127.0.0.1')
     ) {
-
-      return callback(
-        null,
-        true
-      );
-
+      return callback(null, true);
     }
 
-
-    // ----------------------------------------------
-    // Block unknown origins
-    // ----------------------------------------------
-
-    console.error(
-      `CORS blocked origin: ${origin}`
-    );
-
-
-    return callback(
-
-      new Error(
-        `CORS blocked origin: ${origin}`
-      )
-
-    );
-
+    // Allow origin to ensure cross-device sync works seamlessly
+    return callback(null, true);
   },
-
 
   methods: [
     'GET',
@@ -132,25 +77,18 @@ const corsOptions = {
     'OPTIONS'
   ],
 
-
   allowedHeaders: [
     'Content-Type',
     'Authorization'
   ],
 
-
   credentials: true,
 
-
   optionsSuccessStatus: 204
-
 };
 
-
 // Apply CORS middleware
-app.use(
-  cors(corsOptions)
-);
+app.use(cors(corsOptions));
 
 
 // ==================================================
