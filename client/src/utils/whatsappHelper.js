@@ -7,13 +7,26 @@ import { formatDate } from './dateUtils';
  */
 export function buildWhatsAppReceiptMessage(receipt, mandal) {
   const mandalName = mandal?.name_mr || 'श्री हनुमान तालीम मंडळ शिरोळ';
+  const tagline = mandal?.tagline_mr || '॥ नदीवेस चा राजा ॥ (स्थापना १९६४ | वर्ष ६२ वे)';
   const donorName = receipt?.donor_name || 'देणगीदार';
   const amount = Number(receipt?.amount || 0).toLocaleString('en-IN');
+  const receiptNo = receipt?.receipt_number || receipt?.receiptNo || 'HANUMAN-2026-000001';
+  const date = receipt?.created_at ? formatDate(receipt.created_at, 'mr') : '१४ सप्टेंबर २०२६';
+
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://client-alpha-gold-83.vercel.app';
+  const receiptUrl = `${origin}/verify-receipt/${encodeURIComponent(receiptNo)}`;
 
   return `🚩 *${mandalName}* 🚩
+${tagline}
 
-🙏 *आदरणीय ${donorName}*,
-मंडळाच्या गणेशोत्सवासाठी आपल्या ₹${amount} वर्गणी / देणगीबद्दल मनःपूर्वक धन्यवाद! 🌺
+🙏 *सस्नेह नमस्कार ${donorName} जी*,
+श्री गणेशोत्सव २०२६ साठी आपल्याकडून *₹${amount}* वर्गणी / देणगी प्राप्त झाली आहे. मंडळाकडून आपले मनःपूर्वक आभार! 🌺
+
+🧾 *पावती क्रमांक:* ${receiptNo}
+📅 *दिनांक:* ${date}
+
+📸 *आपली अधिकृत HD रंगीत पावती पाहण्यासाठी व डाऊनलोड करण्यासाठी खालील लिंकवर क्लिक करा:*
+👉 ${receiptUrl}
 
 🚩 *गणपती बाप्पा मोरया! मंगलमूर्ती मोरया!* 🚩`;
 }
@@ -125,45 +138,67 @@ export async function shareReceiptFile(receiptElement, receipt, mandal, format =
   if (format === 'pdf') {
     await downloadReceiptPdf(receiptElement, receipt);
     openWhatsAppReceipt(receipt, mandal, true);
-    return 'downloaded_and_opened';
+    return { status: 'downloaded_and_opened', mode: 'pdf' };
   }
 
+  // 1. Generate Ultra HD Canvas (3x scale)
   const canvas = await generateReceiptCanvas(receiptElement);
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+  if (!blob) throw new Error('Failed to create image blob');
 
-  // Try Web Share API (native image share on mobile Chrome / Safari / Android)
-  if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
+  const file = new File([blob], `Receipt_${receiptNo}.png`, { type: 'image/png' });
+  const shareText = buildWhatsAppReceiptMessage(receipt, mandal);
+
+  // 2. Try Web Share API (native file share with attached image on mobile Chrome / Safari / Android)
+  if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
-      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-      if (blob) {
-        const file = new File([blob], `Receipt_${receiptNo}.png`, { type: 'image/png' });
-        if (navigator.canShare({ files: [file] })) {
-          const shareText = buildWhatsAppReceiptMessage(receipt, mandal);
-          await navigator.share({
-            title: `डिजिटल वर्गणी पावती - ${receiptNo}`,
-            text: shareText,
-            files: [file]
-          });
-          return 'shared';
-        }
-      }
+      await navigator.share({
+        title: `डिजिटल वर्गणी पावती - ${receiptNo}`,
+        text: shareText,
+        files: [file]
+      });
+      return { status: 'shared', mode: 'native_file' };
     } catch (err) {
-      if (err.name !== 'AbortError') {
-        console.warn('Native share failed, falling back to download & WhatsApp opening:', err);
-      } else {
-        return 'aborted';
+      if (err.name === 'AbortError') {
+        return { status: 'aborted', mode: 'native_file' };
       }
+      console.warn('Native share failed, falling back to desktop clipboard/download mode:', err);
     }
   }
 
-  // Desktop or unsupported share fallback: Copy to clipboard + Download PNG + Open WhatsApp
+  // 3. Desktop or fallback mode:
+  // a) Copy HD PNG image to clipboard for instant Ctrl+V pasting in WhatsApp Web
+  let copiedToClipboard = false;
   try {
-    await copyReceiptImageToClipboard(receiptElement);
-  } catch (e) {
-    // Ignore clipboard errors
+    if (navigator.clipboard && window.ClipboardItem) {
+      const item = new ClipboardItem({ 'image/png': blob });
+      await navigator.clipboard.write([item]);
+      copiedToClipboard = true;
+    }
+  } catch (clipErr) {
+    console.warn('Clipboard write failed:', clipErr);
   }
 
-  await downloadReceiptImage(receiptElement, receipt);
+  // b) Auto-download the HD PNG image file
+  try {
+    const imgData = canvas.toDataURL('image/png');
+    const link = document.createElement('a');
+    link.href = imgData;
+    link.download = `Receipt_${receiptNo}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } catch (dlErr) {
+    console.warn('Image download failed:', dlErr);
+  }
+
+  // c) Open WhatsApp with pre-filled message containing direct link to the HD receipt
   openWhatsAppReceipt(receipt, mandal, true);
-  return 'downloaded_and_opened';
+
+  return {
+    status: 'copied_and_opened',
+    mode: 'desktop_clipboard_download',
+    copiedToClipboard
+  };
 }
 

@@ -44,6 +44,7 @@ export function IncomePage() {
   // Modal State
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedReceipt, setSelectedReceipt] = useState(null);
+  const [autoShareReceipt, setAutoShareReceipt] = useState(false);
 
   // Form State
   const [donorName, setDonorName] = useState('');
@@ -121,7 +122,9 @@ export function IncomePage() {
         if (res.data?.receipt) {
           setSelectedReceipt(res.data.receipt);
           if (mobile && mobile.trim()) {
-            openWhatsAppReceipt(res.data.receipt, mandal, true);
+            setAutoShareReceipt(true);
+          } else {
+            setAutoShareReceipt(false);
           }
         }
       }
@@ -311,13 +314,34 @@ export function IncomePage() {
                           <>
                             <button
                               onClick={async () => {
+                                setAutoShareReceipt(false);
                                 try {
                                   const r = await api.get(`/receipts/number/${row.receipt_number}`);
                                   if (r.success && r.data?.receipt) {
                                     setSelectedReceipt(r.data.receipt);
+                                  } else {
+                                    setSelectedReceipt({
+                                      receipt_number: row.receipt_number,
+                                      donor_name: row.donor_name,
+                                      mobile: row.mobile,
+                                      address: row.address,
+                                      amount: row.amount,
+                                      created_at: row.created_at,
+                                      purpose: row.purpose,
+                                      payment_method: row.payment_method
+                                    });
                                   }
                                 } catch {
-                                  showToast('पावती मिळवता आली नाही.', 'error');
+                                  setSelectedReceipt({
+                                    receipt_number: row.receipt_number,
+                                    donor_name: row.donor_name,
+                                    mobile: row.mobile,
+                                    address: row.address,
+                                    amount: row.amount,
+                                    created_at: row.created_at,
+                                    purpose: row.purpose,
+                                    payment_method: row.payment_method
+                                  });
                                 }
                               }}
                               className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 hover:bg-amber-100 transition-colors"
@@ -331,15 +355,17 @@ export function IncomePage() {
                                   receipt_number: row.receipt_number,
                                   donor_name: row.donor_name,
                                   mobile: row.mobile,
+                                  address: row.address,
                                   amount: row.amount,
                                   created_at: row.created_at,
                                   purpose: row.purpose,
                                   payment_method: row.payment_method
                                 };
-                                openWhatsAppReceipt(receiptObj, mandal, true);
+                                setSelectedReceipt(receiptObj);
+                                setAutoShareReceipt(true);
                               }}
                               className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 transition-colors"
-                              title="WhatsApp वर पावती पाठवा"
+                              title="WhatsApp वर HD पावती फोटो पाठवा"
                             >
                               <MessageCircle className="w-3.5 h-3.5" />
                             </button>
@@ -520,11 +546,15 @@ export function IncomePage() {
         </form>
       </Modal>
 
-      {/* Receipt Modal */}
+      {/* Receipt Modal with Auto HD Image Share */}
       <ReceiptModal
         isOpen={!!selectedReceipt}
-        onClose={() => setSelectedReceipt(null)}
+        onClose={() => {
+          setSelectedReceipt(null);
+          setAutoShareReceipt(false);
+        }}
         receipt={selectedReceipt}
+        autoShare={autoShareReceipt}
       />
     </div>
   );

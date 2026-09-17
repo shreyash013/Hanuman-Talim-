@@ -23,7 +23,7 @@ import {
   Sparkles
 } from 'lucide-react';
 
-export function ReceiptModal({ isOpen, onClose, receipt }) {
+export function ReceiptModal({ isOpen, onClose, receipt, autoShare = false }) {
   const { t } = useLanguage();
   const { mandal } = useMandal();
   const { showToast } = useNotification();
@@ -34,12 +34,11 @@ export function ReceiptModal({ isOpen, onClose, receipt }) {
   const [isCopyingImage, setIsCopyingImage] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [isCopiedImage, setIsCopiedImage] = useState(false);
+  const [showDesktopGuide, setShowDesktopGuide] = useState(false);
 
-  if (!receipt) return null;
-
-  const rawMobile = receipt.mobile ? String(receipt.mobile).replace(/\D/g, '') : '';
+  const rawMobile = receipt?.mobile ? String(receipt.mobile).replace(/\D/g, '') : '';
   const hasMobile = rawMobile.length >= 10;
-  const displayMobile = hasMobile ? (rawMobile.length === 10 ? `+91 ${rawMobile}` : `+${rawMobile}`) : (receipt.mobile || '');
+  const displayMobile = hasMobile ? (rawMobile.length === 10 ? `+91 ${rawMobile}` : `+${rawMobile}`) : (receipt?.mobile || '');
 
   const handleDirectWhatsAppMsg = () => {
     openWhatsAppReceipt(receipt, mandal, true);
@@ -50,12 +49,18 @@ export function ReceiptModal({ isOpen, onClose, receipt }) {
     if (!receiptRef.current) return;
     try {
       setIsSharing(true);
-      showToast(`${format === 'pdf' ? 'PDF' : 'इमेज'} तयार होत आहे...`, 'info');
-      const status = await shareReceiptFile(receiptRef.current, receipt, mandal, format);
-      if (status === 'shared') {
-        showToast('पावती यशस्वीरित्या शेअर केली!', 'success');
-      } else {
-        showToast('फाइल डाऊनलोड झाली व WhatsApp उघडले!', 'success');
+      showToast(`${format === 'pdf' ? 'PDF' : 'HD इमेज'} तयार होत आहे...`, 'info');
+      const res = await shareReceiptFile(receiptRef.current, receipt, mandal, format);
+
+      if (res?.status === 'shared') {
+        showToast('HD पावती फोटो WhatsApp वर यशस्वीरित्या पाठवला! 🕉️', 'success');
+        setShowDesktopGuide(false);
+      } else if (res?.status === 'copied_and_opened') {
+        setShowDesktopGuide(true);
+        showToast('HD पावती फोटो कॉपी व डाऊनलोड झाला! WhatsApp मध्ये Ctrl+V दाबा.', 'success');
+      } else if (res?.status !== 'aborted') {
+        setShowDesktopGuide(true);
+        showToast('पावती डाऊनलोड झाली व WhatsApp उघडले!', 'success');
       }
     } catch (err) {
       console.error('Share error:', err);
@@ -64,6 +69,17 @@ export function ReceiptModal({ isOpen, onClose, receipt }) {
       setIsSharing(false);
     }
   };
+
+  React.useEffect(() => {
+    if (isOpen && autoShare && receiptRef.current) {
+      const timer = setTimeout(() => {
+        handleShareImageOrPdf('image');
+      }, 600);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, autoShare, receipt]);
+
+  if (!receipt) return null;
 
   const handleDownloadImage = async () => {
     if (!receiptRef.current) return;
@@ -197,6 +213,46 @@ export function ReceiptModal({ isOpen, onClose, receipt }) {
             <span className="hidden sm:inline">💻 <strong>डेस्कटॉप:</strong> 'इमेज कॉपी करा' दाबून WhatsApp Web मध्ये डायरेक्ट Ctrl+V करा.</span>
           </div>
         </div>
+
+        {/* Desktop Helper Banner when WhatsApp Web is launched */}
+        {showDesktopGuide && (
+          <div className="p-4 rounded-2xl bg-emerald-950/90 border-2 border-emerald-500/70 text-white space-y-2.5 shadow-xl animate-fadeIn">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 font-black text-emerald-300 text-sm">
+                <Sparkles className="w-5 h-5 text-amber-400 shrink-0" />
+                <span>📸 HD पावती फोटो कॉपी व डाऊनलोड झाला आहे! (HD Image Ready)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDesktopGuide(false)}
+                className="text-xs text-emerald-300 hover:text-white px-2 py-0.5 rounded bg-emerald-900/80 border border-emerald-700 cursor-pointer"
+              >
+                ✕ बंद करा
+              </button>
+            </div>
+            <p className="text-xs text-emerald-100 leading-relaxed">
+              WhatsApp उघडल्यावर चॅट इनपुट बॉक्सवर क्लिक करून फक्त <kbd className="px-2 py-0.5 bg-slate-900 border border-emerald-500/60 rounded font-mono font-bold text-amber-300">Ctrl + V</kbd> (Paste) दाबा — तुमची HD पावती थेट <strong>रंगीत फोटो (Photo)</strong> म्हणून सेंड होईल! (तसेच फोटो डाऊनलोड फोल्डरमध्येही सेव्ह झाला आहे).
+            </p>
+            <div className="flex items-center gap-2 pt-1 flex-wrap">
+              <button
+                type="button"
+                onClick={handleCopyImage}
+                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow transition"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>पुन्हा फोटो कॉपी करा</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleDirectWhatsAppMsg}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow transition"
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+                <span>WhatsApp पुन्हा उघडा</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Printable Digital Receipt Card */}
         <div className="overflow-x-auto pb-2">
