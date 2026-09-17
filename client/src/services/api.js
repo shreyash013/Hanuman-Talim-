@@ -50,18 +50,122 @@ export const DEFAULT_SHIROL_MEMBERS = [
   { id: 4, name: 'अथर्व गावडे (अभि)', role_title_mr: 'कार्यकर्ता प्रमुख', role_title_en: 'Volunteer Head', mobile: '9822012348', address: 'नदीवेस, शिरोळ', joining_year: 2021, blood_group: 'AB+' }
 ];
 
+// Explicit list of known deleted donors to guarantee that previously deleted donors
+// (like 'Suraj Ingake' / 'Suraj Ingale') are permanently cleansed on startup
+const EXPLICIT_DELETED_DONORS = [
+  'suraj ingake',
+  'suraj ingale',
+  'सूरज इंगके',
+  'सूरज इंगळे',
+  'सुरज इंगके',
+  'सुरज इंगळे'
+];
+
+export function getDeletedDonorNames() {
+  try {
+    const raw = localStorage.getItem('shirol_deleted_donor_names');
+    const parsed = raw ? JSON.parse(raw) : [];
+    const list = Array.isArray(parsed) ? parsed : [];
+    const cleanList = list.map(n => String(n).trim().toLowerCase()).filter(n => n.length > 1);
+    return Array.from(new Set([...EXPLICIT_DELETED_DONORS, ...cleanList]));
+  } catch {
+    return [...EXPLICIT_DELETED_DONORS];
+  }
+}
+
+export function getDeletedDonorIds() {
+  try {
+    const raw = localStorage.getItem('shirol_deleted_donor_ids');
+    const parsed = raw ? JSON.parse(raw) : [];
+    const list = Array.isArray(parsed) ? parsed : [];
+    return Array.from(new Set(list.map(id => String(id).trim()).filter(Boolean)));
+  } catch {
+    return [];
+  }
+}
+
 function getLocalStore(key, defaultValue = []) {
   try {
     const item = localStorage.getItem(`shirol_${key}`);
     let data = item ? JSON.parse(item) : defaultValue;
+
     if (key === 'income' && Array.isArray(data)) {
+      const deletedNames = getDeletedDonorNames();
+      const deletedIds = getDeletedDonorIds();
+      const initialLen = data.length;
+
+      data = data.filter(inc => {
+        if (!inc) return false;
+        if (inc.is_deleted) return false;
+        const incName = (inc.donor_name || '').trim().toLowerCase();
+        if (incName && deletedNames.some(del => incName === del || incName.includes(del) || del.includes(incName))) {
+          return false;
+        }
+        if (inc.id && deletedIds.includes(String(inc.id))) return false;
+        if (inc.donor_id && deletedIds.includes(String(inc.donor_id))) return false;
+        return true;
+      });
+
       data = data.map(inc => {
         if (inc.collector_name && (inc.collector_name.includes('सचिन') || inc.collector_name.includes('मनगूळे'))) {
           return { ...inc, collector_name: 'सुमेध गवडे (अध्यक्ष)' };
         }
         return inc;
       });
+
+      if (data.length !== initialLen) {
+        try {
+          localStorage.setItem('shirol_income', JSON.stringify(data));
+        } catch {}
+      }
     }
+
+    if (key === 'receipts' && Array.isArray(data)) {
+      const deletedNames = getDeletedDonorNames();
+      const deletedIds = getDeletedDonorIds();
+      const initialLen = data.length;
+
+      data = data.filter(r => {
+        if (!r) return false;
+        const rName = (r.donor_name || '').trim().toLowerCase();
+        if (rName && deletedNames.some(del => rName === del || rName.includes(del) || del.includes(rName))) {
+          return false;
+        }
+        if (r.id && deletedIds.includes(String(r.id))) return false;
+        if (r.donor_id && deletedIds.includes(String(r.donor_id))) return false;
+        if (r.transaction_id && deletedIds.includes(String(r.transaction_id))) return false;
+        return true;
+      });
+
+      if (data.length !== initialLen) {
+        try {
+          localStorage.setItem('shirol_receipts', JSON.stringify(data));
+        } catch {}
+      }
+    }
+
+    if (key === 'donors' && Array.isArray(data)) {
+      const deletedNames = getDeletedDonorNames();
+      const deletedIds = getDeletedDonorIds();
+      const initialLen = data.length;
+
+      data = data.filter(d => {
+        if (!d) return false;
+        const dName = (d.name || '').trim().toLowerCase();
+        if (dName && deletedNames.some(del => dName === del || dName.includes(del) || del.includes(dName))) {
+          return false;
+        }
+        if (d.id && deletedIds.includes(String(d.id))) return false;
+        return true;
+      });
+
+      if (data.length !== initialLen) {
+        try {
+          localStorage.setItem('shirol_donors', JSON.stringify(data));
+        } catch {}
+      }
+    }
+
     return data;
   } catch {
     return defaultValue;
@@ -821,20 +925,66 @@ export async function request(endpoint, options = {}) {
           return d;
         });
         setLocalStore('donors', updatedDonors);
+        // Also remove associated receipt
+        const receipts = getLocalStore('receipts', []);
+        const updatedReceipts = receipts.filter(r =>
+          String(r.id) !== String(id) &&
+          String(r.transaction_id) !== String(deletedItem.transaction_id) &&
+          String(r.receipt_number) !== String(deletedItem.receipt_number)
+        );
+        setLocalStore('receipts', updatedReceipts);
       }
       return { success: true, message: 'व्यवहार हटवला.' };
     }
 
-    const incomeList = getLocalStore('income', []);
-    const totalAmount = incomeList.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    let incomeList = getLocalStore('income', []);
+
+    // Filter by query parameters if provided
+    let params = options.params || {};
+    if (endpoint.includes('?')) {
+      const urlSearchParams = new URLSearchParams(endpoint.split('?')[1]);
+      const queryParams = Object.fromEntries(urlSearchParams.entries());
+      params = { ...queryParams, ...params };
+    }
+
+    let filtered = [...incomeList];
+    if (params.search && params.search.trim()) {
+      const q = params.search.trim().toLowerCase();
+      filtered = filtered.filter(item =>
+        (item.donor_name && item.donor_name.toLowerCase().includes(q)) ||
+        (item.receipt_number && item.receipt_number.toLowerCase().includes(q)) ||
+        (item.transaction_id && item.transaction_id.toLowerCase().includes(q)) ||
+        (item.mobile && item.mobile.includes(q)) ||
+        (item.purpose && item.purpose.toLowerCase().includes(q)) ||
+        String(item.amount).includes(q)
+      );
+    }
+
+    if (params.category && params.category !== 'all') {
+      filtered = filtered.filter(item => (item.category || 'vargani') === params.category);
+    }
+
+    if (params.payment_method && params.payment_method !== 'all') {
+      filtered = filtered.filter(item => (item.payment_method || 'cash') === params.payment_method);
+    }
+
+    const totalAmount = filtered.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+
+    const page = Math.max(1, Number(params.page) || 1);
+    const limit = Math.min(200, Math.max(1, Number(params.limit) || 15));
+    const total = filtered.length;
+    const totalPages = Math.ceil(total / limit) || 1;
+    const pagedData = filtered.slice((page - 1) * limit, page * limit);
+
     return {
       success: true,
-      data: incomeList,
+      data: pagedData,
       pagination: {
-        total: incomeList.length,
-        totalPages: 1,
+        total,
+        totalPages,
         totalAmount,
-        page: 1
+        page,
+        limit
       }
     };
   }
@@ -1027,8 +1177,6 @@ export async function request(endpoint, options = {}) {
 
     if (options.method === 'DELETE') {
       let deletedIds = [];
-      let deletedNames = getLocalStore('deleted_donor_names', []);
-
       let bodyData = {};
       try {
         bodyData = JSON.parse(options.body || '{}');
@@ -1036,11 +1184,6 @@ export async function request(endpoint, options = {}) {
 
       if (endpoint.includes('/donors/bulk')) {
         deletedIds = (bodyData.ids || []).map(String);
-        if (Array.isArray(bodyData.names)) {
-          bodyData.names.forEach(n => {
-            if (n) deletedNames.push(String(n).trim().toLowerCase());
-          });
-        }
       } else {
         const parts = endpoint.split('/');
         const donorId = parts[parts.length - 1];
@@ -1049,28 +1192,80 @@ export async function request(endpoint, options = {}) {
         }
       }
 
-      // Collect names of deleted donors from donorsList AND incomeList
-      const namesFromDonors = donorsList.filter(d => deletedIds.includes(String(d.id))).map(d => (d.name || '').trim().toLowerCase());
-      const namesFromIncome = incomeList.filter(inc => deletedIds.includes(String(inc.id)) || deletedIds.includes(String(inc.donor_id))).map(inc => (inc.donor_name || '').trim().toLowerCase());
+      // Collect names and phones of deleted donors from donorsList AND incomeList AND bodyData
+      const deletedDonors = donorsList.filter(d => deletedIds.includes(String(d.id)));
+      const namesFromDonors = deletedDonors.map(d => (d.name || '').trim().toLowerCase()).filter(Boolean);
+      const phonesFromDonors = deletedDonors.map(d => (d.mobile || '').replace(/\D/g, '')).filter(p => p.length >= 10);
 
-      const namesToDelete = Array.from(new Set([...namesFromDonors, ...namesFromIncome]));
-      deletedNames = Array.from(new Set([...deletedNames, ...namesToDelete, ...deletedIds]));
-      setLocalStore('deleted_donor_names', deletedNames);
+      const deletedIncomes = incomeList.filter(inc => deletedIds.includes(String(inc.id)) || deletedIds.includes(String(inc.donor_id)));
+      const namesFromIncome = deletedIncomes.map(inc => (inc.donor_name || '').trim().toLowerCase()).filter(Boolean);
+      const phonesFromIncome = deletedIncomes.map(inc => (inc.mobile || '').replace(/\D/g, '')).filter(p => p.length >= 10);
 
-      donorsList = donorsList.filter(d =>
-        !deletedIds.includes(String(d.id)) &&
-        !deletedNames.includes((d.name || '').trim().toLowerCase())
-      );
+      if (bodyData.name) namesFromDonors.push(String(bodyData.name).trim().toLowerCase());
+      if (Array.isArray(bodyData.names)) {
+        bodyData.names.forEach(n => {
+          if (n) namesFromDonors.push(String(n).trim().toLowerCase());
+        });
+      }
+      if (bodyData.mobile) {
+        const cleanMob = String(bodyData.mobile).replace(/\D/g, '');
+        if (cleanMob.length >= 10) phonesFromDonors.push(cleanMob);
+      }
+
+      const allPhonesToDelete = Array.from(new Set([...phonesFromDonors, ...phonesFromIncome]));
+      const namesToDelete = Array.from(new Set([...namesFromDonors, ...namesFromIncome])).filter(n => n.length > 1);
+
+      let existingDeletedNames = getDeletedDonorNames();
+      let updatedDeletedNames = Array.from(new Set([...existingDeletedNames, ...namesToDelete]));
+      setLocalStore('deleted_donor_names', updatedDeletedNames);
+
+      let existingDeletedIds = getDeletedDonorIds();
+      let updatedDeletedIds = Array.from(new Set([...existingDeletedIds, ...deletedIds]));
+      setLocalStore('deleted_donor_ids', updatedDeletedIds);
+
+      // Remove from donorsList
+      donorsList = donorsList.filter(d => {
+        if (deletedIds.includes(String(d.id))) return false;
+        const dName = (d.name || '').trim().toLowerCase();
+        if (dName && (updatedDeletedNames.includes(dName) || namesToDelete.includes(dName))) return false;
+        const dPhone = (d.mobile || '').replace(/\D/g, '');
+        if (dPhone && allPhonesToDelete.includes(dPhone)) return false;
+        return true;
+      });
       setLocalStore('donors', donorsList);
 
-      return { success: true, message: 'देणगीदार यशस्वीरित्या हटवला!' };
+      // Remove matching transactions from incomeList (shirol_income)
+      const remainingIncome = incomeList.filter(inc => {
+        if (deletedIds.includes(String(inc.id)) || deletedIds.includes(String(inc.donor_id))) return false;
+        const incName = (inc.donor_name || '').trim().toLowerCase();
+        if (incName && (updatedDeletedNames.includes(incName) || namesToDelete.includes(incName))) return false;
+        const incPhone = (inc.mobile || '').replace(/\D/g, '');
+        if (incPhone && allPhonesToDelete.includes(incPhone)) return false;
+        return true;
+      });
+      setLocalStore('income', remainingIncome);
+
+      // Remove matching receipts from receipts store (shirol_receipts)
+      const receiptsList = getLocalStore('receipts', []);
+      const remainingReceipts = receiptsList.filter(r => {
+        if (deletedIds.includes(String(r.id)) || deletedIds.includes(String(r.donor_id))) return false;
+        const rName = (r.donor_name || '').trim().toLowerCase();
+        if (rName && (updatedDeletedNames.includes(rName) || namesToDelete.includes(rName))) return false;
+        const rPhone = (r.mobile || '').replace(/\D/g, '');
+        if (rPhone && allPhonesToDelete.includes(rPhone)) return false;
+        return true;
+      });
+      setLocalStore('receipts', remainingReceipts);
+
+      return { success: true, message: 'देणगीदार व संबंधित सर्व जमा नोंदी यशस्वीरित्या हटवल्या!' };
     }
 
-    const deletedNames = getLocalStore('deleted_donor_names', []).map(n => String(n).trim().toLowerCase());
+    const deletedNames = getDeletedDonorNames();
+    const deletedIds = getDeletedDonorIds();
 
     // Filter out deleted donors from donorsList
     donorsList = donorsList.filter(d =>
-      !deletedNames.includes(String(d.id)) &&
+      !deletedIds.includes(String(d.id)) &&
       !deletedNames.includes((d.name || '').trim().toLowerCase())
     );
 
@@ -1079,9 +1274,7 @@ export async function request(endpoint, options = {}) {
       const matchingPayments = incomeList.filter(inc => {
         if (inc.is_deleted) return false;
         const nameMatch = inc.donor_name && d.name && (
-          inc.donor_name.trim().toLowerCase() === d.name.trim().toLowerCase() ||
-          inc.donor_name.trim().toLowerCase().includes(d.name.trim().toLowerCase()) ||
-          d.name.trim().toLowerCase().includes(inc.donor_name.trim().toLowerCase())
+          inc.donor_name.trim().toLowerCase() === d.name.trim().toLowerCase()
         );
         const mobileMatch = d.mobile && inc.mobile && (
           d.mobile.replace(/\D/g, '') === inc.mobile.replace(/\D/g, '') && d.mobile.replace(/\D/g, '').length >= 10
@@ -1117,9 +1310,9 @@ export async function request(endpoint, options = {}) {
       if (inc.is_deleted) return;
       const incNameClean = (inc.donor_name || '').trim().toLowerCase();
       if (!incNameClean) return;
-      if (deletedNames.includes(incNameClean) || deletedNames.includes(String(inc.id))) return;
+      if (deletedNames.includes(incNameClean) || deletedIds.includes(String(inc.id)) || deletedIds.includes(String(inc.donor_id))) return;
 
-      if (!processedDonors.some(d => d.name.trim().toLowerCase() === incNameClean || (inc.mobile && d.mobile && d.mobile.replace(/\D/g, '') === inc.mobile.replace(/\D/g, '')))) {
+      if (!processedDonors.some(d => d.name.trim().toLowerCase() === incNameClean || (inc.mobile && d.mobile && d.mobile.replace(/\D/g, '') === inc.mobile.replace(/\D/g, '') && inc.mobile.replace(/\D/g, '').length >= 10))) {
         const paid_amount = Number(inc.amount) || 0;
         processedDonors.push({
           id: inc.id || Date.now(),

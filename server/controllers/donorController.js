@@ -126,8 +126,17 @@ export async function updateDonor(req, res) {
 export async function deleteDonor(req, res) {
   try {
     const { id } = req.params;
+    const { data: donor } = await db.from('donors').select('id, name, mobile').eq('id', id).maybeSingle();
     const { error } = await db.from('donors').delete().eq('id', id);
     throwIfError(error);
+
+    // Also soft-delete associated income transactions so they are not counted in calculations or visible in income list
+    if (id) {
+      await db.from('income_transactions').update({ is_deleted: true }).eq('donor_id', id);
+    }
+    if (donor?.name) {
+      await db.from('income_transactions').update({ is_deleted: true }).ilike('donor_name', donor.name.trim());
+    }
     return res.json({ success: true, message: 'देणगीदार यशस्वीरित्या हटवला / Donor deleted successfully' });
   } catch (err) {
     console.error('deleteDonor error:', err);
@@ -141,11 +150,23 @@ export async function deleteMultipleDonors(req, res) {
     if (!Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ success: false, message: 'हटवण्यासाठी किमान एक देणगीदार निवडा.' });
     }
+    const { data: donors } = await db.from('donors').select('id, name').in('id', ids);
     const { error } = await db.from('donors').delete().in('id', ids);
     throwIfError(error);
+
+    // Also soft-delete associated income transactions
+    await db.from('income_transactions').update({ is_deleted: true }).in('donor_id', ids);
+    if (donors && donors.length > 0) {
+      for (const d of donors) {
+        if (d.name) {
+          await db.from('income_transactions').update({ is_deleted: true }).ilike('donor_name', d.name.trim());
+        }
+      }
+    }
     return res.json({ success: true, message: `${ids.length} देणगीदार यशस्वीरित्या हटवले / Selected donors deleted successfully` });
   } catch (err) {
     console.error('deleteMultipleDonors error:', err);
     return res.status(500).json({ success: false, message: 'देणगीदार हटवताना त्रुटी' });
   }
 }
+

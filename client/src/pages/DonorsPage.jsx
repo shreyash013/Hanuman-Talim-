@@ -242,14 +242,14 @@ export function DonorsPage() {
 
   // Delete Donor handler
   const handleDeleteDonor = async (donor) => {
-    if (!window.confirm(`नक्की "${donor.name}" यांना देणगीदार यादीतून हटवायचे आहे का?`)) {
+    if (!window.confirm(`नक्की "${donor.name}" यांना देणगीदार यादीतून हटवायचे आहे का?\n(या देणगीदाराच्या सर्व जमा नोंदी देखील हटवल्या जातील आणि एकूण रकमेतून वजा होतील)`)) {
       return;
     }
 
     try {
-      const res = await api.delete(`/donors/${donor.id}`);
+      const res = await api.delete(`/donors/${donor.id}`, { name: donor.name, mobile: donor.mobile });
       if (res.success) {
-        showToast(`'${donor.name}' देणगीदार यशस्वीरित्या हटवला!`, 'success');
+        showToast(`'${donor.name}' देणगीदार व संबंधित सर्व जमा नोंदी यशस्वीरित्या हटवल्या!`, 'success');
         if (selectedDonorProfile && selectedDonorProfile.id === donor.id) {
           setSelectedDonorProfile(null);
         }
@@ -636,16 +636,26 @@ export function DonorsPage() {
                       {styles.badge}
                     </td>
 
-                    {/* Actions Column: ONLY ONE EDIT OPTION */}
+                    {/* Actions Column: EDIT & DELETE */}
                     <td className="p-4 text-right">
-                      <button
-                        onClick={() => openEditAmountModal(d)}
-                        className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs shadow transition inline-flex items-center space-x-1 border border-amber-400"
-                        title="माहिती व वर्गणी बदला"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                        <span>एडिट</span>
-                      </button>
+                      <div className="inline-flex items-center space-x-1.5">
+                        <button
+                          onClick={() => openEditAmountModal(d)}
+                          className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs shadow transition inline-flex items-center space-x-1 border border-amber-400"
+                          title="माहिती व वर्गणी बदला"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          <span>एडिट</span>
+                        </button>
+                        <button
+                          onClick={() => handleDeleteDonor(d)}
+                          className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-xl text-xs shadow transition inline-flex items-center space-x-1 border border-rose-500"
+                          title="देणगीदार व जमा व्यवहार हटवा"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>हटवा</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
