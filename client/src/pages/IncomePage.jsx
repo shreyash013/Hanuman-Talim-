@@ -24,8 +24,10 @@ import {
   CreditCard,
   User,
   Smartphone,
-  MessageCircle
+  MessageCircle,
+  QrCode
 } from 'lucide-react';
+import phonepeQrImg from '../assets/phonepe_qr.jpg';
 
 export function IncomePage() {
   const { t, lang } = useLanguage();
@@ -493,6 +495,25 @@ export function IncomePage() {
                 <option value="cheque">📝 धनादेश (Cheque)</option>
               </select>
             </div>
+
+            {incomePaymentMethod === 'upi' && (
+              <div className="sm:col-span-2 p-3.5 bg-slate-900 border-2 border-emerald-500/60 rounded-2xl text-center space-y-2">
+                <div className="flex items-center justify-center gap-1.5 text-emerald-400 text-xs font-bold">
+                  <QrCode className="w-4 h-4" />
+                  <span>PhonePe अधिकृत स्कॅनर (+91 9699572617)</span>
+                </div>
+                <div className="p-2 bg-white rounded-xl max-w-[170px] mx-auto overflow-hidden shadow-md">
+                  <img
+                    src={phonepeQrImg}
+                    alt="PhonePe Payment QR"
+                    className="w-full h-auto rounded-lg object-contain"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-300">
+                  UPI ID: <strong className="text-amber-400 font-mono">9699572617@ibl</strong> • खाते: <strong className="text-white">SUMEDH SHAHAJI GAVADE</strong>
+                </p>
+              </div>
+            )}
 
             <div className="space-y-1 sm:col-span-2">
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300">पत्ता</label>

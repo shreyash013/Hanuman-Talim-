@@ -60,8 +60,8 @@ export async function seedDatabase(force = false) {
       2026,
       '2026-09-14T09:00:00',
       '2026-09-25T18:00:00',
-      'sarveshkharoshe8-2@okaxis',
-      'Shri Hanuman Talim Mandal Shirol',
+      '9699572617@ibl',
+      'SUMEDH SHAHAJI GAVADE',
       'HANUMAN-2026-',
       'mr'
     )

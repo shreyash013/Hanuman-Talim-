@@ -27,8 +27,8 @@ export const SHIROL_MANDAL_SETTINGS = {
   festival_year: 2026,
   arrival_date: '2026-09-14T09:00:00+05:30',
   visarjan_date: '2026-09-25T18:00:00+05:30',
-  upi_id: '9699572617@ybl',
-  upi_name: 'Shri Hanuman Talim Mandal Shirol',
+  upi_id: '9699572617@ibl',
+  upi_name: 'SUMEDH SHAHAJI GAVADE',
   receipt_prefix: 'HANUMAN-2026-',
   receipt_language: 'mr',
   currency_symbol: '₹',
@@ -271,33 +271,6 @@ export async function request(endpoint, options = {}) {
     return { success: false, message: 'लॉगिन केलेले नाही' };
   }
 
-  // Handle AI Assistant & Report endpoints
-  if (endpoint.startsWith('/ai/ask')) {
-    const bodyData = JSON.parse(options.body || '{}');
-    const query = (bodyData.query || '').toLowerCase();
-    const incomeList = getLocalStore('income', []);
-    const expenseList = getLocalStore('expenses', []);
-    const donorsList = getLocalStore('donors', []);
-
-    const approvedExpenses = expenseList.filter(e => ['approved', 'paid'].includes(e.status));
-    const totalIncome = incomeList.reduce((s, i) => s + (Number(i.amount) || 0), 0);
-    const totalExpense = approvedExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
-    const currentBalance = totalIncome - totalExpense;
-
-    let answer = '';
-    if (query.includes('top') || query.includes('देणगीदार') || query.includes('donor')) {
-      const top10 = [...donorsList].sort((a, b) => b.total_donated - a.total_donated).slice(0, 10);
-      answer = `🏆 मंडळात सर्वाधिक वर्गणी देणारे top 10 देणगीदार:\n` + top10.map((d, i) => `${i + 1}. ${d.name} (${d.area || 'शिरोळ'}) - ₹${Number(d.total_donated).toLocaleString('en-IN')}`).join('\n');
-    } else if (query.includes('collection') || query.includes('जमा') || query.includes('आले')) {
-      answer = `📊 या गणेशोत्सवात एकूण ₹${totalIncome.toLocaleString('en-IN')} वर्गणी जमा झाली आहे (एकूण ${incomeList.length} पावत्या).`;
-    } else if (query.includes('expense') || query.includes('खर्च') || query.includes('budget')) {
-      answer = `💸 एकूण मंजूर खर्च ₹${totalExpense.toLocaleString('en-IN')} असून शिल्लक जमा रक्कम ₹${currentBalance.toLocaleString('en-IN')} आहे.`;
-    } else {
-      answer = `🤖 **श्री गणेशोत्सव एआय विश्लेषक:**\n• एकूण जमा: ₹${totalIncome.toLocaleString('en-IN')}\n• एकूण खर्च: ₹${totalExpense.toLocaleString('en-IN')}\n• शिल्लक रक्कम: ₹${currentBalance.toLocaleString('en-IN')}\n• देणगीदार संख्या: ${donorsList.length}`;
-    }
-    return { success: true, data: { answer, timestamp: new Date().toISOString() } };
-  }
-
   // Handle Volunteer Leaderboard Endpoint
   if (endpoint.startsWith('/volunteers/leaderboard')) {
     const incomeList = getLocalStore('income', []);
@@ -457,7 +430,12 @@ export async function request(endpoint, options = {}) {
         console.error('Save settings error:', err);
       }
     }
-    const currentSettings = getLocalStore('mandal_settings_custom', SHIROL_MANDAL_SETTINGS);
+    let currentSettings = getLocalStore('mandal_settings_custom', SHIROL_MANDAL_SETTINGS);
+    if (!currentSettings.upi_id || currentSettings.upi_id.includes('okaxis') || currentSettings.upi_id.includes('@ybl')) {
+      currentSettings.upi_id = '9699572617@ibl';
+      currentSettings.upi_name = 'SUMEDH SHAHAJI GAVADE';
+      setLocalStore('mandal_settings_custom', currentSettings);
+    }
     return { success: true, data: currentSettings, mandal: currentSettings };
   }
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { useNotification } from '../context/NotificationContext';
+import { useMandal } from '../context/MandalContext';
 import api from '../services/api';
 import { formatDate } from '../utils/dateUtils';
 import { Modal } from '../components/common/Modal';
@@ -23,6 +24,7 @@ import {
 export function DonorsPage() {
   const { t } = useLanguage();
   const { showToast } = useNotification();
+  const { mandal } = useMandal();
 
   const [donors, setDonors] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -62,8 +64,8 @@ export function DonorsPage() {
   // Profile CRM Modal
   const [selectedDonorProfile, setSelectedDonorProfile] = useState(null);
 
-  const upiId = 'sarveshkharoshe8-2@okaxis';
-  const upiName = 'Shri Hanuman Talim Mandal Shirol';
+  const upiId = mandal?.upi_id || '9699572617@ibl';
+  const upiName = mandal?.upi_name || 'SUMEDH SHAHAJI GAVADE';
 
   const fetchDonors = async () => {
     try {

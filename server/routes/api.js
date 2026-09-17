@@ -15,10 +15,8 @@ import * as eventController from '../controllers/eventController.js';
 import * as reportController from '../controllers/reportController.js';
 import * as auditController from '../controllers/auditController.js';
 import * as settingsController from '../controllers/settingsController.js';
-import * as notificationController from '../controllers/notificationController.js';
 import * as publicController from '../controllers/publicController.js';
 import * as festivalController from '../controllers/festivalController.js';
-import * as aiController from '../controllers/aiController.js';
 import * as volunteerController from '../controllers/volunteerController.js';
 import * as loanController from '../controllers/loanController.js';
 
@@ -37,10 +35,6 @@ router.post('/public/donate', publicController.submitOnlineDonationIntent);
 router.get('/public/festival', festivalController.getFestivalInfo);
 
 router.use(authenticate);
-
-// AI Assistant & Reports
-router.post('/ai/ask', aiController.askAiAssistant);
-router.get('/ai/report', aiController.generateAiReport);
 
 // Volunteer Leaderboard
 router.get('/volunteers/leaderboard', volunteerController.getVolunteerLeaderboard);
@@ -87,8 +81,6 @@ router.get('/audit-logs', requireRoles('admin'), auditController.getAuditLogs);
 router.get('/settings', settingsController.getSettings);
 router.put('/settings', requireRoles('admin'), upload.single('logo'), settingsController.updateSettings);
 router.post('/settings/reset-database', requireRoles('admin'), settingsController.resetDatabase);
-router.get('/notifications', notificationController.getNotifications);
-router.put('/notifications/:id/read', notificationController.markAsRead);
 
 // Loans / Borrowings Endpoints
 router.get('/loans', loanController.getLoans);

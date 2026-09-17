@@ -52,8 +52,8 @@ export function DigitalPaymentsPage() {
     loadStats();
   }, []);
 
-  const upiId = mandal?.upi_id || '9699572617@ybl';
-  const upiName = mandal?.upi_name || 'Shri Hanuman Talim Mandal Shirol';
+  const upiId = mandal?.upi_id || '9699572617@ibl';
+  const upiName = mandal?.upi_name || 'SUMEDH SHAHAJI GAVADE';
 
   const upiUri = amount > 0
     ? `upi://pay?pa=${upiId}&pn=${encodeURIComponent(upiName)}&am=${amount}&cu=INR&tn=${encodeURIComponent(note)}`

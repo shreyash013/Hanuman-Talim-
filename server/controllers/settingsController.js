@@ -85,8 +85,8 @@ export async function resetDatabase(req, res) {
       contact_email: 'shreyashgavade7@gmail.com',
       registration_no: 'MAH/KOLHAPUR/1964',
       receipt_prefix: 'HANUMAN-2026-',
-      upi_id: 'sarveshkharoshe8-2@okaxis',
-      upi_name: 'Shri Hanuman Talim Mandal Shirol',
+      upi_id: '9699572617@ibl',
+      upi_name: 'SUMEDH SHAHAJI GAVADE',
       initial_opening_balance: 0
     };
 

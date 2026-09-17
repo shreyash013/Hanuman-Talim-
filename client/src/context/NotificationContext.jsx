@@ -1,13 +1,10 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 import { CheckCircle2, AlertCircle, AlertTriangle, Info, X } from 'lucide-react';
-import api from '../services/api';
 
 const NotificationContext = createContext();
 
 export function NotificationProvider({ children }) {
   const [toasts, setToasts] = useState([]);
-  const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
 
   const showToast = (message, type = 'success', duration = 4500) => {
     const id = Date.now() + Math.random();
@@ -23,36 +20,10 @@ export function NotificationProvider({ children }) {
     setToasts(prev => prev.filter(t => t.id !== id));
   };
 
-  const fetchNotifications = async () => {
-    try {
-      const res = await api.get('/notifications');
-      if (res.success && res.data) {
-        setNotifications(res.data);
-        setUnreadCount(res.unreadCount || 0);
-      }
-    } catch {
-      // ignore
-    }
-  };
-
-  const markAllAsRead = async () => {
-    try {
-      await api.put('/notifications/all/read', {});
-      setUnreadCount(0);
-      setNotifications(prev => prev.map(n => ({ ...n, is_read: 1 })));
-    } catch {
-      // ignore
-    }
-  };
-
   return (
     <NotificationContext.Provider
       value={{
-        showToast,
-        notifications,
-        unreadCount,
-        fetchNotifications,
-        markAllAsRead
+        showToast
       }}
     >
       {children}

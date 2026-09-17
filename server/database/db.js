@@ -205,11 +205,11 @@ export async function ensureInitialSetup() {
 
         upi_id:
           process.env.MANDAL_UPI_ID ||
-          'sarveshkharoshe8-2@okaxis',
+          '9699572617@ibl',
 
         upi_name:
           process.env.MANDAL_UPI_NAME ||
-          'Shri Hanuman Talim Mandal Shirol',
+          'SUMEDH SHAHAJI GAVADE',
 
         receipt_prefix:
           process.env.RECEIPT_PREFIX ||

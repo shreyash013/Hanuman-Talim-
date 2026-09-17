@@ -7,13 +7,10 @@ import {
   Menu,
   Moon,
   Sun,
-  ChevronDown,
-  Bot
+  ChevronDown
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { GanpatiLogo } from '../common/GanpatiLogo';
-import { NotificationDropdown } from '../common/NotificationDropdown';
-import { AiFinancialAssistantModal } from '../ai/AiFinancialAssistantModal';
 
 export function TopNavbar({ onOpenMobileMenu }) {
   const { lang, setLang, t } = useLanguage();
@@ -21,7 +18,6 @@ export function TopNavbar({ onOpenMobileMenu }) {
   const { theme, toggleTheme } = useTheme();
   const { mandal } = useMandal();
 
-  const [showAiModal, setShowAiModal] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
 
   const languages = [
@@ -59,22 +55,6 @@ export function TopNavbar({ onOpenMobileMenu }) {
 
       {/* Right Controls */}
       <div className="flex items-center gap-2 sm:gap-3">
-        {/* AI Assistant Button */}
-        <button
-          onClick={() => setShowAiModal(true)}
-          className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 rounded-xl font-black text-xs shadow-glow-amber transition-all active:scale-95 border border-amber-300/40"
-          title="AI Financial Assistant"
-        >
-          <Bot className="w-4 h-4 text-slate-950" />
-          <span className="hidden sm:inline">AI Assistant</span>
-        </button>
-
-        {/* Notification Bell Dropdown */}
-        <NotificationDropdown />
-
-        {/* AI Assistant Modal */}
-        <AiFinancialAssistantModal isOpen={showAiModal} onClose={() => setShowAiModal(false)} />
-
         {/* Language Selector Dropdown */}
         <div className="relative">
           <button

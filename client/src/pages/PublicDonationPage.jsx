@@ -53,8 +53,8 @@ export function PublicDonationPage() {
     fetchPublicData();
   }, []);
 
-  const upiId = mandalInfo?.upi_id || '9699572617@ybl';
-  const upiName = mandalInfo?.upi_name || 'Shri Hanuman Talim Mandal Shirol';
+  const upiId = mandalInfo?.upi_id || '9699572617@ibl';
+  const upiName = mandalInfo?.upi_name || 'SUMEDH SHAHAJI GAVADE';
 
   const upiUri = amount > 0
     ? `upi://pay?pa=${upiId}&pn=${encodeURIComponent(upiName)}&am=${amount}&cu=INR&tn=${encodeURIComponent(purpose)}`
