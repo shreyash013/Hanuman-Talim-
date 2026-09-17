@@ -64,12 +64,12 @@ export async function login(req, res) {
     }
 
     // 2. Treasurer Account
-    if (!user && (cleanId === 'treasurer@mandal.org' || cleanId === 'treasurer@ganeshmandal.org' || cleanId === '9822022222' || cleanId === 'treasurer') && (password === 'treasurer123' || password === '123456')) {
+    if (!user && (cleanId === 'treasurer@mandal.org' || cleanId === 'treasurer@ganeshmandal.org' || cleanId === '9822022222' || cleanId === '9356997428' || cleanId === 'treasurer' || cleanId === 'shreyashgavade7@gmail.com') && (password === 'treasurer123' || password === '123456')) {
       user = {
         id: 102,
-        name: 'मयुर बागल (खजिनदार)',
-        email: 'treasurer@mandal.org',
-        mobile: '9822022222',
+        name: 'श्रेयश गवडे (खजिनदार)',
+        email: 'shreyashgavade7@gmail.com',
+        mobile: '9356997428',
         password_hash: await bcrypt.hash('treasurer123', 10),
         role: 'treasurer',
         status: 'active'

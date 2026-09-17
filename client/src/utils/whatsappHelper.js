@@ -3,43 +3,17 @@ import jsPDF from 'jspdf';
 import { formatDate } from './dateUtils';
 
 /**
- * Builds a Marathi WhatsApp message for Vargani/Donation receipts
+ * Builds a clean, simple Marathi WhatsApp thank you message to accompany receipt image
  */
 export function buildWhatsAppReceiptMessage(receipt, mandal) {
   const mandalName = mandal?.name_mr || 'श्री हनुमान तालीम मंडळ शिरोळ';
-  const tagline = mandal?.tagline_mr || 'स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा राजा ॥ 🔱';
-  const phone = mandal?.contact_phone || '+91 9356997428';
-  const email = mandal?.contact_email || 'shreyashgavade7@gmail.com';
-  
-  const receiptNo = receipt.receipt_number || receipt.receiptNo || 'HANUMAN-2026-000001';
-  const amount = Number(receipt.amount || 0).toLocaleString('en-IN');
-  const dateStr = formatDate(receipt.created_at || new Date(), 'mr');
-  const purpose = receipt.purpose || 'श्री गणेशोत्सव वर्गणी';
-  const paymentMethod = receipt.payment_method === 'cash' ? 'रोख (Cash)' :
-                        receipt.payment_method === 'upi' ? 'UPI / QR कोड' :
-                        receipt.payment_method === 'bank_transfer' ? 'बँक ट्रान्सफर' :
-                        receipt.payment_method === 'pending_udhar' ? 'उधार / बाकी (Pending Credit)' : receipt.payment_method || 'रोख';
-
-  const verificationUrl = `${window.location.origin}/verify-receipt/${receiptNo}`;
+  const donorName = receipt?.donor_name || 'देणगीदार';
+  const amount = Number(receipt?.amount || 0).toLocaleString('en-IN');
 
   return `🚩 *${mandalName}* 🚩
-${tagline}
 
-🙏 *आदरणीय ${receipt.donor_name}*,
-
-मंडळाच्या गणेशोत्सवासाठी आपली वर्गणी / देणगी यशस्वीरित्या जमा झाली आहे.
-
-🧾 *पावती क्रमांक:* ${receiptNo}
-💰 *जमा रक्कम:* ₹${amount}
-📅 *दिनांक:* ${dateStr}
-💳 *पेमेंट प्रकार:* ${paymentMethod}
-🎯 *संकल्प / हेतू:* ${purpose}
-
-🔗 *डिजिटल पावती पाहा / डाउनलोड करा:*
-${verificationUrl}
-
-📞 *संपर्क:* श्रेयश गवडे (${phone})
-📧 *ईमेल:* ${email}
+🙏 *आदरणीय ${donorName}*,
+मंडळाच्या गणेशोत्सवासाठी आपल्या ₹${amount} वर्गणी / देणगीबद्दल मनःपूर्वक धन्यवाद! 🌺
 
 🚩 *गणपती बाप्पा मोरया! मंगलमूर्ती मोरया!* 🚩`;
 }
@@ -48,19 +22,23 @@ ${verificationUrl}
  * Directly opens WhatsApp Web or App with pre-filled message targeted to registered mobile
  */
 export function openWhatsAppReceipt(receipt, mandal, autoSend = true) {
-  const rawMobile = receipt.mobile ? receipt.mobile.replace(/\D/g, '') : '';
+  const rawMobile = receipt?.mobile ? String(receipt.mobile).replace(/\D/g, '') : '';
   const message = buildWhatsAppReceiptMessage(receipt, mandal);
   const encodedText = encodeURIComponent(message);
 
   let targetUrl = '';
   if (rawMobile && rawMobile.length >= 10) {
-    const formattedNum = rawMobile.length === 10 ? `91${rawMobile}` : rawMobile;
+    let cleanMobile = rawMobile;
+    if (cleanMobile.length === 11 && cleanMobile.startsWith('0')) {
+      cleanMobile = cleanMobile.slice(1);
+    }
+    const formattedNum = cleanMobile.length === 10 ? `91${cleanMobile}` : cleanMobile;
     targetUrl = `https://api.whatsapp.com/send?phone=${formattedNum}&text=${encodedText}`;
   } else {
     targetUrl = `https://api.whatsapp.com/send?text=${encodedText}`;
   }
 
-  if (autoSend) {
+  if (autoSend && typeof window !== 'undefined') {
     window.open(targetUrl, '_blank');
   }
   return targetUrl;
@@ -159,9 +137,10 @@ export async function shareReceiptFile(receiptElement, receipt, mandal, format =
       if (blob) {
         const file = new File([blob], `Receipt_${receiptNo}.png`, { type: 'image/png' });
         if (navigator.canShare({ files: [file] })) {
+          const shareText = buildWhatsAppReceiptMessage(receipt, mandal);
           await navigator.share({
             title: `डिजिटल वर्गणी पावती - ${receiptNo}`,
-            text: `🚩 श्री हनुमान तालीम मंडळ शिरोळ - देणगी पावती (${receipt.donor_name || ''})`,
+            text: shareText,
             files: [file]
           });
           return 'shared';

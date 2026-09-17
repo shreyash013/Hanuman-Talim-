@@ -1,6 +1,12 @@
-import { numberToWordsMarathi, numberToWordsEnglish } from '../utils/marathiNumberToWords';
+export const getActiveApiUrl = () => {
+  if (typeof window !== 'undefined') {
+    const custom = localStorage.getItem('shirol_custom_api_url');
+    if (custom && custom.trim()) return custom.trim();
+  }
+  return import.meta.env.VITE_API_URL || 'https://hanuman-talim-mandal.onrender.com/api';
+};
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://hanuman-talim-mandal.onrender.com/api';
+export const API_BASE_URL = getActiveApiUrl();
 
 // ==========================================
 // MANDAL CONSTANTS & LOCAL STORAGE ENGINE
@@ -74,8 +80,9 @@ function setLocalStore(key, value) {
 export async function request(endpoint, options = {}) {
   const token = localStorage.getItem('ganpati_mandal_token');
 
+  const baseUrl = getActiveApiUrl();
   // Network-First: Try live central backend API first for cross-device sync
-  if (API_BASE_URL && !endpoint.startsWith('/auth/send-otp') && !endpoint.startsWith('/auth/verify-otp')) {
+  if (baseUrl && !endpoint.startsWith('/auth/send-otp') && !endpoint.startsWith('/auth/verify-otp')) {
     try {
       const headers = { ...(options.headers || {}) };
       if (!(options.body instanceof FormData)) {
@@ -85,7 +92,7 @@ export async function request(endpoint, options = {}) {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const res = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
+      const res = await fetch(`${baseUrl}${endpoint}`, { ...options, headers });
       if (res.status === 401 && !endpoint.includes('/auth/login')) {
         localStorage.removeItem('ganpati_mandal_token');
         localStorage.removeItem('ganpati_mandal_user');
@@ -119,13 +126,13 @@ export async function request(endpoint, options = {}) {
     }
 
     // 2. Treasurer Authority Account
-    if (cleanId === 'treasurer@mandal.org' || cleanId === 'treasurer@ganeshmandal.org' || cleanId === '9822022222' || cleanId === 'treasurer') {
+    if (cleanId === 'treasurer@mandal.org' || cleanId === 'treasurer@ganeshmandal.org' || cleanId === '9822022222' || cleanId === '9356997428' || cleanId === 'treasurer' || cleanId === 'shreyashgavade7@gmail.com') {
       if (password === 'treasurer123' || password === '123456') {
-        const user = { id: 102, name: 'मयुर बागल (खजिनदार)', email: 'treasurer@mandal.org', mobile: '9822022222', role: 'treasurer', status: 'active' };
+        const user = { id: 102, name: 'श्रेयश गवडे (खजिनदार)', email: 'shreyashgavade7@gmail.com', mobile: '9356997428', role: 'treasurer', status: 'active' };
         const token = 'demo-treasurer-token-' + Date.now();
         localStorage.setItem('ganpati_mandal_token', token);
         localStorage.setItem('ganpati_mandal_user', JSON.stringify(user));
-        return { success: true, message: 'खजिनदार (Treasurer) म्हणून लॉगिन!', token, user };
+        return { success: true, message: 'खजिनदार (Treasurer - श्रेयश गवडे) म्हणून लॉगिन!', token, user };
       }
     }
 
@@ -244,6 +251,7 @@ export async function request(endpoint, options = {}) {
       const bodyData = JSON.parse(options.body || '{}');
       const repayAmount = Number(bodyData.amount) || 0;
 
+      let targetLoan = null;
       loansList = loansList.map(loan => {
         if (String(loan.id) === String(loanId)) {
           const currentPaid = Number(loan.paid_amount) || 0;
@@ -259,19 +267,41 @@ export async function request(endpoint, options = {}) {
             date: new Date().toISOString()
           };
 
-          return {
+          targetLoan = {
             ...loan,
             paid_amount: newPaid,
             remaining_amount: newRemaining,
             status: newStatus,
             repayments: [...(loan.repayments || []), repaymentEntry]
           };
+          return targetLoan;
         }
         return loan;
       });
 
       setLocalStore('loans', loansList);
-      return { success: true, message: 'परतफेड नोंदवली!' };
+
+      // Automatically add loan repayment to Expenses
+      if (targetLoan && (targetLoan.type === 'borrowed' || !targetLoan.type) && repayAmount > 0) {
+        const expensesList = getLocalStore('expenses', []);
+        const expCount = expensesList.length + 1;
+        const newExpense = {
+          id: Date.now(),
+          expense_id: `EXP-LOAN-${String(expCount).padStart(4, '0')}`,
+          category: 'loan_repayment',
+          paid_to: targetLoan.person_name,
+          amount: repayAmount,
+          payment_method: bodyData.payment_method || 'cash',
+          description: `कर्ज / उधारी परतफेड: ${targetLoan.person_name} (${targetLoan.remaining_amount === 0 ? 'पूर्ण फेडली' : 'अंशतः परतफेड'}${bodyData.notes ? ` - ${bodyData.notes}` : ''})`,
+          notes: bodyData.notes || 'कर्ज परतफेड',
+          status: 'approved',
+          approved_by_name: 'खजिनदार',
+          created_at: new Date().toISOString()
+        };
+        setLocalStore('expenses', [newExpense, ...expensesList]);
+      }
+
+      return { success: true, message: 'उधारी परतफेड नोंदवली व खर्चात जमा झाली! 💸' };
     }
 
     if (options.method === 'POST') {

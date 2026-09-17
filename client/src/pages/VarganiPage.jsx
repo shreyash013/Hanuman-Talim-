@@ -178,8 +178,16 @@ export function VarganiPage() {
           confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } });
         } catch {}
 
-        setGeneratedReceipt(res.data.receipt);
+        const createdReceipt = res.data.receipt;
+        setGeneratedReceipt(createdReceipt);
         showToast('वर्गणी यशस्वीरित्या जमा झाली!', 'success');
+
+        // Auto-share receipt directly to the entered mobile number via WhatsApp
+        if (createdReceipt?.mobile || mobile.trim()) {
+          const receiptToShare = createdReceipt || { ...payload, mobile: mobile.trim() };
+          openWhatsAppReceipt(receiptToShare, mandal, true);
+        }
+
         resetForm();
       } else {
         showToast(res.message || 'त्रुटी आली.', 'error');

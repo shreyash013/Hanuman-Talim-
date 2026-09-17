@@ -37,6 +37,15 @@ export function ReceiptModal({ isOpen, onClose, receipt }) {
 
   if (!receipt) return null;
 
+  const rawMobile = receipt.mobile ? String(receipt.mobile).replace(/\D/g, '') : '';
+  const hasMobile = rawMobile.length >= 10;
+  const displayMobile = hasMobile ? (rawMobile.length === 10 ? `+91 ${rawMobile}` : `+${rawMobile}`) : (receipt.mobile || '');
+
+  const handleDirectWhatsAppMsg = () => {
+    openWhatsAppReceipt(receipt, mandal, true);
+    showToast(`WhatsApp ${displayMobile ? `(${displayMobile})` : ''} उघडत आहे...`, 'info');
+  };
+
   const handleShareImageOrPdf = async (format = 'image') => {
     if (!receiptRef.current) return;
     try {
@@ -118,15 +127,27 @@ export function ReceiptModal({ isOpen, onClose, receipt }) {
         {/* Action Buttons Bar */}
         <div className="p-4 rounded-2xl bg-amber-500/10 dark:bg-slate-800/80 border border-amber-500/30 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            {/* Primary Mobile Direct WhatsApp Share Button */}
-            <button
-              disabled={isSharing}
-              onClick={() => handleShareImageOrPdf('image')}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs sm:text-sm shadow-md transition-all transform hover:-translate-y-0.5 disabled:opacity-50"
-            >
-              <MessageCircle className="w-4 h-4 fill-current" />
-              <span>{isSharing ? 'HD इमेज तयार होत आहे...' : 'WhatsApp वर HD पावती पाठवा'}</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Main HD Image WhatsApp Share Button */}
+              <button
+                disabled={isSharing}
+                onClick={() => handleShareImageOrPdf('image')}
+                className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-extrabold text-xs sm:text-sm shadow-md transition-all transform hover:-translate-y-0.5 disabled:opacity-50"
+                title={displayMobile ? `${displayMobile} वर HD पावती फोटो पाठवा` : 'WhatsApp वर HD पावती फोटो पाठवा'}
+              >
+                <MessageCircle className="w-5 h-5 fill-current text-white shrink-0" />
+                <div className="text-left">
+                  <span className="block leading-tight">
+                    {isSharing ? 'HD इमेज तयार होत आहे...' : 'WhatsApp वर HD पावती फोटो पाठवा'}
+                  </span>
+                  {displayMobile && (
+                    <span className="text-[10px] text-emerald-100 block font-normal">
+                      नंबर: {displayMobile}
+                    </span>
+                  )}
+                </div>
+              </button>
+            </div>
 
             <div className="flex flex-wrap items-center gap-2">
               {/* Copy Image Button */}
@@ -171,9 +192,9 @@ export function ReceiptModal({ isOpen, onClose, receipt }) {
             </div>
           </div>
 
-          <div className="flex items-center justify-between text-[11px] text-amber-800 dark:text-amber-300 font-medium pt-1 border-t border-amber-500/20">
-            <span>📱 <strong>मोबाईल:</strong> WhatsApp बटणावर क्लिक करताच इमेज / PDF फाइल डायरेक्ट चॅटवर पाठवता येते.</span>
-            <span className="hidden sm:inline">💻 <strong>डेस्कटॉप:</strong> 'इमेज कॉपी करा' दाबून WhatsApp Web मध्ये direct Ctrl+V (Paste) करा.</span>
+          <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-amber-800 dark:text-amber-300 font-medium pt-1 border-t border-amber-500/20">
+            <span>📱 <strong>लक्ष्य मोबाईल:</strong> <strong className="text-emerald-700 dark:text-emerald-400 font-bold">{displayMobile || 'मोबाईल नोंदवला नाही'}</strong> (पावती डायरेक्ट या क्रमांकावर पाठवली जाते)</span>
+            <span className="hidden sm:inline">💻 <strong>डेस्कटॉप:</strong> 'इमेज कॉपी करा' दाबून WhatsApp Web मध्ये डायरेक्ट Ctrl+V करा.</span>
           </div>
         </div>
 
