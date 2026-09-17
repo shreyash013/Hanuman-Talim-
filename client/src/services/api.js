@@ -3,7 +3,7 @@ export const getActiveApiUrl = () => {
     const custom = localStorage.getItem('shirol_custom_api_url');
     if (custom && custom.trim()) return custom.trim();
   }
-  return import.meta.env.VITE_API_URL || 'https://hanuman-talim-mandal.onrender.com/api';
+  return import.meta.env.VITE_API_URL || 'https://hanuman-talim-api.onrender.com/api';
 };
 
 export const API_BASE_URL = getActiveApiUrl();
