@@ -374,12 +374,13 @@ export async function request(endpoint, options = {}) {
       .filter(item => item.category === 'vargani')
       .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    // Bug 1 fix: Use IST date instead of UTC
+    const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
     const todayCollection = incomeList
-      .filter(item => item.created_at && item.created_at.startsWith(todayStr))
+      .filter(item => item.created_at && new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(item.created_at)) === todayStr)
       .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
     const todayExpense = approvedExpenses
-      .filter(item => item.created_at && item.created_at.startsWith(todayStr))
+      .filter(item => item.created_at && new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(item.created_at)) === todayStr)
       .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 
     const targetAmount = getLocalStore('daily_vargani_target', 500000);
@@ -395,7 +396,7 @@ export async function request(endpoint, options = {}) {
           totalDonation: totalIncome - totalVargani,
           totalSponsorship: 0,
           totalDonors: donorsList.length,
-          totalTransactions: incomeList.length + approvedExpenses.length,
+          totalTransactions: incomeList.length + expenseList.length, // Bug 8 fix: count all expenses
           todayCollection,
           varganiTarget: targetAmount,
           todayExpense,
@@ -798,8 +799,29 @@ export async function request(endpoint, options = {}) {
     if (options.method === 'DELETE') {
       const id = endpoint.split('/income/')[1];
       const incomeList = getLocalStore('income', []);
+      // Bug 4 fix: update donor's total_donated and donations_count when income is deleted
+      const deletedItem = incomeList.find(item => String(item.id) === String(id));
       const filtered = incomeList.filter(item => String(item.id) !== String(id));
       setLocalStore('income', filtered);
+      if (deletedItem) {
+        const donorsList = getLocalStore('donors', []);
+        const updatedDonors = donorsList.map(d => {
+          const nameMatch = deletedItem.donor_name && d.name &&
+            d.name.trim().toLowerCase() === deletedItem.donor_name.trim().toLowerCase();
+          const mobileMatch = deletedItem.mobile && d.mobile &&
+            d.mobile.replace(/\D/g, '') === deletedItem.mobile.replace(/\D/g, '') &&
+            d.mobile.replace(/\D/g, '').length >= 10;
+          if (nameMatch || mobileMatch) {
+            return {
+              ...d,
+              total_donated: Math.max(0, (Number(d.total_donated) || 0) - (Number(deletedItem.amount) || 0)),
+              donations_count: Math.max(0, (Number(d.donations_count) || 0) - 1)
+            };
+          }
+          return d;
+        });
+        setLocalStore('donors', updatedDonors);
+      }
       return { success: true, message: 'व्यवहार हटवला.' };
     }
 

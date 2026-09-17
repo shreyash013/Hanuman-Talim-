@@ -51,9 +51,10 @@ export async function getExpenseList(req, res) {
     const rows = summaryRows || [];
     const approved = rows.filter(r => ['approved', 'paid'].includes(r.status));
     const pending = rows.filter(r => r.status === 'pending');
+    const rejected = rows.filter(r => r.status === 'rejected');
     const total = count || 0;
 
-    return res.json({ success: true, data: expenses || [], summary: { total, totalAmount: sum(rows), approvedAmount: sum(approved), pendingAmount: sum(pending) }, pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) || 1 } });
+    return res.json({ success: true, data: expenses || [], summary: { total, totalAmount: sum(rows), approvedAmount: sum(approved), pendingAmount: sum(pending), rejectedAmount: sum(rejected) }, pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) || 1 } });
   } catch (err) {
     console.error('getExpenseList error:', err);
     return res.status(500).json({ success: false, message: 'खर्च यादी मिळवताना त्रुटी' });
@@ -74,9 +75,10 @@ export async function createExpense(req, res) {
     const approvedById = null;
     const approvedAt = null;
 
-    const { count, error: countError } = await db.from('expense_transactions').select('*', { count: 'exact', head: true });
+    // Use MAX id to prevent duplicate expense IDs after soft-deletes
+    const { data: maxExpRow, error: countError } = await db.from('expense_transactions').select('id').order('id', { ascending: false }).limit(1).maybeSingle();
     throwIfError(countError);
-    const expenseId = `EXP-2026-${String((count || 0) + 1).padStart(5, '0')}`;
+    const expenseId = `EXP-2026-${String(((maxExpRow?.id) || 0) + 1).padStart(5, '0')}`;
     const billAttachmentUrl = req.file ? await uploadFileToSupabase(req.file, 'expenses') : '';
 
     const { data: createdExpense, error } = await db.from('expense_transactions').insert({

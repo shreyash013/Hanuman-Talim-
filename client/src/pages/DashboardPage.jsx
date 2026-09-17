@@ -115,6 +115,9 @@ export function DashboardPage() {
         { date: 'आज', amount: todayCollection }
       ];
 
+  // Bug 9 fix: filter trend data by selected graphDays
+  const graphData = dailyTrendData.slice(-graphDays);
+
   const expenseCategoryData = stats?.expenseCategories && stats.expenseCategories.length > 0
     ? stats.expenseCategories
     : [];
@@ -429,13 +432,13 @@ export function DashboardPage() {
         </div>
         <div className="flex flex-wrap items-center gap-3 text-xs font-bold">
           <span className="px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-            💵 ₹{(summary.cashIncome || totalIncome * 0.4).toLocaleString('en-IN')} Cash
+            💵 ₹{(summary.cashIncome || 0).toLocaleString('en-IN')} Cash
           </span>
           <span className="px-3 py-1.5 rounded-xl bg-sky-500/10 text-sky-400 border border-sky-500/30">
-            📱 ₹{(summary.digitalIncome || totalIncome * 0.5).toLocaleString('en-IN')} UPI QR
+            📱 ₹{(summary.digitalIncome || 0).toLocaleString('en-IN')} UPI / Digital
           </span>
           <span className="px-3 py-1.5 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/30">
-            🏦 ₹{(totalIncome * 0.1).toLocaleString('en-IN')} Bank Transfer
+            🏦 ₹{(Math.max(0, totalIncome - (summary.cashIncome || 0) - (summary.digitalIncome || 0))).toLocaleString('en-IN')} Bank Transfer
           </span>
         </div>
       </div>
@@ -471,7 +474,8 @@ export function DashboardPage() {
 
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={dailyTrendData}>
+              {/* Bug 9 fix: Use graphData (filtered by graphDays) instead of dailyTrendData */}
+              <AreaChart data={graphData}>
                 <defs>
                   <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4} />
@@ -499,7 +503,8 @@ export function DashboardPage() {
           <div className="h-56">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={expenseCategoryData} dataKey="amount" nameKey="name" cx="50%" cy="50%" outerRadius={70} label>
+                {/* Bug 2 fix: dataKey must be 'total_amount', nameKey must be the group field */}
+                <Pie data={expenseCategoryData} dataKey="total_amount" nameKey="category" cx="50%" cy="50%" outerRadius={70} label>
                   {expenseCategoryData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
@@ -513,9 +518,10 @@ export function DashboardPage() {
               <div key={i} className="flex justify-between text-slate-300">
                 <span className="flex items-center space-x-1.5">
                   <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[i] }} />
-                  <span>{c.name}</span>
+                  {/* Bug 2 fix: use c.total_amount instead of c.amount */}
+                  <span>{c.category || c.name}</span>
                 </span>
-                <strong className="text-white">₹{c.amount.toLocaleString('en-IN')}</strong>
+                <strong className="text-white">₹{(c.total_amount || 0).toLocaleString('en-IN')}</strong>
               </div>
             ))}
           </div>

@@ -118,9 +118,10 @@ export async function createIncome(req, res) {
       throwIfError(error);
     }
 
-    const { count, error: countError } = await db.from('income_transactions').select('*', { count: 'exact', head: true });
-    throwIfError(countError);
-    const nextNum = (count || 0) + 1;
+    // Use MAX id to prevent duplicate receipt numbers after soft-deletes
+    const { data: maxRow, error: maxError } = await db.from('income_transactions').select('id').order('id', { ascending: false }).limit(1).maybeSingle();
+    throwIfError(maxError);
+    const nextNum = ((maxRow?.id) || 0) + 1;
     const formattedNum = String(nextNum).padStart(6, '0');
     const receiptNumber = `${settings.receipt_prefix || 'HANUMAN-2026-'}${formattedNum}`;
     const transactionId = `TXN-${settings.festival_year || 2026}-${formattedNum}`;

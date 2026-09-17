@@ -42,7 +42,6 @@ export async function createLoan(req, res) {
     }
 
     const newLoan = {
-      id: Date.now(),
       person_name: person_name.trim(),
       mobile: mobile ? mobile.trim() : '',
       type,
@@ -55,12 +54,13 @@ export async function createLoan(req, res) {
       interest_rate: Number(interest_rate) || 0,
       notes: notes || '',
       status: 'pending',
-      repayments: [],
-      created_at: new Date().toISOString()
+      repayments: []
     };
 
+    let insertedLoan = newLoan;
     try {
-      await db.from('loans').insert(newLoan);
+      const { data: inserted, error: insertError } = await db.from('loans').insert(newLoan).select('*').single();
+      if (!insertError && inserted) insertedLoan = inserted;
     } catch (dbErr) {
       console.warn('DB loan insert fallback:', dbErr.message);
     }
@@ -84,7 +84,7 @@ export async function createLoan(req, res) {
     return res.status(201).json({
       success: true,
       message: 'उधारीची नोंद यशस्वीरित्या झाली!',
-      data: newLoan
+      data: insertedLoan
     });
   } catch (err) {
     console.error('createLoan error:', err);
