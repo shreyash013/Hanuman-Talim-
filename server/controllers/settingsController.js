@@ -77,8 +77,8 @@ export async function resetDatabase(req, res) {
     const newSettings = {
       name_mr: 'श्री हनुमान तालीम मंडळ शिरोळ',
       name_en: 'Shri Hanuman Talim Mandal Shirol',
-      tagline_mr: 'स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा राजा ॥ 🔱 | ताकद फुल्लच 💪🏼',
-      tagline_en: 'Est. 1964 🚩 | 62nd Year 🔱 | Nadives Cha Raja 🔱',
+      tagline_mr: 'स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा महाराजा ॥ 🔱 | ताकद फुल्लच 💪🏼',
+      tagline_en: 'Est. 1964 🚩 | 62nd Year 🔱 | Nadives Cha Maharaja 🔱',
       address_mr: 'नदीवेस, शिरोळ, जि. कोल्हापूर | ४१६१०३',
       address_en: 'Nadives, Shirol, Dist. Kolhapur | 416103',
       contact_phone: '+91 9356997428',

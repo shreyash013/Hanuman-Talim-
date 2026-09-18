@@ -168,10 +168,10 @@ export async function ensureInitialSetup() {
           'Shri Hanuman Talim Mandal Shirol',
 
         tagline_mr:
-          'स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा राजा ॥ 🔱',
+          'स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा महाराजा ॥ 🔱',
 
         tagline_en:
-          'Est. 1964 🚩 | 62nd Year 🔱 | Nadives Cha Raja 🔱',
+          'Est. 1964 🚩 | 62nd Year 🔱 | Nadives Cha Maharaja 🔱',
 
         address_mr:
           'नदीवेस, शिरोळ, जि. कोल्हापूर | ४१६१०३',

@@ -284,7 +284,7 @@ export function DonorsPage() {
 
   // WhatsApp Thank You Message
   const sendWhatsAppThankYou = (donor) => {
-    const text = `नमस्कार *${donor.name}* जी! 🚩\n\nश्री हनुमान तालीम मंडळ शिरोळ (वर्ष ६२ वे) गणेशोत्सवासाठी दिलेल्या ₹${donor.paid_amount || donor.target_amount || 500} वर्गणीबद्दल मंडळ आपले मनःपूर्वक आभार मानत आहे! 🙏\n\n- श्री हनुमान तालीम मंडळ शिरोळ (नदीवेस चा राजा)`;
+    const text = `नमस्कार *${donor.name}* जी! 🚩\n\nश्री हनुमान तालीम मंडळ शिरोळ (वर्ष ६२ वे) गणेशोत्सवासाठी दिलेल्या ₹${donor.paid_amount || donor.target_amount || 500} वर्गणीबद्दल मंडळ आपले मनःपूर्वक आभार मानत आहे! 🙏\n\n- श्री हनुमान तालीम मंडळ शिरोळ (नदीवेस चा महाराजा)`;
     const phone = (donor.mobile || '').replace(/[^0-9]/g, '');
     window.open(`https://api.whatsapp.com/send?phone=${phone.length === 10 ? '91' + phone : phone}&text=${encodeURIComponent(text)}`, '_blank');
   };

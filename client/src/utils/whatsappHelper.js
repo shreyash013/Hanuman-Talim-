@@ -49,7 +49,7 @@ export function getDisplayMobileNumber(receipt) {
  */
 export function buildWhatsAppReceiptMessage(receipt, mandal) {
   const mandalName = mandal?.name_mr || 'श्री हनुमान तालीम मंडळ शिरोळ';
-  const tagline = mandal?.tagline_mr || '॥ नदीवेस चा राजा ॥ (स्थापना १९६४ | वर्ष ६२ वे)';
+  const tagline = mandal?.tagline_mr || '॥ नदीवेस चा महाराजा ॥ (स्थापना १९६४ | वर्ष ६२ वे)';
   const donorName = receipt?.donor_name || 'देणगीदार';
   const amount = Number(receipt?.amount || 0).toLocaleString('en-IN');
   const receiptNo = receipt?.receipt_number || receipt?.receiptNo || 'HANUMAN-2026-000001';

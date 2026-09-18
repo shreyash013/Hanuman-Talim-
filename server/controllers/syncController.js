@@ -29,8 +29,8 @@ export async function autoSyncAll(req, res) {
         const updatePayload = {
           name_mr: settings.name_mr || 'श्री हनुमान तालीम मंडळ शिरोळ',
           name_en: settings.name_en || 'Shri Hanuman Talim Mandal Shirol',
-          tagline_mr: settings.tagline_mr || 'स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा राजा ॥ 🔱',
-          tagline_en: settings.tagline_en || 'Est. 1964 🚩 | 62nd Year 🔱 | Nadives Cha Raja 🔱',
+          tagline_mr: settings.tagline_mr || 'स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा महाराजा ॥ 🔱',
+          tagline_en: settings.tagline_en || 'Est. 1964 🚩 | 62nd Year 🔱 | Nadives Cha Maharaja 🔱',
           address_mr: settings.address_mr || 'नदीवेस, शिरोळ, जि. कोल्हापूर | ४१६१०३',
           address_en: settings.address_en || 'Nadives, Shirol, Dist. Kolhapur | 416103',
           contact_phone: settings.contact_phone || '+91 9356997428',

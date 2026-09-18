@@ -48,7 +48,7 @@ export function TopNavbar({ onOpenMobileMenu }) {
               {mandal?.name_mr || 'श्री हनुमान तालीम मंडळ शिरोळ'}
             </h1>
             <p className="text-[10px] sm:text-[11px] text-amber-600 dark:text-amber-400 font-semibold line-clamp-1">
-              {mandal?.tagline_mr || 'स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा राजा ॥ 🔱'}
+              {mandal?.tagline_mr || 'स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा महाराजा ॥ 🔱'}
             </p>
           </div>
         </div>

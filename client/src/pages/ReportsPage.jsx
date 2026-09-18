@@ -141,7 +141,7 @@ export function ReportsPage() {
             {mandal?.name_mr || 'श्री हनुमान तालीम मंडळ शिरोळ'}
           </h1>
           <p className="text-xs font-bold text-slate-300">
-            {mandal?.tagline_mr || 'स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा राजा ॥'}
+            {mandal?.tagline_mr || 'स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा महाराजा ॥'}
           </p>
           <p className="text-[11px] text-slate-400">
             {mandal?.address_mr} • रजि. क्र.: {mandal?.registration_no}

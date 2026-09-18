@@ -9,7 +9,7 @@ async function getMandal(select = '*') {
     return data || {
       name_mr: 'श्री हनुमान तालीम मंडळ शिरोळ',
       name_en: 'Shri Hanuman Talim Mandal Shirol',
-      tagline_mr: 'स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा राजा ॥ 🔱',
+      tagline_mr: 'स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा महाराजा ॥ 🔱',
       address_mr: 'नदीवेस, शिरोळ, जि. कोल्हापूर | ४१६१०३',
       contact_phone: '+91 9356997428',
       registration_no: 'MAH/KOLHAPUR/1964',
@@ -19,7 +19,7 @@ async function getMandal(select = '*') {
     return {
       name_mr: 'श्री हनुमान तालीम मंडळ शिरोळ',
       name_en: 'Shri Hanuman Talim Mandal Shirol',
-      tagline_mr: 'स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा राजा ॥ 🔱',
+      tagline_mr: 'स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा महाराजा ॥ 🔱',
       address_mr: 'नदीवेस, शिरोळ, जि. कोल्हापूर | ४१६१०३',
       contact_phone: '+91 9356997428',
       registration_no: 'MAH/KOLHAPUR/1964',

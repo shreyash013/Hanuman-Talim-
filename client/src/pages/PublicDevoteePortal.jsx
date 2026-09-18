@@ -28,7 +28,7 @@ export function PublicDevoteePortal() {
             </div>
             <div>
               <h1 className="font-extrabold text-white text-sm sm:text-base">श्री हनुमान तालीम मंडळ शिरोळ</h1>
-              <p className="text-[10px] text-amber-400 font-medium">स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा राजा ॥</p>
+              <p className="text-[10px] text-amber-400 font-medium">स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा महाराजा ॥</p>
             </div>
           </div>
           <a
@@ -46,7 +46,7 @@ export function PublicDevoteePortal() {
         <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 rounded-3xl p-6 sm:p-8 shadow-2xl text-slate-950 relative overflow-hidden">
           <div className="relative z-10 max-w-2xl">
             <span className="inline-block px-3 py-1 bg-slate-950/20 text-slate-950 font-bold text-xs rounded-full mb-2 backdrop-blur-sm">
-              ॥ नदीवेस चा राजा २०२६ ॥
+              ॥ नदीवेस चा महाराजा २०२६ ॥
             </span>
             <h2 className="text-3xl sm:text-4xl font-black leading-tight text-white drop-shadow-md">
               श्री गणेशोत्सव डिजिटल भाविक पोर्टल
@@ -95,9 +95,9 @@ export function PublicDevoteePortal() {
         {activeTab === 'about' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
-              <h3 className="font-bold text-white text-lg border-b border-slate-800 pb-2">मंडळ इतिहास व राजा</h3>
+              <h3 className="font-bold text-white text-lg border-b border-slate-800 pb-2">मंडळ इतिहास व महाराजा</h3>
               <p className="text-xs text-slate-300 leading-relaxed">
-                श्री हनुमान तालीम मंडळ शिरोळ ची स्थापना १९६४ साली झाली असून यंदा मंडळाचे ६२ वे वर्ष साजरे केले जात आहे. शिरोळ शहरातील 'नदीवेस चा राजा' म्हणून मंडळ प्रसिद्ध आहे.
+                श्री हनुमान तालीम मंडळ शिरोळ ची स्थापना १९६४ साली झाली असून यंदा मंडळाचे ६२ वे वर्ष साजरे केले जात आहे. शिरोळ शहरातील 'नदीवेस चा महाराजा' म्हणून मंडळ प्रसिद्ध आहे.
               </p>
               <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800/80 space-y-2 text-xs">
                 <div className="flex justify-between">

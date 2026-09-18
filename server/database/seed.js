@@ -50,8 +50,8 @@ export async function seedDatabase(force = false) {
     ) VALUES (
       'श्री हनुमान तालीम मंडळ शिरोळ',
       'Shri Hanuman Talim Mandal Shirol',
-      'स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा राजा ॥ 🔱',
-      'Est. 1964 🚩 | 62nd Year 🔱 | Nadives Cha Raja 🔱',
+      'स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा महाराजा ॥ 🔱',
+      'Est. 1964 🚩 | 62nd Year 🔱 | Nadives Cha Maharaja 🔱',
       'नदीवेस, शिरोळ, जि. कोल्हापूर | ४१६१०३',
       'Nadives, Shirol, Dist. Kolhapur | 416103',
       '+91 9356997428',
