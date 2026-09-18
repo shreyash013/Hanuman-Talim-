@@ -56,11 +56,15 @@ export function ApprovalsPage() {
       setIsProcessing(true);
       const res = await api.put(`/expenses/${id}/approve`, {});
       if (res.success) {
-        showToast(`खर्च ${expId} यशस्वीरित्या मंजूर केला!`, 'success');
+        showToast(`खर्च ${expId || id} यशस्वीरित्या मंजूर केला!`, 'success');
+        setPendingExpenses(prev => prev.filter(e => String(e.id) !== String(id) && String(e.expense_id) !== String(expId)));
         fetchPending();
+      } else {
+        showToast(res.message || 'मंजूर करताना अडचण आली.', 'error');
       }
     } catch (err) {
-      showToast('मंजूर करताना अडचण आली.', 'error');
+      console.error('handleApprove error:', err);
+      showToast(err?.message || 'मंजूर करताना अडचण आली.', 'error');
     } finally {
       setIsProcessing(false);
     }
@@ -74,12 +78,16 @@ export function ApprovalsPage() {
       const res = await api.put(`/expenses/${rejectId}/reject`, { reason: rejectReason });
       if (res.success) {
         showToast('खर्च नामंजूर करण्यात आला.', 'info');
+        setPendingExpenses(prev => prev.filter(e => String(e.id) !== String(rejectId) && String(e.expense_id) !== String(rejectId)));
         setRejectId(null);
         setRejectReason('');
         fetchPending();
+      } else {
+        showToast(res.message || 'नामंजूर करताना अडचण आली.', 'error');
       }
     } catch (err) {
-      showToast('नामंजूर करताना अडचण आली.', 'error');
+      console.error('handleRejectSubmit error:', err);
+      showToast(err?.message || 'नामंजूर करताना अडचण आली.', 'error');
     } finally {
       setIsProcessing(false);
     }

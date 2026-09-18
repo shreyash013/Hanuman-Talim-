@@ -142,10 +142,7 @@ export function IncomePage() {
             mobile: submittedMobile || res.data.receipt.mobile || ''
           };
           setSelectedReceipt(finalReceipt);
-          setAutoShareReceipt(sendWhatsApp);
-          if (sendWhatsApp) {
-            showToast(`पावती तयार झाली! +91 ${submittedMobile.slice(-10)} वर थेट WhatsApp उघडत आहे...`, 'info');
-          }
+          setAutoShareReceipt(false);
         }
       }
     } catch (err) {
@@ -575,36 +572,13 @@ export function IncomePage() {
               रद्द करा
             </button>
             <div className="flex items-center gap-2">
-              {mobile.trim().replace(/\D/g, '').length >= 10 ? (
-                <>
-                  <button
-                    type="button"
-                    disabled={isSubmitting}
-                    onClick={(e) => handleAddIncome(e, false)}
-                    className="px-3.5 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-800 dark:text-slate-100 text-xs font-bold"
-                  >
-                    फक्त जतन करा
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isSubmitting}
-                    onClick={(e) => handleAddIncome(e, true)}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-extrabold shadow-md disabled:opacity-50"
-                    title="जमा नोंदवून थेट WhatsApp वर पावती पाठवा"
-                  >
-                    <MessageCircle className="w-3.5 h-3.5 fill-current" />
-                    <span>जतन करा व थेट WhatsApp पाठवा</span>
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-md disabled:opacity-50"
-                >
-                  {isSubmitting ? 'जतन होत आहे...' : 'जतन करा व पावती बनवा'}
-                </button>
-              )}
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold shadow-md disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>{isSubmitting ? 'जतन होत आहे...' : 'जतन करा व पावती पहा'}</span>
+              </button>
             </div>
           </div>
         </form>

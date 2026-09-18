@@ -214,11 +214,19 @@ export function ExpensesPage() {
       setActionProcessing(true);
       const res = await api.put(`/expenses/${id}/approve`, {});
       if (res.success) {
-        showToast(`खर्च ${expId} मुख्य यादीत मंजूर झाला!`, 'success');
+        showToast(`खर्च ${expId || id} मुख्य यादीत मंजूर झाला!`, 'success');
+        setExpenses(prev => prev.map(e =>
+          (String(e.id) === String(id) || String(e.expense_id) === String(expId))
+            ? { ...e, status: 'approved', approved_at: new Date().toISOString() }
+            : e
+        ));
         fetchExpenses();
+      } else {
+        showToast(res.message || 'खर्च मंजूर करताना त्रुटी आली.', 'error');
       }
     } catch (err) {
-      showToast('खर्च मंजूर करताना त्रुटी.', 'error');
+      console.error('handleApproveExpense error:', err);
+      showToast(err?.message || 'खर्च मंजूर करताना त्रुटी आली.', 'error');
     } finally {
       setActionProcessing(false);
     }
@@ -232,10 +240,18 @@ export function ExpensesPage() {
       const res = await api.put(`/expenses/${id}/reject`, { reason });
       if (res.success) {
         showToast('खर्च नामंजूर करण्यात आला.', 'info');
+        setExpenses(prev => prev.map(e =>
+          (String(e.id) === String(id) || String(e.expense_id) === String(expId))
+            ? { ...e, status: 'rejected' }
+            : e
+        ));
         fetchExpenses();
+      } else {
+        showToast(res.message || 'नामंजूर करताना त्रुटी आली.', 'error');
       }
     } catch (err) {
-      showToast('नामंजूर करताना त्रुटी.', 'error');
+      console.error('handleRejectExpense error:', err);
+      showToast(err?.message || 'नामंजूर करताना त्रुटी आली.', 'error');
     } finally {
       setActionProcessing(false);
     }

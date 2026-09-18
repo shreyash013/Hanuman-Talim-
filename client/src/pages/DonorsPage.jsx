@@ -85,7 +85,10 @@ export function DonorsPage() {
 
   useEffect(() => {
     fetchDonors();
-    // Auto-sync any local donors to server in background
+  }, [search]);
+
+  useEffect(() => {
+    // Auto-sync local donors to server once on mount in background
     forceSyncNow().catch(() => {});
 
     const handleUpdate = () => {
@@ -101,7 +104,7 @@ export function DonorsPage() {
       window.removeEventListener('shirol_data_updated', handleUpdate);
       window.removeEventListener('storage', handleUpdate);
     };
-  }, [search]);
+  }, []);
 
   // Single Add Donor submit handler
   const handleAddDonor = async (e) => {
@@ -340,7 +343,7 @@ export function DonorsPage() {
       try {
         res = await api.delete('/donors/bulk', { ids: selectedIds, names: selectedNames });
       } catch (err) {
-        await Promise.all(selectedIds.map((id) => api.delete(`/donors/${id}`)));
+        await Promise.all(selectedDonors.map((d) => api.delete(`/donors/${d.id}`, { name: d.name, mobile: d.mobile })));
         res = { success: true };
       }
 

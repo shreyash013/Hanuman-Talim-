@@ -52,9 +52,19 @@ export async function login(req, res) {
 
     // 1. President Account
     if (!user && (cleanId === adminEmail || cleanId === 'president@mandal.org' || cleanId === 'admin@ganeshmandal.org' || cleanId === adminMobile || cleanId === 'admin') && (password === adminPassword || password === 'admin123')) {
+      let realAdminId = 1;
+      let realAdminName = process.env.ADMIN_NAME || 'सुमेध गवडे (अध्यक्ष)';
+      try {
+        const { data: dbAdmin } = await db.from('users').select('id, name').eq('role', 'admin').order('id', { ascending: true }).limit(1).maybeSingle();
+        if (dbAdmin) {
+          realAdminId = dbAdmin.id;
+          if (dbAdmin.name) realAdminName = dbAdmin.name;
+        }
+      } catch {}
+
       user = {
-        id: 101,
-        name: process.env.ADMIN_NAME || 'सुमेध गवडे (अध्यक्ष)',
+        id: realAdminId,
+        name: realAdminName,
         email: 'president@mandal.org',
         mobile: adminMobile,
         password_hash: await bcrypt.hash('admin123', 10),
@@ -65,9 +75,19 @@ export async function login(req, res) {
 
     // 2. Treasurer Account
     if (!user && (cleanId === 'treasurer@mandal.org' || cleanId === 'treasurer@ganeshmandal.org' || cleanId === '9822022222' || cleanId === '9356997428' || cleanId === 'treasurer' || cleanId === 'shreyashgavade7@gmail.com') && (password === 'treasurer123' || password === '123456')) {
+      let realTreasurerId = 1;
+      let realTreasurerName = 'श्रेयश गवडे (खजिनदार)';
+      try {
+        const { data: dbTreasurer } = await db.from('users').select('id, name').or('role.eq.treasurer,role.eq.admin').order('id', { ascending: true }).limit(1).maybeSingle();
+        if (dbTreasurer) {
+          realTreasurerId = dbTreasurer.id;
+          if (dbTreasurer.name) realTreasurerName = dbTreasurer.name;
+        }
+      } catch {}
+
       user = {
-        id: 102,
-        name: 'श्रेयश गवडे (खजिनदार)',
+        id: realTreasurerId,
+        name: realTreasurerName,
         email: 'shreyashgavade7@gmail.com',
         mobile: '9356997428',
         password_hash: await bcrypt.hash('treasurer123', 10),

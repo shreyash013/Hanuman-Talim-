@@ -19,8 +19,16 @@ export async function logAudit({
       ? String(forwarded).split(',')[0].trim()
       : (req?.socket?.remoteAddress || '');
 
+    let safeUserId = null;
+    if (userId) {
+      try {
+        const { data: u } = await db.from('users').select('id').eq('id', userId).maybeSingle();
+        if (u) safeUserId = u.id;
+      } catch {}
+    }
+
     const { error } = await db.from('audit_logs').insert({
-      user_id: userId,
+      user_id: safeUserId,
       user_name: userName,
       user_role: userRole,
       action,

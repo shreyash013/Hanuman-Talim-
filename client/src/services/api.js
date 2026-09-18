@@ -50,98 +50,16 @@ export const DEFAULT_SHIROL_MEMBERS = [
   { id: 4, name: 'अथर्व गावडे (अभि)', role_title_mr: 'कार्यकर्ता प्रमुख', role_title_en: 'Volunteer Head', mobile: '9822012348', address: 'नदीवेस, शिरोळ', joining_year: 2021, blood_group: 'AB+' }
 ];
 
-// Data recovery to clear any legacy blacklists and ensure valid existing data
+// Data recovery to ensure valid baseline mandal settings and structure
 export function ensureDataRecovery() {
   if (typeof window === 'undefined') return;
   try {
-    // 1. Purge legacy blacklist keys once and for all
-    localStorage.removeItem('shirol_deleted_donor_names');
-    localStorage.removeItem('shirol_deleted_donor_ids');
-
-    // 2. Check if HANUMAN-2026-000010 (Suraj Ingale, ₹2,000) exists in shirol_income
-    const rawIncome = localStorage.getItem('shirol_income');
-    let incomeArr = rawIncome ? JSON.parse(rawIncome) : [];
-    if (!Array.isArray(incomeArr)) incomeArr = [];
-
-    const hasSurajIncome = incomeArr.some(inc =>
-      (inc && inc.receipt_number && String(inc.receipt_number).includes('000010')) ||
-      (inc && inc.donor_name && String(inc.donor_name).toLowerCase().includes('suraj ingale'))
-    );
-
-    if (!hasSurajIncome) {
-      const surajIncome = {
-        id: 10,
-        transaction_id: 'TXN-2026-000010',
-        receipt_number: 'HANUMAN-2026-000010',
-        donor_name: 'Suraj Ingale',
-        mobile: '',
-        address: 'नदीवेस, शिरोळ',
-        amount: 2000,
-        payment_method: 'upi',
-        category: 'vargani',
-        purpose: 'श्री गणेशोत्सव वर्गणी',
-        notes: '',
-        collector_name: 'सुमेध गवडे (अध्यक्ष)',
-        amount_in_words_mr: 'दोन हजार रुपये फक्त',
-        amount_in_words_en: 'Two Thousand Rupees Only',
-        created_at: '2026-09-17T21:20:00.000Z'
-      };
-      incomeArr = [surajIncome, ...incomeArr];
-      localStorage.setItem('shirol_income', JSON.stringify(incomeArr));
-    }
-
-    // 3. Ensure Suraj Ingale is in shirol_donors
-    const rawDonors = localStorage.getItem('shirol_donors');
-    let donorsArr = rawDonors ? JSON.parse(rawDonors) : [];
-    if (!Array.isArray(donorsArr)) donorsArr = [];
-
-    const hasSurajDonor = donorsArr.some(d => d && d.name && String(d.name).toLowerCase().includes('suraj ingale'));
-    if (!hasSurajDonor) {
-      donorsArr.push({
-        id: 10,
-        name: 'Suraj Ingale',
-        mobile: '',
-        address: 'नदीवेस, शिरोळ',
-        area: 'नदीवेस शिरोळ',
-        total_donated: 2000,
-        target_amount: 2000,
-        paid_amount: 2000,
-        pending_amount: 0,
-        donations_count: 1,
-        status: 'paid',
-        last_donated_at: '2026-09-17T21:20:00.000Z'
-      });
-      localStorage.setItem('shirol_donors', JSON.stringify(donorsArr));
-    }
-
-    // 4. Ensure HANUMAN-2026-000010 is in shirol_receipts
-    const rawReceipts = localStorage.getItem('shirol_receipts');
-    let receiptsArr = rawReceipts ? JSON.parse(rawReceipts) : [];
-    if (!Array.isArray(receiptsArr)) receiptsArr = [];
-
-    const hasSurajReceipt = receiptsArr.some(r => r && r.receipt_number && String(r.receipt_number).includes('000010'));
-    if (!hasSurajReceipt) {
-      receiptsArr = [{
-        id: 10,
-        receipt_number: 'HANUMAN-2026-000010',
-        transaction_id: 'TXN-2026-000010',
-        donor_name: 'Suraj Ingale',
-        mobile: '',
-        address: 'नदीवेस, शिरोळ',
-        amount: 2000,
-        amount_in_words_mr: 'दोन हजार रुपये फक्त',
-        amount_in_words_en: 'Two Thousand Rupees Only',
-        payment_method: 'upi',
-        category: 'vargani',
-        purpose: 'श्री गणेशोत्सव वर्गणी',
-        collector_name: 'सुमेध गवडे (अध्यक्ष)',
-        verification_code: 'V-SURAJ-2000-2026',
-        created_at: '2026-09-17T21:20:00.000Z'
-      }, ...receiptsArr];
-      localStorage.setItem('shirol_receipts', JSON.stringify(receiptsArr));
+    const rawSettings = localStorage.getItem('shirol_mandal_settings_custom');
+    if (!rawSettings) {
+      localStorage.setItem('shirol_mandal_settings_custom', JSON.stringify(SHIROL_MANDAL_SETTINGS));
     }
   } catch (err) {
-    console.warn('ensureDataRecovery error:', err);
+    console.warn('ensureDataRecovery note:', err);
   }
 }
 
@@ -183,6 +101,117 @@ export async function ensureValidToken() {
   return token;
 }
 
+// Helper: Immediately delete donor from local storage, remove associated transactions/receipts, and track tombstone
+export function handleLocalDonorDeletion(endpoint, options = {}) {
+  try {
+    let deletedIds = [];
+    let bodyData = {};
+    try {
+      bodyData = typeof options.body === 'string' ? JSON.parse(options.body) : (options.body || {});
+    } catch (e) {}
+
+    if (endpoint.includes('/donors/bulk')) {
+      deletedIds = (bodyData.ids || []).map(String);
+    } else {
+      const parts = endpoint.split('?')[0].split('/');
+      const donorId = parts[parts.length - 1];
+      if (donorId && donorId !== 'donors' && donorId !== 'bulk') {
+        deletedIds = [String(donorId)];
+      }
+    }
+
+    let donorsList = getLocalStore('donors', []);
+    const incomeList = getLocalStore('income', []);
+
+    // Collect target names and phones for deletion
+    const deletedDonors = donorsList.filter(d => deletedIds.includes(String(d.id)));
+    const targetNames = Array.from(new Set([
+      ...deletedDonors.map(d => (d.name || '').trim().toLowerCase()),
+      ...(bodyData.name ? [String(bodyData.name).trim().toLowerCase()] : []),
+      ...(Array.isArray(bodyData.names) ? bodyData.names.map(n => String(n).trim().toLowerCase()) : [])
+    ])).filter(Boolean);
+
+    const targetPhones = Array.from(new Set([
+      ...deletedDonors.map(d => (d.mobile || '').replace(/\D/g, '')),
+      ...(bodyData.mobile ? [String(bodyData.mobile).replace(/\D/g, '')] : [])
+    ])).filter(p => p.length >= 10);
+
+    // 1. Remove from donorsList
+    donorsList = donorsList.filter(d => {
+      if (deletedIds.includes(String(d.id))) return false;
+      const dName = (d.name || '').trim().toLowerCase();
+      const dPhone = (d.mobile || '').replace(/\D/g, '');
+      if (dName && targetNames.includes(dName)) {
+        if (targetPhones.length === 0 || !dPhone || targetPhones.includes(dPhone)) {
+          return false;
+        }
+      }
+      return true;
+    });
+    localStorage.setItem('shirol_donors', JSON.stringify(donorsList));
+
+    // 2. Remove matching transactions from incomeList
+    const incomeToDelete = incomeList.filter(inc => {
+      if (deletedIds.includes(String(inc.id)) || deletedIds.includes(String(inc.donor_id))) return true;
+      const incName = (inc.donor_name || '').trim().toLowerCase();
+      const incPhone = (inc.mobile || '').replace(/\D/g, '');
+      if (incName && targetNames.includes(incName)) {
+        if (targetPhones.length === 0 || !incPhone || targetPhones.includes(incPhone)) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    const deletedTxIds = incomeToDelete.map(i => String(i.id));
+    const deletedReceiptNos = incomeToDelete.map(i => i.receipt_number).filter(Boolean);
+
+    const remainingIncome = incomeList.filter(inc => !incomeToDelete.includes(inc));
+    localStorage.setItem('shirol_income', JSON.stringify(remainingIncome));
+
+    // 3. Remove matching receipts
+    const receiptsList = getLocalStore('receipts', []);
+    const remainingReceipts = receiptsList.filter(r => {
+      if (deletedIds.includes(String(r.id)) || deletedIds.includes(String(r.donor_id))) return false;
+      if (deletedTxIds.includes(String(r.transaction_id)) || deletedTxIds.includes(String(r.id))) return false;
+      if (deletedReceiptNos.includes(r.receipt_number)) return false;
+      const rName = (r.donor_name || '').trim().toLowerCase();
+      const rPhone = (r.mobile || '').replace(/\D/g, '');
+      if (rName && targetNames.includes(rName)) {
+        if (targetPhones.length === 0 || !rPhone || targetPhones.includes(rPhone)) {
+          return false;
+        }
+      }
+      return true;
+    });
+    localStorage.setItem('shirol_receipts', JSON.stringify(remainingReceipts));
+
+    // 4. Record in shirol_deleted_donors so auto-sync never brings them back
+    const existingDeleted = getLocalStore('deleted_donors', []);
+    const updatedDeleted = [...existingDeleted];
+
+    deletedIds.forEach(id => {
+      if (!updatedDeleted.some(d => String(d.id) === String(id))) {
+        updatedDeleted.push({ id, deleted_at: new Date().toISOString() });
+      }
+    });
+    targetNames.forEach(name => {
+      if (!updatedDeleted.some(d => d.name && d.name.trim().toLowerCase() === name)) {
+        updatedDeleted.push({ name, deleted_at: new Date().toISOString() });
+      }
+    });
+    localStorage.setItem('shirol_deleted_donors', JSON.stringify(updatedDeleted));
+
+    // 5. Dispatch live update events
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('shirol_data_updated'));
+      window.dispatchEvent(new Event('storage'));
+    }
+  } catch (err) {
+    console.warn('handleLocalDonorDeletion error:', err);
+  }
+}
+
 // 100% Automatic Auto-Upload: Syncs all local data to live cloud server in background
 export async function autoSyncAllToServer(force = false, retryCount = 0) {
   if (typeof window === 'undefined') return { success: false, reason: 'no-window' };
@@ -198,6 +227,7 @@ export async function autoSyncAllToServer(force = false, retryCount = 0) {
   const rawReceipts = localStorage.getItem('shirol_receipts');
   const rawMembers = localStorage.getItem('shirol_members');
   const rawSettings = localStorage.getItem('shirol_mandal_settings_custom');
+  const rawDeletedDonors = localStorage.getItem('shirol_deleted_donors');
 
   const income = rawIncome ? JSON.parse(rawIncome) : [];
   const expenses = rawExpenses ? JSON.parse(rawExpenses) : [];
@@ -206,9 +236,10 @@ export async function autoSyncAllToServer(force = false, retryCount = 0) {
   const receipts = rawReceipts ? JSON.parse(rawReceipts) : [];
   const members = rawMembers ? JSON.parse(rawMembers) : [];
   const settings = rawSettings ? JSON.parse(rawSettings) : null;
+  const deleted_donors = rawDeletedDonors ? JSON.parse(rawDeletedDonors) : [];
 
   const totalLocalCount = income.length + expenses.length + donors.length + loans.length;
-  if (totalLocalCount === 0) return { success: true, count: 0 };
+  if (totalLocalCount === 0 && deleted_donors.length === 0) return { success: true, count: 0 };
 
   isSyncingToServer = true;
   window.dispatchEvent(new CustomEvent('shirol_sync_status_changed', {
@@ -217,7 +248,7 @@ export async function autoSyncAllToServer(force = false, retryCount = 0) {
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout for Render wake up
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
 
     const headers = { 'Content-Type': 'application/json' };
     const token = localStorage.getItem('ganpati_mandal_token');
@@ -236,7 +267,8 @@ export async function autoSyncAllToServer(force = false, retryCount = 0) {
         loans,
         receipts,
         members,
-        settings
+        settings,
+        deleted_donors
       })
     });
     clearTimeout(timeoutId);
@@ -255,7 +287,7 @@ export async function autoSyncAllToServer(force = false, retryCount = 0) {
     }
 
     // If server responded with error and retry available
-    if (retryCount < 2) {
+    if (retryCount < 1) {
       setTimeout(() => autoSyncAllToServer(true, retryCount + 1), 3000);
     }
     window.dispatchEvent(new CustomEvent('shirol_sync_status_changed', {
@@ -264,7 +296,7 @@ export async function autoSyncAllToServer(force = false, retryCount = 0) {
     return { success: false, reason: 'server-error' };
   } catch (err) {
     console.warn('Background auto-sync note:', err.message);
-    if (retryCount < 2) {
+    if (retryCount < 1) {
       setTimeout(() => autoSyncAllToServer(true, retryCount + 1), 4000);
     }
     window.dispatchEvent(new CustomEvent('shirol_sync_status_changed', {
@@ -302,25 +334,48 @@ export async function autoSyncFromServer() {
         const cloud = resp.data;
         let updated = false;
 
-        // 1. Smart Merge Donors: NEVER wipe out local donors!
-        if (Array.isArray(cloud.donors) && cloud.donors.length > 0) {
+        // 1. Smart Merge Donors: Filter out any deleted donors!
+        if (Array.isArray(cloud.donors)) {
           const currentDonors = getLocalStore('donors', []);
-          const donorMap = new Map();
-          // First add cloud donors
-          cloud.donors.forEach(d => {
-            if (d && d.name) donorMap.set(d.name.trim().toLowerCase(), d);
+          const deletedDonors = getLocalStore('deleted_donors', []);
+          const deletedNames = new Set(deletedDonors.map(d => (typeof d === 'string' ? d : d.name || '').trim().toLowerCase()).filter(Boolean));
+          const deletedIds = new Set(deletedDonors.map(d => (typeof d === 'object' ? String(d.id) : null)).filter(Boolean));
+          const deletedMobiles = new Set(deletedDonors.map(d => (typeof d === 'object' && d.mobile ? String(d.mobile).replace(/\D/g, '') : null)).filter(m => m && m.length >= 10));
+
+          // Filter cloud donors to exclude any that were marked deleted locally
+          const validCloudDonors = cloud.donors.filter(d => {
+            if (!d || !d.name) return false;
+            const name = d.name.trim().toLowerCase();
+            const id = String(d.id);
+            const mob = (d.mobile || '').replace(/\D/g, '');
+            if (deletedNames.has(name)) return false;
+            if (deletedIds.has(id)) return false;
+            if (mob && deletedMobiles.has(mob)) return false;
+            return true;
           });
-          // Preserve local donors that aren't yet in cloud
+
+          // Build donor map from active cloud donors
+          const donorMap = new Map();
+          validCloudDonors.forEach(d => {
+            donorMap.set(d.name.trim().toLowerCase(), d);
+          });
+
+          // Preserve local donors that aren't yet in cloud AND not deleted
           currentDonors.forEach(d => {
-            if (d && d.name && !donorMap.has(d.name.trim().toLowerCase())) {
-              donorMap.set(d.name.trim().toLowerCase(), d);
+            if (d && d.name) {
+              const name = d.name.trim().toLowerCase();
+              const id = String(d.id);
+              const mob = (d.mobile || '').replace(/\D/g, '');
+              const isDeleted = deletedNames.has(name) || deletedIds.has(id) || (mob && deletedMobiles.has(mob));
+              if (!isDeleted && !donorMap.has(name)) {
+                donorMap.set(name, d);
+              }
             }
           });
+
           const mergedDonors = Array.from(donorMap.values());
-          if (mergedDonors.length > currentDonors.length || cloud.donors.length >= currentDonors.length) {
-            localStorage.setItem('shirol_donors', JSON.stringify(mergedDonors));
-            updated = true;
-          }
+          localStorage.setItem('shirol_donors', JSON.stringify(mergedDonors));
+          updated = true;
         }
 
         // 2. Smart Merge Income / Vargani Transactions
@@ -344,13 +399,28 @@ export async function autoSyncFromServer() {
           }
         }
 
-        // 3. Expenses
+        // 3. Expenses: Smart merge preserving approved status
         if (Array.isArray(cloud.expenses) && cloud.expenses.length > 0) {
           const currentExpenses = getLocalStore('expenses', []);
-          if (cloud.expenses.length >= currentExpenses.length || currentExpenses.length === 0) {
-            localStorage.setItem('shirol_expenses', JSON.stringify(cloud.expenses));
-            updated = true;
-          }
+          const merged = cloud.expenses.map(ce => {
+            const localMatch = currentExpenses.find(le =>
+              (le.id && String(le.id) === String(ce.id)) ||
+              (le.expense_id && String(le.expense_id) === String(ce.expense_id))
+            );
+            if (localMatch && localMatch.status === 'approved' && ce.status === 'pending') {
+              return { ...ce, status: 'approved', approved_by_name: localMatch.approved_by_name || ce.approved_by_name };
+            }
+            return ce;
+          });
+          currentExpenses.forEach(le => {
+            const inCloud = merged.some(me =>
+              (me.id && String(me.id) === String(le.id)) ||
+              (me.expense_id && String(me.expense_id) === String(le.expense_id))
+            );
+            if (!inCloud) merged.push(le);
+          });
+          localStorage.setItem('shirol_expenses', JSON.stringify(merged));
+          updated = true;
         }
 
         // 4. Loans
@@ -404,36 +474,24 @@ export function triggerAutoSync() {
   if (syncDebounceTimer) clearTimeout(syncDebounceTimer);
   syncDebounceTimer = setTimeout(() => {
     autoSyncAllToServer();
-  }, 800);
+  }, 1000);
 }
 
-// Background auto-sync initialization on app startup with redundant retries
+// Background auto-sync initialization on app startup
 if (typeof window !== 'undefined') {
-  // 1. Immediate trigger on load
-  autoSyncAllToServer().then(() => autoSyncFromServer());
-
-  // 2. Retry at 2 seconds
+  // 1. Initial sync after 1 second
   setTimeout(() => {
     autoSyncAllToServer().then(() => autoSyncFromServer());
-  }, 2000);
+  }, 1000);
 
-  // 3. Retry at 5 seconds (handles slow mobile startup / Render spinup)
-  setTimeout(() => {
-    autoSyncAllToServer().then(() => autoSyncFromServer());
-  }, 5000);
-
-  // 4. Periodic background sync every 25 seconds
+  // 2. Periodic background sync every 60 seconds
   setInterval(() => {
     autoSyncAllToServer().then(() => autoSyncFromServer());
-  }, 25000);
+  }, 60000);
 
-  // 5. Event listeners for visibility, online & tab focus
+  // 3. Event listeners for visibility & online
   window.addEventListener('online', () => {
     autoSyncAllToServer(true).then(() => autoSyncFromServer());
-  });
-
-  window.addEventListener('focus', () => {
-    autoSyncAllToServer().then(() => autoSyncFromServer());
   });
 
   document.addEventListener('visibilitychange', () => {
@@ -508,6 +566,43 @@ export async function request(endpoint, options = {}) {
       if (res.ok) {
         const data = await res.json();
         if (data && data.success !== false) {
+          // Immediately sync local store on donor deletion
+          if (options.method === 'DELETE' && endpoint.includes('/donors')) {
+            handleLocalDonorDeletion(endpoint, options);
+          }
+
+          // If donor was created or updated, ensure it's removed from deleted_donors tombstone
+          if ((options.method === 'POST' || options.method === 'PUT') && endpoint.includes('/donors')) {
+            try {
+              const bodyData = typeof options.body === 'string' ? JSON.parse(options.body) : (options.body || {});
+              const existingDeleted = getLocalStore('deleted_donors', []);
+              if (existingDeleted.length > 0) {
+                const targetName = (bodyData.name || data.data?.name || '').trim().toLowerCase();
+                const filtered = existingDeleted.filter(d => !d.name || d.name.trim().toLowerCase() !== targetName);
+                localStorage.setItem('shirol_deleted_donors', JSON.stringify(filtered));
+              }
+            } catch (e) {}
+          }
+
+          // Immediately sync local store on expense approval/rejection
+          if (options.method === 'PUT' && endpoint.includes('/expenses/') && (endpoint.includes('/approve') || endpoint.includes('/reject'))) {
+            const parts = endpoint.split('/');
+            const targetExpId = parts[2];
+            const isApprove = endpoint.includes('/approve');
+            let expensesList = getLocalStore('expenses', []);
+            expensesList = expensesList.map(exp => {
+              if (String(exp.id) === String(targetExpId) || String(exp.expense_id) === String(targetExpId)) {
+                return {
+                  ...exp,
+                  status: isApprove ? 'approved' : 'rejected',
+                  approved_at: isApprove ? new Date().toISOString() : exp.approved_at,
+                  approved_by_name: isApprove ? (exp.approved_by_name || 'अध्यक्ष (Admin)') : exp.approved_by_name
+                };
+              }
+              return exp;
+            });
+            setLocalStore('expenses', expensesList);
+          }
           return data;
         }
       }
@@ -1412,11 +1507,11 @@ export async function request(endpoint, options = {}) {
       const parts = endpoint.split('/');
       const expenseId = parts[2];
       expensesList = expensesList.map(exp => {
-        if (String(exp.id) === String(expenseId)) {
+        if (String(exp.id) === String(expenseId) || String(exp.expense_id) === String(expenseId)) {
           return {
             ...exp,
             status: 'approved',
-            approved_by_id: user.id || 101,
+            approved_by_id: user.id || 1,
             approved_by_name: user.name || 'अध्यक्ष (Admin)',
             approved_at: new Date().toISOString()
           };
@@ -1432,7 +1527,7 @@ export async function request(endpoint, options = {}) {
       const expenseId = parts[2];
       const bodyData = JSON.parse(options.body || '{}');
       expensesList = expensesList.map(exp => {
-        if (String(exp.id) === String(expenseId)) {
+        if (String(exp.id) === String(expenseId) || String(exp.expense_id) === String(expenseId)) {
           return {
             ...exp,
             status: 'rejected',
@@ -1544,6 +1639,16 @@ export async function request(endpoint, options = {}) {
       donorsList = [newDonor, ...donorsList];
       setLocalStore('donors', donorsList);
 
+      // Clean up from deleted_donors tombstone if re-adding
+      try {
+        const existingDeleted = getLocalStore('deleted_donors', []);
+        if (existingDeleted.length > 0) {
+          const targetName = (bodyData.name || '').trim().toLowerCase();
+          const filtered = existingDeleted.filter(d => !d.name || d.name.trim().toLowerCase() !== targetName);
+          localStorage.setItem('shirol_deleted_donors', JSON.stringify(filtered));
+        }
+      } catch (e) {}
+
       // If donor was added with paid amount, also add an income transaction so dashboard total updates
       if (paid > 0) {
         const count = incomeList.length + 1;
@@ -1609,93 +1714,7 @@ export async function request(endpoint, options = {}) {
     }
 
     if (options.method === 'DELETE') {
-      let deletedIds = [];
-      let bodyData = {};
-      try {
-        bodyData = JSON.parse(options.body || '{}');
-      } catch (e) {}
-
-      if (endpoint.includes('/donors/bulk')) {
-        deletedIds = (bodyData.ids || []).map(String);
-      } else {
-        const parts = endpoint.split('/');
-        const donorId = parts[parts.length - 1];
-        if (donorId && donorId !== 'donors' && donorId !== 'bulk') {
-          deletedIds = [String(donorId)];
-        }
-      }
-
-      // Collect target names and phones for deletion
-      const deletedDonors = donorsList.filter(d => deletedIds.includes(String(d.id)));
-      const targetNames = Array.from(new Set([
-        ...deletedDonors.map(d => (d.name || '').trim().toLowerCase()),
-        ...(bodyData.name ? [String(bodyData.name).trim().toLowerCase()] : []),
-        ...(Array.isArray(bodyData.names) ? bodyData.names.map(n => String(n).trim().toLowerCase()) : [])
-      ])).filter(Boolean);
-
-      const targetPhones = Array.from(new Set([
-        ...deletedDonors.map(d => (d.mobile || '').replace(/\D/g, '')),
-        ...(bodyData.mobile ? [String(bodyData.mobile).replace(/\D/g, '')] : [])
-      ])).filter(p => p.length >= 10);
-
-      // 1. Remove from donorsList
-      donorsList = donorsList.filter(d => {
-        if (deletedIds.includes(String(d.id))) return false;
-        const dName = (d.name || '').trim().toLowerCase();
-        const dPhone = (d.mobile || '').replace(/\D/g, '');
-        if (dName && targetNames.includes(dName)) {
-          if (targetPhones.length === 0 || !dPhone || targetPhones.includes(dPhone)) {
-            return false;
-          }
-        }
-        return true;
-      });
-      setLocalStore('donors', donorsList);
-
-      // 2. Remove matching transactions from incomeList (shirol_income) so dashboard amount is deducted
-      const incomeToDelete = incomeList.filter(inc => {
-        if (deletedIds.includes(String(inc.id)) || deletedIds.includes(String(inc.donor_id))) return true;
-        const incName = (inc.donor_name || '').trim().toLowerCase();
-        const incPhone = (inc.mobile || '').replace(/\D/g, '');
-        if (incName && targetNames.includes(incName)) {
-          if (targetPhones.length === 0 || !incPhone || targetPhones.includes(incPhone)) {
-            return true;
-          }
-        }
-        return false;
-      });
-
-      const deletedTxIds = incomeToDelete.map(i => String(i.id));
-      const deletedReceiptNos = incomeToDelete.map(i => i.receipt_number).filter(Boolean);
-
-      const remainingIncome = incomeList.filter(inc => !incomeToDelete.includes(inc));
-      setLocalStore('income', remainingIncome);
-
-      // 3. Remove matching receipts from receipts store (shirol_receipts)
-      const receiptsList = getLocalStore('receipts', []);
-      const remainingReceipts = receiptsList.filter(r => {
-        if (deletedIds.includes(String(r.id)) || deletedIds.includes(String(r.donor_id))) return false;
-        if (deletedTxIds.includes(String(r.transaction_id)) || deletedTxIds.includes(String(r.id))) return false;
-        if (deletedReceiptNos.includes(r.receipt_number)) return false;
-        const rName = (r.donor_name || '').trim().toLowerCase();
-        const rPhone = (r.mobile || '').replace(/\D/g, '');
-        if (rName && targetNames.includes(rName)) {
-          if (targetPhones.length === 0 || !rPhone || targetPhones.includes(rPhone)) {
-            return false;
-          }
-        }
-        return true;
-      });
-      setLocalStore('receipts', remainingReceipts);
-
-      // NO blacklist is stored! Any donor can be re-added normally without being blocked.
-
-      // 4. Dispatch live update event so dashboard & other tabs update immediately
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new Event('shirol_data_updated'));
-        window.dispatchEvent(new Event('storage'));
-      }
-
+      handleLocalDonorDeletion(endpoint, options);
       return { success: true, message: 'देणगीदार व संबंधित सर्व जमा नोंदी यशस्वीरित्या हटवल्या!' };
     }
 

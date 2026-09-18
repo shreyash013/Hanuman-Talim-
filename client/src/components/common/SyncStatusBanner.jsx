@@ -1,15 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { Cloud, CheckCircle2, AlertCircle, RefreshCw, Copy, Check, ChevronDown, ChevronUp, Database } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { CheckCircle2, RefreshCw, X, AlertCircle } from 'lucide-react';
 import { forceSyncNow } from '../../services/api';
 
 export function SyncStatusBanner() {
   const [status, setStatus] = useState('idle'); // 'idle' | 'syncing' | 'synced' | 'error'
   const [donorsCount, setDonorsCount] = useState(0);
   const [incomeCount, setIncomeCount] = useState(0);
-  const [lastSyncTime, setLastSyncTime] = useState(null);
-  const [copied, setCopied] = useState(false);
-  const [showDetails, setShowDetails] = useState(false);
   const [isManualSyncing, setIsManualSyncing] = useState(false);
+  const autoDismissTimerRef = useRef(null);
 
   const checkLocalCounts = () => {
     try {
@@ -19,11 +17,24 @@ export function SyncStatusBanner() {
       const income = rawIncome ? JSON.parse(rawIncome) : [];
       setDonorsCount(Array.isArray(donors) ? donors.length : 0);
       setIncomeCount(Array.isArray(income) ? income.length : 0);
-      const last = localStorage.getItem('shirol_last_auto_synced');
-      if (last) setLastSyncTime(new Date(last).toLocaleTimeString('mr-IN'));
     } catch (e) {
       console.warn('Sync banner count check note:', e);
     }
+  };
+
+  const clearDismissTimer = () => {
+    if (autoDismissTimerRef.current) {
+      clearTimeout(autoDismissTimerRef.current);
+      autoDismissTimerRef.current = null;
+    }
+  };
+
+  const scheduleAutoDismiss = (delay = 3000) => {
+    clearDismissTimer();
+    autoDismissTimerRef.current = setTimeout(() => {
+      setStatus('idle');
+      autoDismissTimerRef.current = null;
+    }, delay);
   };
 
   useEffect(() => {
@@ -31,7 +42,18 @@ export function SyncStatusBanner() {
 
     const handleSyncStatus = (e) => {
       const detail = e.detail || {};
-      if (detail.status) setStatus(detail.status);
+      if (detail.status) {
+        if (detail.status === 'syncing') {
+          clearDismissTimer();
+          setStatus('syncing');
+        } else if (detail.status === 'synced') {
+          setStatus('synced');
+          scheduleAutoDismiss(3000);
+        } else if (detail.status === 'error') {
+          setStatus('error');
+          scheduleAutoDismiss(4000);
+        }
+      }
       checkLocalCounts();
     };
 
@@ -44,102 +66,63 @@ export function SyncStatusBanner() {
     window.addEventListener('storage', handleDataUpdate);
 
     return () => {
+      clearDismissTimer();
       window.removeEventListener('shirol_sync_status_changed', handleSyncStatus);
       window.removeEventListener('shirol_data_updated', handleDataUpdate);
       window.removeEventListener('storage', handleDataUpdate);
     };
   }, []);
 
-  const handleForceSync = async () => {
-    setIsManualSyncing(true);
-    setStatus('syncing');
-    try {
-      const res = await forceSyncNow();
-      if (res && res.success) {
-        setStatus('synced');
-        checkLocalCounts();
-      } else {
-        setStatus('error');
-      }
-    } catch (err) {
-      setStatus('error');
-    } finally {
-      setIsManualSyncing(false);
-    }
+  const handleDismiss = () => {
+    clearDismissTimer();
+    setStatus('idle');
   };
 
-  const handleCopyBackup = () => {
-    try {
-      const rawDonors = localStorage.getItem('shirol_donors') || '[]';
-      const rawIncome = localStorage.getItem('shirol_income') || '[]';
-      const rawExpenses = localStorage.getItem('shirol_expenses') || '[]';
-      const rawLoans = localStorage.getItem('shirol_loans') || '[]';
-      const backupData = {
-        mandal: 'श्री हनुमान तालीम मंडळ शिरोळ',
-        timestamp: new Date().toISOString(),
-        donors: JSON.parse(rawDonors),
-        income: JSON.parse(rawIncome),
-        expenses: JSON.parse(rawExpenses),
-        loans: JSON.parse(rawLoans)
-      };
-
-      navigator.clipboard.writeText(JSON.stringify(backupData, null, 2)).then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 3000);
-      });
-    } catch (e) {
-      alert('डेटा कॉपी करताना अडचण आली: ' + e.message);
-    }
-  };
-
-  // If there are zero donors, no banner needed
-  if (donorsCount === 0 && incomeCount === 0) {
+  // Do not show banner when idle
+  if (status === 'idle') {
     return null;
   }
 
   return (
-    <aside aria-label="Cloud Sync Alert" className="w-full bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 dark:from-amber-950/30 dark:via-orange-950/20 dark:to-amber-950/30 border-b border-amber-200 dark:border-amber-800/40 px-3 py-2 text-xs">
-      <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
-        {/* Status Text */}
+    <aside
+      aria-label="Cloud Sync Alert"
+      className={`w-full transition-all duration-300 border-b px-3 py-2 text-xs select-none ${
+        status === 'synced'
+          ? 'bg-emerald-500/15 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-100'
+          : status === 'error'
+          ? 'bg-rose-500/15 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-100'
+          : 'bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/15 dark:from-amber-950/40 dark:via-orange-950/30 dark:to-amber-950/40 border-amber-300 dark:border-amber-800/60 text-amber-950 dark:text-amber-100'
+      }`}
+    >
+      <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
+        {/* Status Message */}
         <div className="flex items-center gap-2">
           {status === 'syncing' || isManualSyncing ? (
-            <span className="flex items-center gap-1.5 text-amber-700 dark:text-amber-300 font-bold">
+            <span className="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold animate-pulse">
               <RefreshCw className="w-4 h-4 animate-spin text-amber-600" />
-              <span>क्लाउड सर्व्हरवर सिंक होत आहे... ({donorsCount} देणगीदार)</span>
+              <span>क्लाउड सर्व्हरवर सिंक होत आहे... कृपया थांबा</span>
             </span>
           ) : status === 'synced' ? (
-            <span className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-bold">
-              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-              <span>सर्व नोंदी लाईव्ह सर्व्हरवर सुरक्षित आहेत ({donorsCount} देणगीदार, {incomeCount} पावती नोंदी) {lastSyncTime ? `• ${lastSyncTime}` : ''}</span>
+            <span className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <span>सर्व नोंदी लाईव्ह सर्व्हरवर यशस्वीरित्या सिंक झाल्या! ({donorsCount} देणगीदार, {incomeCount} वर्गणी नोंदी)</span>
             </span>
           ) : (
-            <span className="flex items-center gap-1.5 text-slate-800 dark:text-slate-200 font-bold">
-              <Database className="w-4 h-4 text-amber-500" />
-              <span>या डिव्हाइसवर {donorsCount} देणगीदार व {incomeCount} वर्गणी नोंदी आहेत.</span>
+            <span className="flex items-center gap-2 text-rose-700 dark:text-rose-300 font-bold">
+              <AlertCircle className="w-4 h-4 text-rose-500" />
+              <span>सिंक करताना समस्या आली. इंटरनेट कनेक्शन तपासा.</span>
             </span>
           )}
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleForceSync}
-            disabled={isManualSyncing || status === 'syncing'}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-bold text-[11px] shadow-xs transition-all disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3 h-3 ${isManualSyncing ? 'animate-spin' : ''}`} />
-            <span>{isManualSyncing ? 'सिंक होत आहे...' : 'आता सिंक करा'}</span>
-          </button>
-
-          <button
-            onClick={handleCopyBackup}
-            className="flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 text-[11px] font-semibold hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-            title="सर्व स्थानिक डेटा JSON स्वरूपात कॉपी करा (Backup)"
-          >
-            {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3 text-slate-500" />}
-            <span>{copied ? 'कॉपी झाले!' : 'बॅकअप कॉपी'}</span>
-          </button>
-        </div>
+        {/* Close Button */}
+        <button
+          onClick={handleDismiss}
+          className="p-1 rounded-md hover:bg-black/5 dark:hover:bg-white/10 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white transition-colors"
+          title="बंद करा"
+        >
+          <X className="w-4 h-4" />
+        </button>
       </div>
     </aside>
   );

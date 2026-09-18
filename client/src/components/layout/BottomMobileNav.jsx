@@ -81,15 +81,15 @@ export function BottomMobileNav({ onOpenMenu, onQuickAction }) {
         </NavLink>
       ) : (
         <NavLink
-          to="/reports"
+          to="/expenses"
           className={({ isActive }) =>
             `flex flex-col items-center gap-1 text-[10px] font-extrabold transition-all ${
               isActive ? 'text-amber-500 scale-105' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
             }`
           }
         >
-          <FileSpreadsheet className="w-5 h-5" />
-          <span>{t('nav.reports', 'अहवाल')}</span>
+          <CreditCard className="w-5 h-5" />
+          <span>{t('nav.expenses', 'खर्च व्यवस्थापन')}</span>
         </NavLink>
       )}
 

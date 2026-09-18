@@ -1,18 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useMandal } from '../../context/MandalContext';
 import {
   Menu,
-  Moon,
   Sun,
+  Moon,
   ChevronDown,
   Cloud,
   RefreshCw,
-  CheckCircle2
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
 import { GanpatiLogo } from '../common/GanpatiLogo';
 import { forceSyncNow } from '../../services/api';
 
@@ -23,29 +23,59 @@ export function TopNavbar({ onOpenMobileMenu }) {
   const { mandal } = useMandal();
 
   const [showLangMenu, setShowLangMenu] = useState(false);
-  const [syncStatus, setSyncStatus] = useState('synced'); // 'synced' | 'syncing' | 'error'
+  const [syncStatus, setSyncStatus] = useState('idle'); // 'idle' | 'syncing' | 'synced' | 'error'
   const [isSyncing, setIsSyncing] = useState(false);
+  const resetTimerRef = useRef(null);
 
   useEffect(() => {
     const handleStatus = (e) => {
-      if (e.detail?.status) setSyncStatus(e.detail.status);
+      if (e.detail?.status) {
+        setSyncStatus(e.detail.status);
+        if (e.detail.status === 'synced') {
+          if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+          resetTimerRef.current = setTimeout(() => {
+            setSyncStatus('idle');
+          }, 3000);
+        } else if (e.detail.status === 'error') {
+          if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+          resetTimerRef.current = setTimeout(() => {
+            setSyncStatus('idle');
+          }, 4000);
+        }
+      }
     };
     window.addEventListener('shirol_sync_status_changed', handleStatus);
-    return () => window.removeEventListener('shirol_sync_status_changed', handleStatus);
+    return () => {
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+      window.removeEventListener('shirol_sync_status_changed', handleStatus);
+    };
   }, []);
 
   const handleManualSync = async () => {
+    if (isSyncing) return;
     setIsSyncing(true);
     setSyncStatus('syncing');
     try {
       const res = await forceSyncNow();
       if (res && res.success) {
         setSyncStatus('synced');
+        if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+        resetTimerRef.current = setTimeout(() => {
+          setSyncStatus('idle');
+        }, 3000);
       } else {
         setSyncStatus('error');
+        if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+        resetTimerRef.current = setTimeout(() => {
+          setSyncStatus('idle');
+        }, 4000);
       }
     } catch (e) {
       setSyncStatus('error');
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+      resetTimerRef.current = setTimeout(() => {
+        setSyncStatus('idle');
+      }, 4000);
     } finally {
       setIsSyncing(false);
     }
@@ -60,7 +90,7 @@ export function TopNavbar({ onOpenMobileMenu }) {
   const currentLang = languages.find(l => l.code === lang) || languages[0];
 
   return (
-    <header className="sticky top-0 z-30 h-16 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-3 sm:px-4 flex items-center justify-between shadow-sm">
+    <header className="sticky top-0 z-30 h-16 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-3 sm:px-4 flex items-center justify-between shadow-sm no-print">
       {/* Left Menu Button (Mobile) & Title */}
       <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         <button
@@ -86,7 +116,7 @@ export function TopNavbar({ onOpenMobileMenu }) {
 
       {/* Right Controls */}
       <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
-        {/* Live Cloud Auto-Sync Indicator (Visible & Interactive on BOTH Mobile & Desktop) */}
+        {/* Live Cloud Auto-Sync Indicator & Button */}
         <button
           onClick={handleManualSync}
           disabled={isSyncing}
@@ -95,18 +125,29 @@ export function TopNavbar({ onOpenMobileMenu }) {
               ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-300'
               : syncStatus === 'error'
               ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300'
-              : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-400'
+              : syncStatus === 'synced'
+              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-400'
+              : 'bg-slate-50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100'
           }`}
           title="लाईव्ह क्लाउड ऑटो-सिंक (क्लिक करून लगेच सिंक करा)"
         >
           {syncStatus === 'syncing' || isSyncing ? (
             <RefreshCw className="w-3 h-3 sm:w-3.5 sm:h-3.5 animate-spin text-amber-600" />
+          ) : syncStatus === 'synced' ? (
+            <CheckCircle2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-600" />
+          ) : syncStatus === 'error' ? (
+            <AlertCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-rose-600" />
           ) : (
-            <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <Cloud className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-500" />
           )}
-          <Cloud className="w-3 h-3 sm:w-3.5 sm:h-3.5 hidden xs:inline" />
           <span className="text-[10px] sm:text-[11px] font-bold">
-            {syncStatus === 'syncing' || isSyncing ? 'सिंक...' : 'लाईव्ह सिंक'}
+            {syncStatus === 'syncing' || isSyncing
+              ? 'सिंक...'
+              : syncStatus === 'synced'
+              ? 'सिंक पूर्ण ✓'
+              : syncStatus === 'error'
+              ? 'त्रुटी'
+              : 'लाईव्ह सिंक'}
           </span>
         </button>
 

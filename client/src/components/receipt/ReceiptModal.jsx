@@ -64,25 +64,22 @@ export function ReceiptModal({ isOpen, onClose, receipt, autoShare = false }) {
     showToast(`WhatsApp ${displayMobile ? `(${displayMobile})` : ''} उघडत आहे...`, 'info');
   };
 
-  const handleShareImageOrPdf = async (format = 'image') => {
+  const handleShareImageOnly = async () => {
     if (!receiptRef.current || !activeReceipt) return;
     try {
       setIsSharing(true);
-      showToast(`${format === 'pdf' ? 'PDF' : 'HD इमेज'} तयार होत आहे...`, 'info');
-      const res = await shareReceiptFile(receiptRef.current, activeReceipt, mandal, format);
+      showToast('HD पावती फोटो तयार होत आहे...', 'info');
+      const res = await shareReceiptFile(receiptRef.current, activeReceipt, mandal, 'image');
 
-      if (res?.status === 'direct_whatsapp_opened') {
-        showToast(`${res.displayMobile || 'नोंदवलेल्या क्रमांकावर'} थेट WhatsApp उघडत आहे... 🕉️`, 'success');
-        setShowDesktopGuide(false);
-      } else if (res?.status === 'shared') {
-        showToast('HD पावती फोटो WhatsApp वर यशस्वीरित्या पाठवला! 🕉️', 'success');
+      if (res?.status === 'shared') {
+        showToast('HD पावती फोटो यशस्वीरित्या पाठवला! 🕉️', 'success');
         setShowDesktopGuide(false);
       } else if (res?.status === 'copied_and_opened') {
         setShowDesktopGuide(true);
-        showToast('HD पावती फोटो कॉपी व डाऊनलोड झाला! WhatsApp मध्ये Ctrl+V दाबा.', 'success');
+        showToast('HD पावती फोटो कॉपी व डाऊनलोड झाला! WhatsApp चॅटमध्ये Ctrl+V दाबा.', 'success');
       } else if (res?.status !== 'aborted') {
         setShowDesktopGuide(true);
-        showToast('पावती डाऊनलोड झाली व WhatsApp उघडले!', 'success');
+        showToast('पावती फोटो डाऊनलोड झाला व WhatsApp उघडले!', 'success');
       }
     } catch (err) {
       console.error('Share error:', err);
@@ -91,22 +88,6 @@ export function ReceiptModal({ isOpen, onClose, receipt, autoShare = false }) {
       setIsSharing(false);
     }
   };
-
-  // Automatically trigger WhatsApp send when requested from form submission
-  useEffect(() => {
-    if (isOpen && autoShare && receipt && !autoShareTriggeredRef.current) {
-      autoShareTriggeredRef.current = true;
-      const timer = setTimeout(() => {
-        if (receiptRef.current) {
-          handleShareImageOrPdf('image');
-        }
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-    if (!isOpen) {
-      autoShareTriggeredRef.current = false;
-    }
-  }, [isOpen, autoShare, receipt]);
 
   const handleNativeShareDirect = async () => {
     if (!receiptRef.current || !activeReceipt) return;
@@ -242,44 +223,40 @@ export function ReceiptModal({ isOpen, onClose, receipt, autoShare = false }) {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
-              {/* Main HD Image WhatsApp Share Button */}
+              {/* Primary 1: Share HD Receipt Image Button */}
               <button
                 disabled={isSharing}
-                onClick={() => handleShareImageOrPdf('image')}
-                className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-extrabold text-xs sm:text-sm shadow-md transition-all transform hover:-translate-y-0.5 disabled:opacity-50"
-                title={displayMobile ? `${displayMobile} वर थेट WhatsApp उघडा` : 'WhatsApp वर पावती फोटो पाठवा'}
+                onClick={handleShareImageOnly}
+                className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-extrabold text-xs sm:text-sm shadow-md transition-all transform hover:-translate-y-0.5 disabled:opacity-50 cursor-pointer"
+                title="फक्त HD पावती फोटो WhatsApp वर पाठवा"
               >
                 <MessageCircle className="w-5 h-5 fill-current text-white shrink-0" />
                 <div className="text-left">
                   <span className="block leading-tight font-black">
                     {isSharing
-                      ? 'HD इमेज तयार होत आहे...'
+                      ? 'HD फोटो तयार होत आहे...'
                       : displayMobile
-                      ? `WhatsApp वर थेट ${displayMobile} ला पाठवा`
-                      : 'WhatsApp वर पावती पाठवा'}
+                      ? `WhatsApp वर पावती फोटो पाठवा (+91 ${displayMobile.slice(-10)})`
+                      : 'WhatsApp वर पावती फोटो पाठवा'}
                   </span>
                   <span className="text-[10px] text-emerald-100 block font-normal">
-                    {displayMobile
-                      ? '✓ थेट या नंबरचे चॅट उघडेल (संपर्क निवडण्याची गरज नाही)'
-                      : 'चॅट उघडल्यावर Ctrl+V करा'}
+                    ✓ केवळ HD पावती फोटो (इमेज) पाठवला जाईल
                   </span>
                 </div>
               </button>
 
-              {/* Optional Native Share to other apps */}
-              {canNativeShare && (
-                <button
-                  disabled={isSharing}
-                  onClick={handleNativeShareDirect}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-xs shadow-sm transition"
-                  title="इतर ॲप्सद्वारे (उदा. ग्रुप किंवा टेलिग्राम) शेअर करा"
-                >
-                  <Share2 className="w-3.5 h-3.5 shrink-0" />
-                  <span>इतर ॲप्सना शेअर</span>
-                </button>
-              )}
+              {/* Primary 2: Download Image PNG directly */}
+              <button
+                disabled={isExportingImage}
+                onClick={handleDownloadImage}
+                className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-bold text-xs sm:text-sm shadow-md transition disabled:opacity-50 cursor-pointer"
+                title="पावती फोटो (PNG) डाऊनलोड करा"
+              >
+                <FileImage className="w-4 h-4 shrink-0" />
+                <span>{isExportingImage ? 'डाऊनलोड होत आहे...' : 'पावती फोटो डाऊनलोड'}</span>
+              </button>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -287,47 +264,55 @@ export function ReceiptModal({ isOpen, onClose, receipt, autoShare = false }) {
               <button
                 disabled={isCopyingImage}
                 onClick={handleCopyImage}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-600 transition shadow-sm"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-600 transition shadow-sm cursor-pointer"
                 title="WhatsApp Web वर पेस्ट करण्यासाठी इमेज कॉपी करा"
               >
                 {isCopiedImage ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4 text-amber-500" />}
-                <span>{isCopiedImage ? 'कॉपी झाली!' : 'इमेज कॉपी (Ctrl+V)'}</span>
+                <span>{isCopiedImage ? 'कॉपी झाली!' : 'फोटो कॉपी (Ctrl+V)'}</span>
               </button>
 
-              {/* Download Image PNG */}
+              {/* Optional Link Message */}
               <button
-                disabled={isExportingImage}
-                onClick={handleDownloadImage}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-sm transition disabled:opacity-50"
+                onClick={handleDirectWhatsAppMsg}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 font-semibold text-xs transition cursor-pointer"
+                title="पावतीची लिंक असलेला मेसेज पाठवा"
               >
-                <FileImage className="w-4 h-4" />
-                <span>{isExportingImage ? '...' : 'PNG डाऊनलोड'}</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>फक्त मेसेज लिंक</span>
               </button>
 
               {/* Download PDF */}
               <button
                 disabled={isExportingPdf}
                 onClick={handleDownloadPdf}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-800 hover:bg-red-900 text-white font-bold text-xs shadow-sm transition disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-800 hover:bg-red-900 text-white font-bold text-xs shadow-sm transition disabled:opacity-50 cursor-pointer"
               >
-                <FileText className="w-4 h-4" />
-                <span>{isExportingPdf ? '...' : 'PDF'}</span>
+                <FileText className="w-3.5 h-3.5" />
+                <span>PDF</span>
               </button>
 
               {/* Print Button */}
               <button
                 onClick={handlePrint}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-800 dark:text-slate-100 font-bold text-xs transition"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-800 dark:text-slate-100 font-bold text-xs transition cursor-pointer"
               >
-                <Printer className="w-4 h-4" />
+                <Printer className="w-3.5 h-3.5" />
                 <span>प्रिंट</span>
+              </button>
+
+              {/* Close Button */}
+              <button
+                onClick={onClose}
+                className="flex items-center gap-1 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs transition cursor-pointer"
+              >
+                <span>पूर्ण झाले ✓</span>
               </button>
             </div>
           </div>
 
           <div className="text-[11px] text-amber-800 dark:text-amber-300 font-medium pt-1 border-t border-amber-500/20 flex flex-wrap items-center justify-between gap-1">
             <span>
-              💡 <strong>पावती फोटो व चॅट:</strong> हिरवे बटण दाबल्यावर पावती इमेज आपोआप डाऊनलोड होते आणि WhatsApp मध्ये थेट <strong>{displayMobile || 'नोंदवलेल्या नंबरचे'}</strong> चॅट उघडते.
+              💡 <strong>पावती फोटो पर्याय:</strong> आपण वर दिलेल्या पर्यायांमधून थेट <strong>पावती फोटो WhatsApp वर पाठवू शकता</strong> किंवा <strong>फोटो डाऊनलोड करू शकता</strong>.
             </span>
           </div>
         </div>

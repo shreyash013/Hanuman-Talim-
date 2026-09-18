@@ -118,20 +118,65 @@ export async function approveExpense(req, res) {
   try {
     const { id } = req.params;
     const notes = req.body.notes?.trim() || '';
-    const { data: expense, error } = await db.from('expense_transactions').select('*').eq('id', id).eq('is_deleted', false).maybeSingle();
+
+    let expenseQuery = db.from('expense_transactions').select('*').eq('is_deleted', false);
+    if (String(id).startsWith('EXP-')) {
+      expenseQuery = expenseQuery.eq('expense_id', id);
+    } else if (/^\d+$/.test(String(id))) {
+      expenseQuery = expenseQuery.eq('id', Number(id));
+    } else {
+      expenseQuery = expenseQuery.or(`id.eq.${id},expense_id.eq.${id}`);
+    }
+
+    const { data: expense, error } = await expenseQuery.maybeSingle();
     throwIfError(error);
     if (!expense) return res.status(404).json({ success: false, message: 'खर्च व्यवहार सापडला नाही.' });
 
-    const update = { status: 'approved', approved_by_id: req.user.id, approved_by_name: req.user.name, approved_at: new Date().toISOString() };
+    // Validate that req.user.id exists in the users table to prevent FK constraint failure
+    let validApproverId = null;
+    if (req.user?.id) {
+      try {
+        const { data: uCheck } = await db.from('users').select('id').eq('id', req.user.id).maybeSingle();
+        if (uCheck) {
+          validApproverId = uCheck.id;
+        } else {
+          const { data: adminUser } = await db.from('users').select('id').eq('role', 'admin').order('id', { ascending: true }).limit(1).maybeSingle();
+          if (adminUser) validApproverId = adminUser.id;
+        }
+      } catch (uErr) {
+        console.warn('Approver user lookup note:', uErr.message);
+      }
+    }
+
+    const update = {
+      status: 'approved',
+      approved_by_id: validApproverId,
+      approved_by_name: req.user?.name || 'अध्यक्ष (Admin)',
+      approved_at: new Date().toISOString()
+    };
     if (notes) update.notes = notes;
-    const { data: updated, error: updateError } = await db.from('expense_transactions').update(update).eq('id', id).select('*').single();
+
+    const { data: updated, error: updateError } = await db.from('expense_transactions').update(update).eq('id', expense.id).select('*').single();
     throwIfError(updateError);
 
-    await logAudit({ userId: req.user.id, userName: req.user.name, userRole: req.user.role, action: 'APPROVE', entity: 'EXPENSE', entityId: expense.expense_id, descriptionMr: `${req.user.name} यांनी खर्च ${expense.expense_id} (रक्कम ₹${expense.amount}) मंजूर केला.`, descriptionEn: `Approved expense ${expense.expense_id} (₹${expense.amount}).`, oldValues: { status: expense.status }, newValues: { status: 'approved' }, req });
+    await logAudit({
+      userId: validApproverId,
+      userName: req.user?.name || 'अध्यक्ष (Admin)',
+      userRole: req.user?.role || 'admin',
+      action: 'APPROVE',
+      entity: 'EXPENSE',
+      entityId: expense.expense_id,
+      descriptionMr: `${req.user?.name || 'अध्यक्ष'} यांनी खर्च ${expense.expense_id} (रक्कम ₹${expense.amount}) मंजूर केला.`,
+      descriptionEn: `Approved expense ${expense.expense_id} (₹${expense.amount}).`,
+      oldValues: { status: expense.status },
+      newValues: { status: 'approved' },
+      req
+    });
+
     return res.json({ success: true, message: 'खर्च यशस्वीरित्या मंजूर करण्यात आला / Expense approved successfully.', data: updated });
   } catch (err) {
     console.error('approveExpense error:', err);
-    return res.status(500).json({ success: false, message: 'खर्च मंजूर करताना त्रुटी.' });
+    return res.status(500).json({ success: false, message: err?.message || 'खर्च मंजूर करताना त्रुटी.' });
   }
 }
 
@@ -139,35 +184,97 @@ export async function rejectExpense(req, res) {
   try {
     const { id } = req.params;
     const reason = req.body.reason?.trim() || 'नाही';
-    const { data: expense, error } = await db.from('expense_transactions').select('*').eq('id', id).eq('is_deleted', false).maybeSingle();
+
+    let expenseQuery = db.from('expense_transactions').select('*').eq('is_deleted', false);
+    if (String(id).startsWith('EXP-')) {
+      expenseQuery = expenseQuery.eq('expense_id', id);
+    } else if (/^\d+$/.test(String(id))) {
+      expenseQuery = expenseQuery.eq('id', Number(id));
+    } else {
+      expenseQuery = expenseQuery.or(`id.eq.${id},expense_id.eq.${id}`);
+    }
+
+    const { data: expense, error } = await expenseQuery.maybeSingle();
     throwIfError(error);
     if (!expense) return res.status(404).json({ success: false, message: 'खर्च व्यवहार सापडला नाही.' });
 
+    let validRejecterId = null;
+    if (req.user?.id) {
+      try {
+        const { data: uCheck } = await db.from('users').select('id').eq('id', req.user.id).maybeSingle();
+        if (uCheck) validRejecterId = uCheck.id;
+      } catch {}
+    }
+
     const notes = `${expense.notes ? `${expense.notes} | ` : ''}नामंजूर करण्याचे कारण: ${reason}`;
-    const { error: updateError } = await db.from('expense_transactions').update({ status: 'rejected', notes }).eq('id', id);
+    const { error: updateError } = await db.from('expense_transactions').update({ status: 'rejected', notes }).eq('id', expense.id);
     throwIfError(updateError);
 
-    await logAudit({ userId: req.user.id, userName: req.user.name, userRole: req.user.role, action: 'REJECT', entity: 'EXPENSE', entityId: expense.expense_id, descriptionMr: `${req.user.name} यांनी खर्च ${expense.expense_id} नामंजूर केला. कारण: ${reason}`, descriptionEn: `Rejected expense ${expense.expense_id}. Reason: ${reason}`, oldValues: { status: expense.status }, newValues: { status: 'rejected', reason }, req });
+    await logAudit({
+      userId: validRejecterId,
+      userName: req.user?.name || 'अध्यक्ष (Admin)',
+      userRole: req.user?.role || 'admin',
+      action: 'REJECT',
+      entity: 'EXPENSE',
+      entityId: expense.expense_id,
+      descriptionMr: `${req.user?.name || 'अध्यक्ष'} यांनी खर्च ${expense.expense_id} नामंजूर केला. कारण: ${reason}`,
+      descriptionEn: `Rejected expense ${expense.expense_id}. Reason: ${reason}`,
+      oldValues: { status: expense.status },
+      newValues: { status: 'rejected', reason },
+      req
+    });
+
     return res.json({ success: true, message: 'खर्च नामंजूर करण्यात आला / Expense rejected.' });
   } catch (err) {
     console.error('rejectExpense error:', err);
-    return res.status(500).json({ success: false, message: 'खर्च नामंजूर करताना त्रुटी.' });
+    return res.status(500).json({ success: false, message: err?.message || 'खर्च नामंजूर करताना त्रुटी.' });
   }
 }
 
 export async function deleteExpense(req, res) {
   try {
     const { id } = req.params;
-    const { data: expense, error } = await db.from('expense_transactions').select('*').eq('id', id).eq('is_deleted', false).maybeSingle();
+
+    let expenseQuery = db.from('expense_transactions').select('*').eq('is_deleted', false);
+    if (String(id).startsWith('EXP-')) {
+      expenseQuery = expenseQuery.eq('expense_id', id);
+    } else if (/^\d+$/.test(String(id))) {
+      expenseQuery = expenseQuery.eq('id', Number(id));
+    } else {
+      expenseQuery = expenseQuery.or(`id.eq.${id},expense_id.eq.${id}`);
+    }
+
+    const { data: expense, error } = await expenseQuery.maybeSingle();
     throwIfError(error);
     if (!expense) return res.status(404).json({ success: false, message: 'खर्च व्यवहार सापडला नाही.' });
 
-    const { error: updateError } = await db.from('expense_transactions').update({ is_deleted: true }).eq('id', id);
+    let validUserId = null;
+    if (req.user?.id) {
+      try {
+        const { data: uCheck } = await db.from('users').select('id').eq('id', req.user.id).maybeSingle();
+        if (uCheck) validUserId = uCheck.id;
+      } catch {}
+    }
+
+    const { error: updateError } = await db.from('expense_transactions').update({ is_deleted: true }).eq('id', expense.id);
     throwIfError(updateError);
-    await logAudit({ userId: req.user.id, userName: req.user.name, userRole: req.user.role, action: 'DELETE', entity: 'EXPENSE', entityId: expense.expense_id, descriptionMr: `${req.user.name} यांनी खर्च व्यवहार ${expense.expense_id} हटवला.`, descriptionEn: `Deleted expense transaction ${expense.expense_id}.`, oldValues: expense, req });
+
+    await logAudit({
+      userId: validUserId,
+      userName: req.user?.name || 'अध्यक्ष (Admin)',
+      userRole: req.user?.role || 'admin',
+      action: 'DELETE',
+      entity: 'EXPENSE',
+      entityId: expense.expense_id,
+      descriptionMr: `${req.user?.name || 'अध्यक्ष'} यांनी खर्च व्यवहार ${expense.expense_id} हटवला.`,
+      descriptionEn: `Deleted expense transaction ${expense.expense_id}.`,
+      oldValues: expense,
+      req
+    });
+
     return res.json({ success: true, message: 'खर्च यशस्वीरित्या हटवला / Expense deleted successfully.' });
   } catch (err) {
     console.error('deleteExpense error:', err);
-    return res.status(500).json({ success: false, message: 'खर्च हटवताना त्रुटी.' });
+    return res.status(500).json({ success: false, message: err?.message || 'खर्च हटवताना त्रुटी.' });
   }
 }
