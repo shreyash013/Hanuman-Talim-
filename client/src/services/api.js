@@ -4,6 +4,15 @@ export const getActiveApiUrl = () => {
   if (typeof window !== 'undefined') {
     const custom = localStorage.getItem('shirol_custom_api_url');
     if (custom && custom.trim()) return custom.trim();
+
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (!isLocal) {
+      const envUrl = typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL;
+      if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
+        return envUrl.trim();
+      }
+      return 'https://hanuman-talim-api.onrender.com/api';
+    }
   }
   return (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) || 'https://hanuman-talim-api.onrender.com/api';
 };
