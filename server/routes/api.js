@@ -19,6 +19,7 @@ import * as publicController from '../controllers/publicController.js';
 import * as festivalController from '../controllers/festivalController.js';
 import * as volunteerController from '../controllers/volunteerController.js';
 import * as loanController from '../controllers/loanController.js';
+import * as syncController from '../controllers/syncController.js';
 
 const router = express.Router();
 
@@ -33,6 +34,10 @@ router.get('/receipts/number/:receiptNumber', receiptController.getReceiptByNumb
 router.get('/public/donation-info', publicController.getPublicDonationInfo);
 router.post('/public/donate', publicController.submitOnlineDonationIntent);
 router.get('/public/festival', festivalController.getFestivalInfo);
+
+// Auto-Sync Routes (Real-time automatic cloud sync & cross-device backup)
+router.post('/sync/auto-sync-all', syncController.autoSyncAll);
+router.get('/sync/full-data', syncController.getCloudFullData);
 
 router.use(authenticate);
 

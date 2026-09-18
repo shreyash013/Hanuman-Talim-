@@ -7,7 +7,8 @@ import {
   Menu,
   Moon,
   Sun,
-  ChevronDown
+  ChevronDown,
+  Cloud
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { GanpatiLogo } from '../common/GanpatiLogo';
@@ -55,6 +56,16 @@ export function TopNavbar({ onOpenMobileMenu }) {
 
       {/* Right Controls */}
       <div className="flex items-center gap-2 sm:gap-3">
+        {/* Live Cloud Auto-Sync Indicator */}
+        <div
+          className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-400 text-xs font-semibold select-none shadow-xs"
+          title="लाईव्ह क्लाउड ऑटो-सिंक सुरू आहे (Live Auto-Sync is Active)"
+        >
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <Cloud className="w-3.5 h-3.5" />
+          <span className="text-[11px] font-bold">लाईव्ह सिंक</span>
+        </div>
+
         {/* Language Selector Dropdown */}
         <div className="relative">
           <button
