@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { useNotification } from '../context/NotificationContext';
 import { useMandal } from '../context/MandalContext';
-import api from '../services/api';
+import api, { forceSyncNow } from '../services/api';
 import { formatDate } from '../utils/dateUtils';
 import { Modal } from '../components/common/Modal';
 import {
@@ -85,6 +85,8 @@ export function DonorsPage() {
 
   useEffect(() => {
     fetchDonors();
+    // Auto-sync any local donors to server in background
+    forceSyncNow().catch(() => {});
 
     const handleUpdate = () => {
       fetchDonors();

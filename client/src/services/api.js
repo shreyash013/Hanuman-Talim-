@@ -4,17 +4,8 @@ export const getActiveApiUrl = () => {
   if (typeof window !== 'undefined') {
     const custom = localStorage.getItem('shirol_custom_api_url');
     if (custom && custom.trim()) return custom.trim();
-
-    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    if (!isLocal) {
-      const envUrl = typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL;
-      if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
-        return envUrl.trim();
-      }
-      return 'https://hanuman-talim-api.onrender.com/api';
-    }
   }
-  return (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) || 'https://hanuman-talim-api.onrender.com/api';
+  return 'https://hanuman-talim-api.onrender.com/api';
 };
 
 export const API_BASE_URL = getActiveApiUrl();
@@ -193,10 +184,12 @@ export async function ensureValidToken() {
 }
 
 // 100% Automatic Auto-Upload: Syncs all local data to live cloud server in background
-export async function autoSyncAllToServer() {
-  if (typeof window === 'undefined' || isSyncingToServer) return;
+export async function autoSyncAllToServer(force = false, retryCount = 0) {
+  if (typeof window === 'undefined') return { success: false, reason: 'no-window' };
+  if (isSyncingToServer && !force) return { success: false, reason: 'already-syncing' };
+
   const baseUrl = getActiveApiUrl();
-  if (!baseUrl) return;
+  if (!baseUrl) return { success: false, reason: 'no-base-url' };
 
   const rawIncome = localStorage.getItem('shirol_income');
   const rawExpenses = localStorage.getItem('shirol_expenses');
@@ -215,17 +208,27 @@ export async function autoSyncAllToServer() {
   const settings = rawSettings ? JSON.parse(rawSettings) : null;
 
   const totalLocalCount = income.length + expenses.length + donors.length + loans.length;
-  if (totalLocalCount === 0) return;
+  if (totalLocalCount === 0) return { success: true, count: 0 };
 
   isSyncingToServer = true;
+  window.dispatchEvent(new CustomEvent('shirol_sync_status_changed', {
+    detail: { status: 'syncing', totalLocalCount, donorsCount: donors.length }
+  }));
+
   try {
-    const token = await ensureValidToken();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout for Render wake up
+
     const headers = { 'Content-Type': 'application/json' };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const token = localStorage.getItem('ganpati_mandal_token');
+    if (token && !token.startsWith('demo-')) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
 
     const res = await fetch(`${baseUrl}/sync/auto-sync-all`, {
       method: 'POST',
       headers,
+      signal: controller.signal,
       body: JSON.stringify({
         income,
         expenses,
@@ -236,22 +239,44 @@ export async function autoSyncAllToServer() {
         settings
       })
     });
+    clearTimeout(timeoutId);
 
     if (res.ok) {
       const data = await res.json();
       if (data.success) {
         console.log('☁️ [Auto-Sync] सर्व नोंदी लाईव्ह सर्व्हरवर ऑटो-अपलोड झाल्या:', data.counts);
         localStorage.setItem('shirol_last_auto_synced', new Date().toISOString());
+        window.dispatchEvent(new CustomEvent('shirol_sync_status_changed', {
+          detail: { status: 'synced', counts: data.counts, donorsCount: donors.length }
+        }));
+        window.dispatchEvent(new Event('shirol_data_updated'));
+        return { success: true, counts: data.counts };
       }
     }
+
+    // If server responded with error and retry available
+    if (retryCount < 2) {
+      setTimeout(() => autoSyncAllToServer(true, retryCount + 1), 3000);
+    }
+    window.dispatchEvent(new CustomEvent('shirol_sync_status_changed', {
+      detail: { status: 'error', reason: 'server-error', donorsCount: donors.length }
+    }));
+    return { success: false, reason: 'server-error' };
   } catch (err) {
     console.warn('Background auto-sync note:', err.message);
+    if (retryCount < 2) {
+      setTimeout(() => autoSyncAllToServer(true, retryCount + 1), 4000);
+    }
+    window.dispatchEvent(new CustomEvent('shirol_sync_status_changed', {
+      detail: { status: 'error', error: err.message, donorsCount: donors.length }
+    }));
+    return { success: false, reason: err.message };
   } finally {
     isSyncingToServer = false;
   }
 }
 
-// 100% Automatic Pull: Syncs latest cloud data to local cache (for laptop and other devices)
+// 100% Automatic Pull: Syncs latest cloud data to local cache (bidirectional smart-merge)
 export async function autoSyncFromServer() {
   if (typeof window === 'undefined' || isSyncingFromServer) return;
   const baseUrl = getActiveApiUrl();
@@ -259,25 +284,67 @@ export async function autoSyncFromServer() {
 
   isSyncingFromServer = true;
   try {
-    const token = await ensureValidToken();
-    const headers = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
 
-    const res = await fetch(`${baseUrl}/sync/full-data`, { headers });
+    const headers = {};
+    const token = localStorage.getItem('ganpati_mandal_token');
+    if (token && !token.startsWith('demo-')) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const res = await fetch(`${baseUrl}/sync/full-data`, { headers, signal: controller.signal });
+    clearTimeout(timeoutId);
+
     if (res.ok) {
       const resp = await res.json();
       if (resp.success && resp.data) {
         const cloud = resp.data;
         let updated = false;
 
-        if (Array.isArray(cloud.income) && cloud.income.length > 0) {
-          const currentIncome = getLocalStore('income', []);
-          if (cloud.income.length >= currentIncome.length || currentIncome.length <= 1) {
-            localStorage.setItem('shirol_income', JSON.stringify(cloud.income));
+        // 1. Smart Merge Donors: NEVER wipe out local donors!
+        if (Array.isArray(cloud.donors) && cloud.donors.length > 0) {
+          const currentDonors = getLocalStore('donors', []);
+          const donorMap = new Map();
+          // First add cloud donors
+          cloud.donors.forEach(d => {
+            if (d && d.name) donorMap.set(d.name.trim().toLowerCase(), d);
+          });
+          // Preserve local donors that aren't yet in cloud
+          currentDonors.forEach(d => {
+            if (d && d.name && !donorMap.has(d.name.trim().toLowerCase())) {
+              donorMap.set(d.name.trim().toLowerCase(), d);
+            }
+          });
+          const mergedDonors = Array.from(donorMap.values());
+          if (mergedDonors.length > currentDonors.length || cloud.donors.length >= currentDonors.length) {
+            localStorage.setItem('shirol_donors', JSON.stringify(mergedDonors));
             updated = true;
           }
         }
 
+        // 2. Smart Merge Income / Vargani Transactions
+        if (Array.isArray(cloud.income) && cloud.income.length > 0) {
+          const currentIncome = getLocalStore('income', []);
+          const incomeMap = new Map();
+          cloud.income.forEach(inc => {
+            const key = inc.receipt_number || inc.transaction_id || `${inc.donor_name}_${inc.amount}`;
+            incomeMap.set(key, inc);
+          });
+          currentIncome.forEach(inc => {
+            const key = inc.receipt_number || inc.transaction_id || `${inc.donor_name}_${inc.amount}`;
+            if (!incomeMap.has(key)) {
+              incomeMap.set(key, inc);
+            }
+          });
+          const mergedIncome = Array.from(incomeMap.values());
+          if (mergedIncome.length > currentIncome.length || cloud.income.length >= currentIncome.length) {
+            localStorage.setItem('shirol_income', JSON.stringify(mergedIncome));
+            updated = true;
+          }
+        }
+
+        // 3. Expenses
         if (Array.isArray(cloud.expenses) && cloud.expenses.length > 0) {
           const currentExpenses = getLocalStore('expenses', []);
           if (cloud.expenses.length >= currentExpenses.length || currentExpenses.length === 0) {
@@ -286,14 +353,7 @@ export async function autoSyncFromServer() {
           }
         }
 
-        if (Array.isArray(cloud.donors) && cloud.donors.length > 0) {
-          const currentDonors = getLocalStore('donors', []);
-          if (cloud.donors.length >= currentDonors.length || currentDonors.length <= 1) {
-            localStorage.setItem('shirol_donors', JSON.stringify(cloud.donors));
-            updated = true;
-          }
-        }
-
+        // 4. Loans
         if (Array.isArray(cloud.loans) && cloud.loans.length > 0) {
           const currentLoans = getLocalStore('loans', []);
           if (cloud.loans.length >= currentLoans.length || currentLoans.length === 0) {
@@ -302,6 +362,7 @@ export async function autoSyncFromServer() {
           }
         }
 
+        // 5. Receipts
         if (Array.isArray(cloud.receipts) && cloud.receipts.length > 0) {
           const currentReceipts = getLocalStore('receipts', []);
           if (cloud.receipts.length >= currentReceipts.length || currentReceipts.length <= 1) {
@@ -310,6 +371,7 @@ export async function autoSyncFromServer() {
           }
         }
 
+        // 6. Settings
         if (cloud.settings && typeof cloud.settings === 'object') {
           localStorage.setItem('shirol_mandal_settings_custom', JSON.stringify(cloud.settings));
           updated = true;
@@ -329,34 +391,55 @@ export async function autoSyncFromServer() {
   }
 }
 
+// Manual force sync trigger for user UI buttons
+export async function forceSyncNow() {
+  const uploadRes = await autoSyncAllToServer(true);
+  await autoSyncFromServer();
+  return uploadRes;
+}
+
 // Debounced trigger for auto-upload on every entry
 export function triggerAutoSync() {
   if (typeof window === 'undefined') return;
   if (syncDebounceTimer) clearTimeout(syncDebounceTimer);
   syncDebounceTimer = setTimeout(() => {
     autoSyncAllToServer();
-  }, 1000);
+  }, 800);
 }
 
-// Background auto-sync initialization on app startup
+// Background auto-sync initialization on app startup with redundant retries
 if (typeof window !== 'undefined') {
-  setTimeout(() => {
-    ensureValidToken().then(() => {
-      // 1. Auto-upload any existing mobile data to live server immediately
-      autoSyncAllToServer().then(() => {
-        // 2. Auto-pull latest cloud data to laptop / other devices
-        autoSyncFromServer();
-      });
-    });
-  }, 500);
+  // 1. Immediate trigger on load
+  autoSyncAllToServer().then(() => autoSyncFromServer());
 
+  // 2. Retry at 2 seconds
+  setTimeout(() => {
+    autoSyncAllToServer().then(() => autoSyncFromServer());
+  }, 2000);
+
+  // 3. Retry at 5 seconds (handles slow mobile startup / Render spinup)
+  setTimeout(() => {
+    autoSyncAllToServer().then(() => autoSyncFromServer());
+  }, 5000);
+
+  // 4. Periodic background sync every 25 seconds
+  setInterval(() => {
+    autoSyncAllToServer().then(() => autoSyncFromServer());
+  }, 25000);
+
+  // 5. Event listeners for visibility, online & tab focus
   window.addEventListener('online', () => {
-    autoSyncAllToServer();
-    autoSyncFromServer();
+    autoSyncAllToServer(true).then(() => autoSyncFromServer());
   });
 
   window.addEventListener('focus', () => {
-    autoSyncFromServer();
+    autoSyncAllToServer().then(() => autoSyncFromServer());
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      autoSyncAllToServer().then(() => autoSyncFromServer());
+    }
   });
 }
 
@@ -516,7 +599,44 @@ export async function request(endpoint, options = {}) {
     return { success: true, data };
   }
 
-  // Handle Loans / Borrowings Endpoints
+  // Handle Dashboard Stats (Local Engine Fallback)
+  if (endpoint.startsWith('/dashboard/stats')) {
+    const incomeList = getLocalStore('income', []);
+    const expensesList = getLocalStore('expenses', []);
+    const donorsList = getLocalStore('donors', []);
+    const loansList = getLocalStore('loans', []);
+
+    const totalIncome = incomeList.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+    const totalExpense = expensesList.filter(e => e.status === 'approved').reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const currentBalance = totalIncome - totalExpense;
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayCollection = incomeList
+      .filter(i => (i.created_at || '').startsWith(todayStr))
+      .reduce((s, i) => s + (Number(i.amount) || 0), 0);
+
+    const pendingExpenses = expensesList.filter(e => e.status === 'pending');
+
+    return {
+      success: true,
+      data: {
+        summary: {
+          totalIncome,
+          totalExpense,
+          currentBalance,
+          todayCollection: todayCollection > 0 ? todayCollection : totalIncome,
+          totalDonors: Math.max(donorsList.length, incomeList.length),
+          totalTransactions: incomeList.length,
+          pendingExpensesCount: pendingExpenses.length,
+          pendingExpensesAmount: pendingExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0)
+        },
+        recentTransactions: incomeList.slice(0, 10),
+        dailyTrend: [
+          { date: 'आज', amount: todayCollection > 0 ? todayCollection : totalIncome }
+        ]
+      }
+    };
+  }
   if (endpoint.startsWith('/loans')) {
     let loansList = getLocalStore('loans', []);
 

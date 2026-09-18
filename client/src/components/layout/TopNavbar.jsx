@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -8,10 +8,13 @@ import {
   Moon,
   Sun,
   ChevronDown,
-  Cloud
+  Cloud,
+  RefreshCw,
+  CheckCircle2
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { GanpatiLogo } from '../common/GanpatiLogo';
+import { forceSyncNow } from '../../services/api';
 
 export function TopNavbar({ onOpenMobileMenu }) {
   const { lang, setLang, t } = useLanguage();
@@ -20,6 +23,33 @@ export function TopNavbar({ onOpenMobileMenu }) {
   const { mandal } = useMandal();
 
   const [showLangMenu, setShowLangMenu] = useState(false);
+  const [syncStatus, setSyncStatus] = useState('synced'); // 'synced' | 'syncing' | 'error'
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  useEffect(() => {
+    const handleStatus = (e) => {
+      if (e.detail?.status) setSyncStatus(e.detail.status);
+    };
+    window.addEventListener('shirol_sync_status_changed', handleStatus);
+    return () => window.removeEventListener('shirol_sync_status_changed', handleStatus);
+  }, []);
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    setSyncStatus('syncing');
+    try {
+      const res = await forceSyncNow();
+      if (res && res.success) {
+        setSyncStatus('synced');
+      } else {
+        setSyncStatus('error');
+      }
+    } catch (e) {
+      setSyncStatus('error');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const languages = [
     { code: 'mr', name: 'मराठी', flag: '🇮🇳' },
@@ -30,24 +60,24 @@ export function TopNavbar({ onOpenMobileMenu }) {
   const currentLang = languages.find(l => l.code === lang) || languages[0];
 
   return (
-    <header className="sticky top-0 z-30 h-16 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 flex items-center justify-between shadow-sm">
+    <header className="sticky top-0 z-30 h-16 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-3 sm:px-4 flex items-center justify-between shadow-sm">
       {/* Left Menu Button (Mobile) & Title */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         <button
           onClick={onOpenMobileMenu}
-          className="lg:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          className="lg:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex-shrink-0"
           aria-label="Menu"
         >
           <Menu className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center gap-2.5">
-          <GanpatiLogo size="sm" className="hidden sm:inline-flex" />
-          <div>
-            <h1 className="text-sm sm:text-base font-black text-slate-900 dark:text-white font-marathi tracking-tight line-clamp-1">
+        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+          <GanpatiLogo size="sm" className="hidden sm:inline-flex flex-shrink-0" />
+          <div className="min-w-0">
+            <h1 className="text-xs sm:text-base font-black text-slate-900 dark:text-white font-marathi tracking-tight truncate">
               {mandal?.name_mr || 'श्री हनुमान तालीम मंडळ शिरोळ'}
             </h1>
-            <p className="text-[10px] sm:text-[11px] text-amber-600 dark:text-amber-400 font-semibold line-clamp-1">
+            <p className="text-[9px] sm:text-[11px] text-amber-600 dark:text-amber-400 font-semibold truncate">
               {mandal?.tagline_mr || 'स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा महाराजा ॥ 🔱'}
             </p>
           </div>
@@ -55,16 +85,30 @@ export function TopNavbar({ onOpenMobileMenu }) {
       </div>
 
       {/* Right Controls */}
-      <div className="flex items-center gap-2 sm:gap-3">
-        {/* Live Cloud Auto-Sync Indicator */}
-        <div
-          className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-400 text-xs font-semibold select-none shadow-xs"
-          title="लाईव्ह क्लाउड ऑटो-सिंक सुरू आहे (Live Auto-Sync is Active)"
+      <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
+        {/* Live Cloud Auto-Sync Indicator (Visible & Interactive on BOTH Mobile & Desktop) */}
+        <button
+          onClick={handleManualSync}
+          disabled={isSyncing}
+          className={`flex items-center gap-1 sm:gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-xl border text-[11px] font-bold select-none shadow-xs active:scale-95 transition-all ${
+            syncStatus === 'syncing' || isSyncing
+              ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-300'
+              : syncStatus === 'error'
+              ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300'
+              : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-400'
+          }`}
+          title="लाईव्ह क्लाउड ऑटो-सिंक (क्लिक करून लगेच सिंक करा)"
         >
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <Cloud className="w-3.5 h-3.5" />
-          <span className="text-[11px] font-bold">लाईव्ह सिंक</span>
-        </div>
+          {syncStatus === 'syncing' || isSyncing ? (
+            <RefreshCw className="w-3 h-3 sm:w-3.5 sm:h-3.5 animate-spin text-amber-600" />
+          ) : (
+            <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          )}
+          <Cloud className="w-3 h-3 sm:w-3.5 sm:h-3.5 hidden xs:inline" />
+          <span className="text-[10px] sm:text-[11px] font-bold">
+            {syncStatus === 'syncing' || isSyncing ? 'सिंक...' : 'लाईव्ह सिंक'}
+          </span>
+        </button>
 
         {/* Language Selector Dropdown */}
         <div className="relative">
