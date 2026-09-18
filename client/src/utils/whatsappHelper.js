@@ -3,7 +3,49 @@ import jsPDF from 'jspdf';
 import { formatDate } from './dateUtils';
 
 /**
- * Builds a clean, simple Marathi WhatsApp thank you message to accompany receipt image
+ * Extracts and sanitizes the donor's 10-digit mobile number from receipt
+ */
+export function getCleanMobileNumber(receipt) {
+  if (!receipt) return '';
+  const possible = receipt.mobile ?? receipt.phone ?? receipt.donor_phone ?? receipt.contact ?? receipt.donorMobile ?? '';
+  let digits = String(possible).replace(/\D/g, '');
+  if (!digits) return '';
+
+  if (digits.length === 11 && digits.startsWith('0')) {
+    digits = digits.slice(1);
+  }
+  if (digits.length === 12 && digits.startsWith('91')) {
+    digits = digits.slice(2);
+  }
+  return digits;
+}
+
+/**
+ * Formats mobile number for WhatsApp international protocol (e.g. 919822012345)
+ */
+export function getFormattedWhatsAppNumber(receipt) {
+  const clean = getCleanMobileNumber(receipt);
+  if (clean && clean.length >= 10) {
+    return `91${clean.slice(-10)}`;
+  }
+  return '';
+}
+
+/**
+ * Formats mobile number for human display (e.g. +91 98220 12345)
+ */
+export function getDisplayMobileNumber(receipt) {
+  const clean = getCleanMobileNumber(receipt);
+  if (clean && clean.length >= 10) {
+    const last10 = clean.slice(-10);
+    return `+91 ${last10.slice(0, 5)} ${last10.slice(5)}`;
+  }
+  const raw = receipt?.mobile || receipt?.phone || '';
+  return raw ? String(raw).trim() : '';
+}
+
+/**
+ * Builds a clean, respectful Marathi WhatsApp message to accompany receipt image
  */
 export function buildWhatsAppReceiptMessage(receipt, mandal) {
   const mandalName = mandal?.name_mr || 'श्री हनुमान तालीम मंडळ शिरोळ';
@@ -11,9 +53,11 @@ export function buildWhatsAppReceiptMessage(receipt, mandal) {
   const donorName = receipt?.donor_name || 'देणगीदार';
   const amount = Number(receipt?.amount || 0).toLocaleString('en-IN');
   const receiptNo = receipt?.receipt_number || receipt?.receiptNo || 'HANUMAN-2026-000001';
-  const date = receipt?.created_at ? formatDate(receipt.created_at, 'mr') : '१४ सप्टेंबर २०२६';
+  const date = receipt?.created_at ? formatDate(receipt.created_at, 'mr') : '१७ सप्टेंबर २०२६';
 
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://client-alpha-gold-83.vercel.app';
+  const origin = typeof window !== 'undefined' && window.location.origin
+    ? window.location.origin
+    : 'https://hanuman-talim.vercel.app';
   const receiptUrl = `${origin}/verify-receipt/${encodeURIComponent(receiptNo)}`;
 
   return `🚩 *${mandalName}* 🚩
@@ -34,19 +78,18 @@ ${tagline}
 /**
  * Directly opens WhatsApp Web or App with pre-filled message targeted to registered mobile
  */
-export function openWhatsAppReceipt(receipt, mandal, autoSend = true) {
-  const rawMobile = receipt?.mobile ? String(receipt.mobile).replace(/\D/g, '') : '';
+export function openWhatsAppReceipt(receipt, mandal, autoSend = true, options = {}) {
+  const formattedNum = getFormattedWhatsAppNumber(receipt);
   const message = buildWhatsAppReceiptMessage(receipt, mandal);
   const encodedText = encodeURIComponent(message);
 
   let targetUrl = '';
-  if (rawMobile && rawMobile.length >= 10) {
-    let cleanMobile = rawMobile;
-    if (cleanMobile.length === 11 && cleanMobile.startsWith('0')) {
-      cleanMobile = cleanMobile.slice(1);
+  if (formattedNum) {
+    if (options.useAppProtocol) {
+      targetUrl = `whatsapp://send?phone=${formattedNum}&text=${encodedText}`;
+    } else {
+      targetUrl = `https://api.whatsapp.com/send?phone=${formattedNum}&text=${encodedText}`;
     }
-    const formattedNum = cleanMobile.length === 10 ? `91${cleanMobile}` : cleanMobile;
-    targetUrl = `https://api.whatsapp.com/send?phone=${formattedNum}&text=${encodedText}`;
   } else {
     targetUrl = `https://api.whatsapp.com/send?text=${encodedText}`;
   }
@@ -103,7 +146,7 @@ export async function downloadReceiptPdf(receiptElement, receipt) {
 }
 
 /**
- * Copies the receipt image directly to clipboard for Ctrl+V pasting in WhatsApp Web
+ * Copies the receipt image directly to clipboard for Ctrl+V pasting in WhatsApp Web/Desktop
  */
 export async function copyReceiptImageToClipboard(receiptElement) {
   const canvas = await generateReceiptCanvas(receiptElement);
@@ -129,16 +172,45 @@ export async function copyReceiptImageToClipboard(receiptElement) {
 }
 
 /**
- * Shares HD Receipt image or PDF directly to donor's registered WhatsApp number
+ * Shares actual image file via Native Web Share API (Mobile phones / Android / iOS)
+ */
+export async function shareReceiptNativeApp(receiptElement, receipt, mandal) {
+  if (!receiptElement) throw new Error('Receipt element not found');
+  const receiptNo = receipt?.receipt_number || receipt?.receiptNo || 'Receipt';
+  const canvas = await generateReceiptCanvas(receiptElement);
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+  if (!blob) throw new Error('Failed to create image blob');
+
+  const file = new File([blob], `Receipt_${receiptNo}.png`, { type: 'image/png' });
+  const shareText = buildWhatsAppReceiptMessage(receipt, mandal);
+
+  if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    await navigator.share({
+      title: `डिजिटल वर्गणी पावती - ${receiptNo}`,
+      text: shareText,
+      files: [file]
+    });
+    return { status: 'shared', mode: 'native_file' };
+  }
+  throw new Error('Native file share not supported on this device');
+}
+
+/**
+ * Primary HD Receipt Share Handler:
+ * 1. Generates 3x HD image.
+ * 2. Copies HD image to clipboard.
+ * 3. Downloads PNG file.
+ * 4. Opens WhatsApp directly targeted to donor's mobile number.
  */
 export async function shareReceiptFile(receiptElement, receipt, mandal, format = 'image') {
   if (!receiptElement) throw new Error('Receipt element not found');
   const receiptNo = receipt?.receipt_number || receipt?.receiptNo || 'Receipt';
+  const displayMobile = getDisplayMobileNumber(receipt);
 
   if (format === 'pdf') {
     await downloadReceiptPdf(receiptElement, receipt);
     openWhatsAppReceipt(receipt, mandal, true);
-    return { status: 'downloaded_and_opened', mode: 'pdf' };
+    return { status: 'downloaded_and_opened', mode: 'pdf', displayMobile };
   }
 
   // 1. Generate Ultra HD Canvas (3x scale)
@@ -149,25 +221,26 @@ export async function shareReceiptFile(receiptElement, receipt, mandal, format =
   const file = new File([blob], `Receipt_${receiptNo}.png`, { type: 'image/png' });
   const shareText = buildWhatsAppReceiptMessage(receipt, mandal);
 
-  // 2. Try Web Share API (native file share with attached image on mobile Chrome / Safari / Android)
-  if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+  // 2. If mobile device supports direct file share via Web Share API
+  const isMobile = typeof navigator !== 'undefined' && /android|iphone|ipad|ipod/i.test(navigator.userAgent || '');
+  if (isMobile && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
       await navigator.share({
         title: `डिजिटल वर्गणी पावती - ${receiptNo}`,
         text: shareText,
         files: [file]
       });
-      return { status: 'shared', mode: 'native_file' };
+      return { status: 'shared', mode: 'native_file', displayMobile };
     } catch (err) {
       if (err.name === 'AbortError') {
-        return { status: 'aborted', mode: 'native_file' };
+        return { status: 'aborted', mode: 'native_file', displayMobile };
       }
-      console.warn('Native share failed, falling back to desktop clipboard/download mode:', err);
+      console.warn('Native share failed, falling back to clipboard + open WhatsApp:', err);
     }
   }
 
   // 3. Desktop or fallback mode:
-  // a) Copy HD PNG image to clipboard for instant Ctrl+V pasting in WhatsApp Web
+  // a) Copy HD PNG image to clipboard for instant Ctrl+V pasting in WhatsApp
   let copiedToClipboard = false;
   try {
     if (navigator.clipboard && window.ClipboardItem) {
@@ -192,13 +265,13 @@ export async function shareReceiptFile(receiptElement, receipt, mandal, format =
     console.warn('Image download failed:', dlErr);
   }
 
-  // c) Open WhatsApp with pre-filled message containing direct link to the HD receipt
+  // c) Open WhatsApp with pre-filled message containing direct link to the HD receipt targeted to mobile
   openWhatsAppReceipt(receipt, mandal, true);
 
   return {
     status: 'copied_and_opened',
     mode: 'desktop_clipboard_download',
-    copiedToClipboard
+    copiedToClipboard,
+    displayMobile
   };
 }
-

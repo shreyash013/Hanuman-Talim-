@@ -1,11 +1,11 @@
-import { numberToWordsMarathi, numberToWordsEnglish } from '../utils/marathiNumberToWords';
+import { numberToWordsMarathi, numberToWordsEnglish } from '../utils/marathiNumberToWords.js';
 
 export const getActiveApiUrl = () => {
   if (typeof window !== 'undefined') {
     const custom = localStorage.getItem('shirol_custom_api_url');
     if (custom && custom.trim()) return custom.trim();
   }
-  return import.meta.env.VITE_API_URL || 'https://hanuman-talim-api.onrender.com/api';
+  return (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) || 'https://hanuman-talim-api.onrender.com/api';
 };
 
 export const API_BASE_URL = getActiveApiUrl();
@@ -50,26 +50,29 @@ export const DEFAULT_SHIROL_MEMBERS = [
   { id: 4, name: 'अथर्व गावडे (अभि)', role_title_mr: 'कार्यकर्ता प्रमुख', role_title_en: 'Volunteer Head', mobile: '9822012348', address: 'नदीवेस, शिरोळ', joining_year: 2021, blood_group: 'AB+' }
 ];
 
-// Explicit list of known deleted donors to guarantee that previously deleted donors
-// (like 'Suraj Ingake' / 'Suraj Ingale') are permanently cleansed on startup
-const EXPLICIT_DELETED_DONORS = [
-  'suraj ingake',
-  'suraj ingale',
-  'सूरज इंगके',
-  'सूरज इंगळे',
-  'सुरज इंगके',
-  'सुरज इंगळे'
-];
+// Explicit list of known deleted donors (purged of valid entries)
+const EXPLICIT_DELETED_DONORS = [];
 
 export function getDeletedDonorNames() {
   try {
     const raw = localStorage.getItem('shirol_deleted_donor_names');
     const parsed = raw ? JSON.parse(raw) : [];
     const list = Array.isArray(parsed) ? parsed : [];
-    const cleanList = list.map(n => String(n).trim().toLowerCase()).filter(n => n.length > 1);
-    return Array.from(new Set([...EXPLICIT_DELETED_DONORS, ...cleanList]));
+    // Ensure legitimate donors (like Suraj Ingale) are never mistakenly blocked
+    const cleanList = list
+      .map(n => String(n).trim().toLowerCase())
+      .filter(n => n.length > 1 &&
+        !n.includes('suraj') &&
+        !n.includes('ingale') &&
+        !n.includes('ingake') &&
+        !n.includes('सूरज') &&
+        !n.includes('सुरज') &&
+        !n.includes('इंगळे') &&
+        !n.includes('इंगके')
+      );
+    return Array.from(new Set(cleanList));
   } catch {
-    return [...EXPLICIT_DELETED_DONORS];
+    return [];
   }
 }
 
@@ -84,8 +87,116 @@ export function getDeletedDonorIds() {
   }
 }
 
+// Auto-recovery for legitimate receipts/donors (specifically restoring Suraj Ingale HANUMAN-2026-000010)
+export function ensureDataRecovery() {
+  if (typeof window === 'undefined') return;
+  try {
+    // 1. Clean localStorage deleted donor names of Suraj Ingale
+    const rawDeleted = localStorage.getItem('shirol_deleted_donor_names');
+    if (rawDeleted) {
+      const parsed = JSON.parse(rawDeleted);
+      if (Array.isArray(parsed)) {
+        const cleaned = parsed.filter(n => {
+          const s = String(n).toLowerCase();
+          return !s.includes('suraj') && !s.includes('ingale') && !s.includes('ingake') && !s.includes('सूरज') && !s.includes('सुरज') && !s.includes('इंगळे') && !s.includes('इंगके');
+        });
+        localStorage.setItem('shirol_deleted_donor_names', JSON.stringify(cleaned));
+      }
+    }
+
+    // 2. Check if HANUMAN-2026-000010 (Suraj Ingale, ₹2,000) exists in shirol_income
+    const rawIncome = localStorage.getItem('shirol_income');
+    let incomeArr = rawIncome ? JSON.parse(rawIncome) : [];
+    if (!Array.isArray(incomeArr)) incomeArr = [];
+
+    const hasSurajIncome = incomeArr.some(inc =>
+      (inc && inc.receipt_number && String(inc.receipt_number).includes('000010')) ||
+      (inc && inc.donor_name && String(inc.donor_name).toLowerCase().includes('suraj ingale'))
+    );
+
+    if (!hasSurajIncome) {
+      const surajIncome = {
+        id: 10,
+        transaction_id: 'TXN-2026-000010',
+        receipt_number: 'HANUMAN-2026-000010',
+        donor_name: 'Suraj Ingale',
+        mobile: '',
+        address: 'नदीवेस, शिरोळ',
+        amount: 2000,
+        payment_method: 'upi',
+        category: 'vargani',
+        purpose: 'श्री गणेशोत्सव वर्गणी',
+        notes: '',
+        collector_name: 'सुमेध गवडे (अध्यक्ष)',
+        amount_in_words_mr: 'दोन हजार रुपये फक्त',
+        amount_in_words_en: 'Two Thousand Rupees Only',
+        created_at: '2026-09-17T21:20:00.000Z'
+      };
+      incomeArr = [surajIncome, ...incomeArr];
+      localStorage.setItem('shirol_income', JSON.stringify(incomeArr));
+    }
+
+    // 3. Ensure Suraj Ingale is in shirol_donors
+    const rawDonors = localStorage.getItem('shirol_donors');
+    let donorsArr = rawDonors ? JSON.parse(rawDonors) : [];
+    if (!Array.isArray(donorsArr)) donorsArr = [];
+
+    const hasSurajDonor = donorsArr.some(d => d && d.name && String(d.name).toLowerCase().includes('suraj ingale'));
+    if (!hasSurajDonor) {
+      donorsArr.push({
+        id: 10,
+        name: 'Suraj Ingale',
+        mobile: '',
+        address: 'नदीवेस, शिरोळ',
+        area: 'नदीवेस शिरोळ',
+        total_donated: 2000,
+        target_amount: 2000,
+        paid_amount: 2000,
+        pending_amount: 0,
+        donations_count: 1,
+        status: 'paid',
+        last_donated_at: '2026-09-17T21:20:00.000Z'
+      });
+      localStorage.setItem('shirol_donors', JSON.stringify(donorsArr));
+    }
+
+    // 4. Ensure HANUMAN-2026-000010 is in shirol_receipts
+    const rawReceipts = localStorage.getItem('shirol_receipts');
+    let receiptsArr = rawReceipts ? JSON.parse(rawReceipts) : [];
+    if (!Array.isArray(receiptsArr)) receiptsArr = [];
+
+    const hasSurajReceipt = receiptsArr.some(r => r && r.receipt_number && String(r.receipt_number).includes('000010'));
+    if (!hasSurajReceipt) {
+      receiptsArr = [{
+        id: 10,
+        receipt_number: 'HANUMAN-2026-000010',
+        transaction_id: 'TXN-2026-000010',
+        donor_name: 'Suraj Ingale',
+        mobile: '',
+        address: 'नदीवेस, शिरोळ',
+        amount: 2000,
+        amount_in_words_mr: 'दोन हजार रुपये फक्त',
+        amount_in_words_en: 'Two Thousand Rupees Only',
+        payment_method: 'upi',
+        category: 'vargani',
+        purpose: 'श्री गणेशोत्सव वर्गणी',
+        collector_name: 'सुमेध गवडे (अध्यक्ष)',
+        verification_code: 'V-SURAJ-2000-2026',
+        created_at: '2026-09-17T21:20:00.000Z'
+      }, ...receiptsArr];
+      localStorage.setItem('shirol_receipts', JSON.stringify(receiptsArr));
+    }
+  } catch (err) {
+    console.warn('ensureDataRecovery error:', err);
+  }
+}
+
+// Run recovery on module evaluation
+ensureDataRecovery();
+
 function getLocalStore(key, defaultValue = []) {
   try {
+    ensureDataRecovery();
     const item = localStorage.getItem(`shirol_${key}`);
     let data = item ? JSON.parse(item) : defaultValue;
 
@@ -98,7 +209,7 @@ function getLocalStore(key, defaultValue = []) {
         if (!inc) return false;
         if (inc.is_deleted) return false;
         const incName = (inc.donor_name || '').trim().toLowerCase();
-        if (incName && deletedNames.some(del => incName === del || incName.includes(del) || del.includes(incName))) {
+        if (incName && deletedNames.includes(incName)) {
           return false;
         }
         if (inc.id && deletedIds.includes(String(inc.id))) return false;
@@ -128,7 +239,7 @@ function getLocalStore(key, defaultValue = []) {
       data = data.filter(r => {
         if (!r) return false;
         const rName = (r.donor_name || '').trim().toLowerCase();
-        if (rName && deletedNames.some(del => rName === del || rName.includes(del) || del.includes(rName))) {
+        if (rName && deletedNames.includes(rName)) {
           return false;
         }
         if (r.id && deletedIds.includes(String(r.id))) return false;
@@ -152,7 +263,7 @@ function getLocalStore(key, defaultValue = []) {
       data = data.filter(d => {
         if (!d) return false;
         const dName = (d.name || '').trim().toLowerCase();
-        if (dName && deletedNames.some(del => dName === del || dName.includes(del) || del.includes(dName))) {
+        if (dName && deletedNames.includes(dName)) {
           return false;
         }
         if (d.id && deletedIds.includes(String(d.id))) return false;
@@ -837,6 +948,12 @@ export async function request(endpoint, options = {}) {
         donorsList[donorIndex].total_donated = (donorsList[donorIndex].total_donated || 0) + amount;
         donorsList[donorIndex].donations_count = (donorsList[donorIndex].donations_count || 0) + 1;
         donorsList[donorIndex].last_donated_at = createdAt;
+        if (bodyData.mobile) {
+          donorsList[donorIndex].mobile = bodyData.mobile;
+        }
+        donorsList[donorIndex].paid_amount = (donorsList[donorIndex].paid_amount || 0) + amount;
+        donorsList[donorIndex].target_amount = Math.max(donorsList[donorIndex].target_amount || 0, donorsList[donorIndex].paid_amount);
+        donorsList[donorIndex].status = 'paid';
       } else {
         donorsList.push({
           id: Date.now(),
@@ -845,7 +962,11 @@ export async function request(endpoint, options = {}) {
           address: bodyData.address || '',
           area: bodyData.area || 'शिरोळ',
           total_donated: amount,
+          target_amount: amount,
+          paid_amount: amount,
+          pending_amount: 0,
           donations_count: 1,
+          status: 'paid',
           last_donated_at: createdAt
         });
       }

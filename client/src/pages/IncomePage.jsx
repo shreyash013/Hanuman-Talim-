@@ -112,6 +112,7 @@ export function IncomePage() {
       if (res.success) {
         showToast('जमा रक्कम यशस्वीरित्या नोंदवली! 🕉️', 'success');
         setShowAddModal(false);
+        const submittedMobile = mobile.trim();
         // Reset form
         setDonorName('');
         setMobile('');
@@ -122,12 +123,12 @@ export function IncomePage() {
         setAttachment(null);
         fetchIncome();
         if (res.data?.receipt) {
-          setSelectedReceipt(res.data.receipt);
-          if (mobile && mobile.trim()) {
-            setAutoShareReceipt(true);
-          } else {
-            setAutoShareReceipt(false);
-          }
+          const finalReceipt = {
+            ...res.data.receipt,
+            mobile: submittedMobile || res.data.receipt.mobile || ''
+          };
+          setSelectedReceipt(finalReceipt);
+          setAutoShareReceipt(false);
         }
       }
     } catch (err) {

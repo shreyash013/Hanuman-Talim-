@@ -182,7 +182,11 @@ export function VarganiPage() {
           confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } });
         } catch {}
 
-        const createdReceipt = res.data.receipt;
+        const submittedMobile = mobile.trim();
+        const createdReceipt = {
+          ...(res.data.receipt || {}),
+          mobile: submittedMobile || res.data.receipt?.mobile || ''
+        };
         setGeneratedReceipt(createdReceipt);
         showToast('वर्गणी यशस्वीरित्या जमा झाली! पावती पॉप-अपमधून फोटो पाठवा.', 'success');
 
