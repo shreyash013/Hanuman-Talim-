@@ -84,6 +84,20 @@ export function IncomePage() {
 
   useEffect(() => {
     fetchIncome();
+
+    const handleUpdate = () => {
+      fetchIncome();
+    };
+
+    window.addEventListener('focus', handleUpdate);
+    window.addEventListener('shirol_data_updated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+
+    return () => {
+      window.removeEventListener('focus', handleUpdate);
+      window.removeEventListener('shirol_data_updated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
   }, [page, search, category, paymentMethod]);
 
   const handleAddIncome = async (e) => {

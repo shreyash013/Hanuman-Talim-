@@ -95,6 +95,20 @@ export function DashboardPage() {
 
   useEffect(() => {
     fetchDashboard();
+
+    const handleUpdate = () => {
+      fetchDashboard();
+    };
+
+    window.addEventListener('focus', handleUpdate);
+    window.addEventListener('shirol_data_updated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+
+    return () => {
+      window.removeEventListener('focus', handleUpdate);
+      window.removeEventListener('shirol_data_updated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
   }, []);
 
   const summary = stats?.summary || {};
