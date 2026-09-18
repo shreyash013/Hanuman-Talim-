@@ -95,7 +95,13 @@ export function openWhatsAppReceipt(receipt, mandal, autoSend = true, options = 
   }
 
   if (autoSend && typeof window !== 'undefined') {
-    window.open(targetUrl, '_blank');
+    const isMobile = /android|iphone|ipad|ipod/i.test(navigator.userAgent || '');
+    if (isMobile) {
+      // On mobile devices, window.location.href seamlessly opens the WhatsApp app directly without popup blockers
+      window.location.href = targetUrl;
+    } else {
+      window.open(targetUrl, '_blank');
+    }
   }
   return targetUrl;
 }
@@ -173,6 +179,7 @@ export async function copyReceiptImageToClipboard(receiptElement) {
 
 /**
  * Shares actual image file via Native Web Share API (Mobile phones / Android / iOS)
+ * Note: Only used when explicitly requested by user or when no phone number exists
  */
 export async function shareReceiptNativeApp(receiptElement, receipt, mandal) {
   if (!receiptElement) throw new Error('Receipt element not found');
@@ -198,19 +205,21 @@ export async function shareReceiptNativeApp(receiptElement, receipt, mandal) {
 /**
  * Primary HD Receipt Share Handler:
  * 1. Generates 3x HD image.
- * 2. Copies HD image to clipboard.
- * 3. Downloads PNG file.
- * 4. Opens WhatsApp directly targeted to donor's mobile number.
+ * 2. Downloads PNG file so it's in Gallery/Downloads.
+ * 3. Copies HD image to clipboard.
+ * 4. IF PHONE NUMBER EXISTS: DIRECTLY OPENS WHATSAPP FOR THAT EXACT NUMBER!
+ *    (NEVER calls navigator.share when phone number is known, avoiding contact selection picker).
  */
 export async function shareReceiptFile(receiptElement, receipt, mandal, format = 'image') {
   if (!receiptElement) throw new Error('Receipt element not found');
   const receiptNo = receipt?.receipt_number || receipt?.receiptNo || 'Receipt';
   const displayMobile = getDisplayMobileNumber(receipt);
+  const formattedNum = getFormattedWhatsAppNumber(receipt);
 
   if (format === 'pdf') {
     await downloadReceiptPdf(receiptElement, receipt);
     openWhatsAppReceipt(receipt, mandal, true);
-    return { status: 'downloaded_and_opened', mode: 'pdf', displayMobile };
+    return { status: 'downloaded_and_opened', mode: 'pdf', displayMobile, formattedNum };
   }
 
   // 1. Generate Ultra HD Canvas (3x scale)
@@ -218,41 +227,7 @@ export async function shareReceiptFile(receiptElement, receipt, mandal, format =
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
   if (!blob) throw new Error('Failed to create image blob');
 
-  const file = new File([blob], `Receipt_${receiptNo}.png`, { type: 'image/png' });
-  const shareText = buildWhatsAppReceiptMessage(receipt, mandal);
-
-  // 2. If mobile device supports direct file share via Web Share API
-  const isMobile = typeof navigator !== 'undefined' && /android|iphone|ipad|ipod/i.test(navigator.userAgent || '');
-  if (isMobile && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-    try {
-      await navigator.share({
-        title: `डिजिटल वर्गणी पावती - ${receiptNo}`,
-        text: shareText,
-        files: [file]
-      });
-      return { status: 'shared', mode: 'native_file', displayMobile };
-    } catch (err) {
-      if (err.name === 'AbortError') {
-        return { status: 'aborted', mode: 'native_file', displayMobile };
-      }
-      console.warn('Native share failed, falling back to clipboard + open WhatsApp:', err);
-    }
-  }
-
-  // 3. Desktop or fallback mode:
-  // a) Copy HD PNG image to clipboard for instant Ctrl+V pasting in WhatsApp
-  let copiedToClipboard = false;
-  try {
-    if (navigator.clipboard && window.ClipboardItem) {
-      const item = new ClipboardItem({ 'image/png': blob });
-      await navigator.clipboard.write([item]);
-      copiedToClipboard = true;
-    }
-  } catch (clipErr) {
-    console.warn('Clipboard write failed:', clipErr);
-  }
-
-  // b) Auto-download the HD PNG image file
+  // a) Auto-download the HD PNG image file to user's device (Recent photos in gallery)
   try {
     const imgData = canvas.toDataURL('image/png');
     const link = document.createElement('a');
@@ -265,13 +240,60 @@ export async function shareReceiptFile(receiptElement, receipt, mandal, format =
     console.warn('Image download failed:', dlErr);
   }
 
-  // c) Open WhatsApp with pre-filled message containing direct link to the HD receipt targeted to mobile
+  // b) Copy HD PNG image to clipboard for instant pasting
+  let copiedToClipboard = false;
+  try {
+    if (navigator.clipboard && window.ClipboardItem) {
+      const item = new ClipboardItem({ 'image/png': blob });
+      await navigator.clipboard.write([item]);
+      copiedToClipboard = true;
+    }
+  } catch (clipErr) {
+    console.warn('Clipboard write failed:', clipErr);
+  }
+
+  // CRITICAL: If a phone number is registered in the receipt, DIRECTLY target that phone number on WhatsApp!
+  // This opens the chat with that donor immediately without asking the user to search or select a contact.
+  if (formattedNum) {
+    openWhatsAppReceipt(receipt, mandal, true);
+    return {
+      status: 'direct_whatsapp_opened',
+      mode: 'direct_phone',
+      formattedNum,
+      displayMobile,
+      copiedToClipboard
+    };
+  }
+
+  // Fallback: ONLY if NO phone number was entered, use navigator.share if mobile supports it
+  const isMobile = typeof navigator !== 'undefined' && /android|iphone|ipad|ipod/i.test(navigator.userAgent || '');
+  const file = new File([blob], `Receipt_${receiptNo}.png`, { type: 'image/png' });
+  const shareText = buildWhatsAppReceiptMessage(receipt, mandal);
+
+  if (isMobile && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({
+        title: `डिजिटल वर्गणी पावती - ${receiptNo}`,
+        text: shareText,
+        files: [file]
+      });
+      return { status: 'shared', mode: 'native_file', displayMobile };
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        return { status: 'aborted', mode: 'native_file', displayMobile };
+      }
+      console.warn('Native share failed, falling back to open WhatsApp:', err);
+    }
+  }
+
+  // Final fallback when no number is recorded: open WhatsApp general chat picker
   openWhatsAppReceipt(receipt, mandal, true);
 
   return {
-    status: 'copied_and_opened',
-    mode: 'desktop_clipboard_download',
+    status: copiedToClipboard ? 'copied_and_opened' : 'downloaded_and_opened',
+    mode: 'general_whatsapp',
     copiedToClipboard,
     displayMobile
   };
 }
+

@@ -44,6 +44,7 @@ export function ReceiptModal({ isOpen, onClose, receipt, autoShare = false }) {
   // Editable mobile state so user can review or change number directly in receipt popup
   const [mobileNumber, setMobileNumber] = useState('');
   const [isEditingPhone, setIsEditingPhone] = useState(false);
+  const autoShareTriggeredRef = useRef(false);
 
   useEffect(() => {
     if (receipt) {
@@ -70,7 +71,10 @@ export function ReceiptModal({ isOpen, onClose, receipt, autoShare = false }) {
       showToast(`${format === 'pdf' ? 'PDF' : 'HD इमेज'} तयार होत आहे...`, 'info');
       const res = await shareReceiptFile(receiptRef.current, activeReceipt, mandal, format);
 
-      if (res?.status === 'shared') {
+      if (res?.status === 'direct_whatsapp_opened') {
+        showToast(`${res.displayMobile || 'नोंदवलेल्या क्रमांकावर'} थेट WhatsApp उघडत आहे... 🕉️`, 'success');
+        setShowDesktopGuide(false);
+      } else if (res?.status === 'shared') {
         showToast('HD पावती फोटो WhatsApp वर यशस्वीरित्या पाठवला! 🕉️', 'success');
         setShowDesktopGuide(false);
       } else if (res?.status === 'copied_and_opened') {
@@ -87,6 +91,22 @@ export function ReceiptModal({ isOpen, onClose, receipt, autoShare = false }) {
       setIsSharing(false);
     }
   };
+
+  // Automatically trigger WhatsApp send when requested from form submission
+  useEffect(() => {
+    if (isOpen && autoShare && receipt && !autoShareTriggeredRef.current) {
+      autoShareTriggeredRef.current = true;
+      const timer = setTimeout(() => {
+        if (receiptRef.current) {
+          handleShareImageOrPdf('image');
+        }
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+    if (!isOpen) {
+      autoShareTriggeredRef.current = false;
+    }
+  }, [isOpen, autoShare, receipt]);
 
   const handleNativeShareDirect = async () => {
     if (!receiptRef.current || !activeReceipt) return;
@@ -228,30 +248,36 @@ export function ReceiptModal({ isOpen, onClose, receipt, autoShare = false }) {
               <button
                 disabled={isSharing}
                 onClick={() => handleShareImageOrPdf('image')}
-                className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-extrabold text-xs sm:text-sm shadow-md transition-all transform hover:-translate-y-0.5 disabled:opacity-50"
-                title={displayMobile ? `${displayMobile} वर थेट WhatsApp पावती फोटो पाठवा` : 'WhatsApp वर पावती फोटो पाठवा'}
+                className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-extrabold text-xs sm:text-sm shadow-md transition-all transform hover:-translate-y-0.5 disabled:opacity-50"
+                title={displayMobile ? `${displayMobile} वर थेट WhatsApp उघडा` : 'WhatsApp वर पावती फोटो पाठवा'}
               >
                 <MessageCircle className="w-5 h-5 fill-current text-white shrink-0" />
                 <div className="text-left">
                   <span className="block leading-tight font-black">
-                    {isSharing ? 'HD इमेज तयार होत आहे...' : 'WhatsApp वर थेट HD पावती फोटो पाठवा'}
+                    {isSharing
+                      ? 'HD इमेज तयार होत आहे...'
+                      : displayMobile
+                      ? `WhatsApp वर थेट ${displayMobile} ला पाठवा`
+                      : 'WhatsApp वर पावती पाठवा'}
                   </span>
                   <span className="text-[10px] text-emerald-100 block font-normal">
-                    {displayMobile ? `लक्ष्य: ${displayMobile}` : 'चॅट उघडल्यावर Ctrl+V करा'}
+                    {displayMobile
+                      ? '✓ थेट या नंबरचे चॅट उघडेल (संपर्क निवडण्याची गरज नाही)'
+                      : 'चॅट उघडल्यावर Ctrl+V करा'}
                   </span>
                 </div>
               </button>
 
-              {/* Mobile Native Share Button (if supported) */}
+              {/* Optional Native Share to other apps */}
               {canNativeShare && (
                 <button
                   disabled={isSharing}
                   onClick={handleNativeShareDirect}
-                  className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs shadow-md transition"
-                  title="मोबाईल शेअर मेनूद्वारे पावती फोटो थेट शेअर करा"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-xs shadow-sm transition"
+                  title="इतर ॲप्सद्वारे (उदा. ग्रुप किंवा टेलिग्राम) शेअर करा"
                 >
-                  <Share2 className="w-4 h-4 shrink-0" />
-                  <span>मोबाईल ॲपद्वारे फोटो शेअर</span>
+                  <Share2 className="w-3.5 h-3.5 shrink-0" />
+                  <span>इतर ॲप्सना शेअर</span>
                 </button>
               )}
             </div>
@@ -300,7 +326,9 @@ export function ReceiptModal({ isOpen, onClose, receipt, autoShare = false }) {
           </div>
 
           <div className="text-[11px] text-amber-800 dark:text-amber-300 font-medium pt-1 border-t border-amber-500/20 flex flex-wrap items-center justify-between gap-1">
-            <span>💡 <strong>कसे पाठवायचे:</strong> बटण दाबल्यास HD पावती फोटो आपोआप कॉपी होतो व WhatsApp चॅट उघडते. चॅटमध्ये फक्त <strong>Ctrl + V</strong> (किंवा Paste) दाबा.</span>
+            <span>
+              💡 <strong>पावती फोटो व चॅट:</strong> हिरवे बटण दाबल्यावर पावती इमेज आपोआप डाऊनलोड होते आणि WhatsApp मध्ये थेट <strong>{displayMobile || 'नोंदवलेल्या नंबरचे'}</strong> चॅट उघडते.
+            </span>
           </div>
         </div>
 

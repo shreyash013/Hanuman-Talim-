@@ -25,7 +25,8 @@ import {
   Wifi,
   WifiOff,
   RefreshCw,
-  Award
+  Award,
+  MessageCircle
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -60,6 +61,7 @@ export function VarganiPage() {
   // Submitting and Generated Receipt Modal
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [generatedReceipt, setGeneratedReceipt] = useState(null);
+  const [autoShareAfterSubmit, setAutoShareAfterSubmit] = useState(false);
 
   // Quick Amounts
   const quickAmounts = [2000, 3000, 5000, 7000];
@@ -141,8 +143,8 @@ export function VarganiPage() {
     }, 1500);
   };
 
-  const handleSubmitVargani = async (e) => {
-    e.preventDefault();
+  const handleSubmitVargani = async (e, sendWhatsApp = false) => {
+    if (e && e.preventDefault) e.preventDefault();
     if (isSubmitting) return;
 
     if (!donorName.trim()) {
@@ -187,8 +189,14 @@ export function VarganiPage() {
           ...(res.data.receipt || {}),
           mobile: submittedMobile || res.data.receipt?.mobile || ''
         };
+        setAutoShareAfterSubmit(sendWhatsApp);
         setGeneratedReceipt(createdReceipt);
-        showToast('वर्गणी यशस्वीरित्या जमा झाली! पावती पॉप-अपमधून फोटो पाठवा.', 'success');
+
+        if (sendWhatsApp) {
+          showToast(`वर्गणी जमा झाली! +91 ${submittedMobile.slice(-10)} वर थेट WhatsApp उघडत आहे... 🕉️`, 'success');
+        } else {
+          showToast('वर्गणी यशस्वीरित्या जमा झाली! पावती पॉप-अपमधून फोटो पाठवा.', 'success');
+        }
 
         resetForm();
       } else {
@@ -443,14 +451,46 @@ export function VarganiPage() {
             )}
 
             {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black rounded-2xl text-sm shadow-xl transition transform active:scale-95 flex items-center justify-center space-x-2"
-            >
-              <Receipt className="w-5 h-5" />
-              <span>{isSubmitting ? 'पावती नोंदवत आहे...' : 'वर्गणी जमा करा व पावती द्या (Generate Receipt)'}</span>
-            </button>
+            {mobile.trim().replace(/\D/g, '').length >= 10 ? (
+              <div className="space-y-2.5">
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={(e) => handleSubmitVargani(e, true)}
+                  className="w-full py-4 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-black rounded-2xl text-sm shadow-xl transition transform active:scale-95 flex items-center justify-center space-x-2.5"
+                  title="वर्गणी जमा करून थेट WhatsApp वर पावती पाठवा"
+                >
+                  <MessageCircle className="w-5 h-5 fill-current shrink-0" />
+                  <div className="text-left sm:text-center">
+                    <span className="block font-black text-sm">
+                      {isSubmitting ? 'पावती नोंदवत आहे...' : `वर्गणी जमा करा व थेट WhatsApp वर पावती पाठवा`}
+                    </span>
+                    <span className="block text-[11px] text-emerald-100 font-normal">
+                      लक्ष्य: +91 {mobile.trim().replace(/\D/g, '').slice(-10)} • थेट या नंबरचे चॅट उघडेल (संपर्क निवडण्याची गरज नाही)
+                    </span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={(e) => handleSubmitVargani(e, false)}
+                  className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs transition flex items-center justify-center space-x-2"
+                >
+                  <Receipt className="w-4 h-4 text-amber-400" />
+                  <span>फक्त वर्गणी जमा करा (WhatsApp नको)</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black rounded-2xl text-sm shadow-xl transition transform active:scale-95 flex items-center justify-center space-x-2"
+              >
+                <Receipt className="w-5 h-5" />
+                <span>{isSubmitting ? 'पावती नोंदवत आहे...' : 'वर्गणी जमा करा व पावती द्या (Generate Receipt)'}</span>
+              </button>
+            )}
           </form>
         </div>
 
@@ -490,7 +530,11 @@ export function VarganiPage() {
         <ReceiptModal
           receipt={generatedReceipt}
           isOpen={!!generatedReceipt}
-          onClose={() => setGeneratedReceipt(null)}
+          onClose={() => {
+            setGeneratedReceipt(null);
+            setAutoShareAfterSubmit(false);
+          }}
+          autoShare={autoShareAfterSubmit}
         />
       )}
 
