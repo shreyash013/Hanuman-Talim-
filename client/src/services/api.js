@@ -108,7 +108,7 @@ export async function ensureValidToken() {
     const res = await fetch(`${baseUrl}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ identifier: 'admin@ganeshmandal.org', password: 'admin123' })
+      body: JSON.stringify({ identifier: 'president@mandal.org', password: 'admin123' })
     });
     if (res.ok) {
       const data = await res.json();
@@ -227,10 +227,11 @@ export function handleLocalDonorDeletion(endpoint, options = {}) {
     });
     localStorage.setItem('shirol_deleted_donors', JSON.stringify(updatedDeleted));
 
-    // 5. Dispatch live update events
+    // 5. Dispatch live update events and trigger immediate cloud sync
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('shirol_data_updated'));
       window.dispatchEvent(new Event('storage'));
+      setTimeout(() => autoSyncAllToServer(true), 100);
     }
   } catch (err) {
     console.warn('handleLocalDonorDeletion error:', err);
@@ -403,25 +404,40 @@ export async function autoSyncFromServer() {
           updated = true;
         }
 
-        // 2. Smart Merge Income / Vargani Transactions
-        if (Array.isArray(cloud.income) && cloud.income.length > 0) {
+        // 2. Smart Merge Income / Vargani Transactions (Exclude deleted donors/transactions!)
+        if (Array.isArray(cloud.income)) {
           const currentIncome = getLocalStore('income', []);
+          const deletedDonors = getLocalStore('deleted_donors', []);
+          const deletedNames = new Set(deletedDonors.map(d => (typeof d === 'string' ? d : d.name || '').trim().toLowerCase()).filter(Boolean));
+          const deletedIds = new Set(deletedDonors.map(d => (typeof d === 'object' ? String(d.id) : null)).filter(Boolean));
+          const deletedMobiles = new Set(deletedDonors.map(d => (typeof d === 'object' && d.mobile ? String(d.mobile).replace(/\D/g, '') : null)).filter(m => m && m.length >= 10));
+
+          const isIncDeleted = (inc) => {
+            if (!inc || inc.is_deleted) return true;
+            const incName = (inc.donor_name || '').trim().toLowerCase();
+            const incId = inc.donor_id ? String(inc.donor_id) : null;
+            const incMob = (inc.mobile || '').replace(/\D/g, '');
+            if (deletedNames.has(incName)) return true;
+            if (incId && deletedIds.has(incId)) return true;
+            if (incMob && deletedMobiles.has(incMob)) return true;
+            return false;
+          };
+
+          const validCloudIncome = cloud.income.filter(inc => !isIncDeleted(inc));
           const incomeMap = new Map();
-          cloud.income.forEach(inc => {
+          validCloudIncome.forEach(inc => {
             const key = inc.receipt_number || inc.transaction_id || `${inc.donor_name}_${inc.amount}`;
             incomeMap.set(key, inc);
           });
-          currentIncome.forEach(inc => {
+          currentIncome.filter(inc => !isIncDeleted(inc)).forEach(inc => {
             const key = inc.receipt_number || inc.transaction_id || `${inc.donor_name}_${inc.amount}`;
             if (!incomeMap.has(key)) {
               incomeMap.set(key, inc);
             }
           });
           const mergedIncome = Array.from(incomeMap.values());
-          if (mergedIncome.length > currentIncome.length || cloud.income.length >= currentIncome.length) {
-            localStorage.setItem('shirol_income', JSON.stringify(mergedIncome));
-            updated = true;
-          }
+          localStorage.setItem('shirol_income', JSON.stringify(mergedIncome));
+          updated = true;
         }
 
         // 3. Expenses: Smart merge preserving approved status
@@ -2125,7 +2141,17 @@ export const api = {
 
   delete: (endpoint, body) => {
     const isFormData = body instanceof FormData;
-    return request(endpoint, {
+    let url = endpoint;
+    if (body && !isFormData && typeof body === 'object') {
+      const qParams = new URLSearchParams();
+      if (body.name) qParams.set('name', body.name);
+      if (body.mobile) qParams.set('mobile', body.mobile);
+      const qStr = qParams.toString();
+      if (qStr) {
+        url = url.includes('?') ? `${url}&${qStr}` : `${url}?${qStr}`;
+      }
+    }
+    return request(url, {
       method: 'DELETE',
       body: body ? (isFormData ? body : JSON.stringify(body)) : undefined
     });

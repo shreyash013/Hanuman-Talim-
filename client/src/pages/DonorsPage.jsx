@@ -472,6 +472,7 @@ export function DonorsPage() {
         if (selectedDonorProfile && selectedDonorProfile.id === donor.id) {
           setSelectedDonorProfile(null);
         }
+        setDonors(prev => prev.filter(d => d.id !== donor.id && d.name !== donor.name));
         fetchDonors();
       }
     } catch (err) {
@@ -564,6 +565,7 @@ export function DonorsPage() {
 
       if (res.success) {
         showToast(`🎉 ${selectedIds.length} देणगीदार यशस्वीरित्या हटवले!`, 'success');
+        setDonors(prev => prev.filter(d => !selectedIds.includes(d.id) && !selectedNames.includes(d.name)));
         setSelectedIds([]);
         fetchDonors();
       }

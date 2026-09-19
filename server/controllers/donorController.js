@@ -170,7 +170,63 @@ export async function createDonor(req, res) {
       if (existingRows?.[0]) return res.status(400).json({ success: false, message: `हा मोबाईल क्रमांक आधीच '${existingRows[0].name}' यांच्यासाठी नोंदवलेला आहे.` });
     }
 
+async function createIncomeForDonor(donor, amount, category = 'vargani') {
+  try {
+    const { data: maxRows } = await db.from('income_transactions').select('id').order('id', { ascending: false }).limit(1);
+    const nextNum = ((maxRows?.[0]?.id) || 0) + 1;
+    const formattedNum = String(nextNum).padStart(6, '0');
+    const receiptNumber = `HANUMAN-2026-${formattedNum}`;
+    const transactionId = `TXN-2026-${formattedNum}`;
+    const cleanName = (donor.name || '').trim();
+    const cleanMobile = (donor.mobile || '').trim();
+    const cleanAddress = (donor.address || '').trim();
+
+    const { data: tx, error: txErr } = await db.from('income_transactions').insert({
+      transaction_id: transactionId,
+      donor_id: donor.id,
+      donor_name: cleanName,
+      mobile: cleanMobile,
+      address: cleanAddress,
+      amount: Number(amount),
+      payment_method: 'cash',
+      category: category,
+      purpose: 'श्री गणेशोत्सव वर्गणी',
+      notes: 'वर्गणी नोंदणी',
+      collector_name: 'अध्यक्ष (Admin)',
+      receipt_number: receiptNumber,
+      status: 'completed',
+      is_deleted: false
+    }).select('*').single();
+
+    if (!txErr && tx) {
+      const verificationCode = `V-${Math.random().toString(36).substring(2, 8).toUpperCase()}-${Date.now().toString(36).slice(-3).toUpperCase()}`;
+      const { data: receipt } = await db.from('receipts').insert({
+        receipt_number: receiptNumber,
+        transaction_id: tx.id,
+        donor_name: cleanName,
+        mobile: cleanMobile,
+        address: cleanAddress,
+        amount: Number(amount),
+        amount_in_words_mr: numberToWordsMarathi(Number(amount)),
+        amount_in_words_en: numberToWordsEnglish(Number(amount)),
+        payment_method: 'cash',
+        category: category,
+        purpose: 'श्री गणेशोत्सव वर्गणी',
+        collector_name: 'अध्यक्ष (Admin)',
+        verification_code: verificationCode
+      }).select('*').single();
+
+      if (receipt) {
+        await db.from('income_transactions').update({ receipt_id: receipt.id }).eq('id', tx.id);
+      }
+    }
+  } catch (err) {
+    console.warn('createIncomeForDonor helper note:', err.message);
+  }
+}
+
     const target = Number(target_amount || amount || 500);
+    const initialPaid = Number(req.body.paid_amount || req.body.total_donated || 0);
     const { data: created, error } = await db.from('donors').insert({
       name: name.trim(),
       mobile: cleanMobile,
@@ -179,12 +235,16 @@ export async function createDonor(req, res) {
       area: (area || 'शिरोळ').trim(),
       notes: notes.trim(),
       target_amount: target,
-      paid_amount: 0,
-      total_donated: 0,
-      donations_count: 0,
-      status: 'unpaid'
+      paid_amount: initialPaid,
+      total_donated: initialPaid,
+      donations_count: initialPaid > 0 ? 1 : 0,
+      status: initialPaid >= target && target > 0 ? 'paid' : (initialPaid > 0 ? 'partial' : 'unpaid')
     }).select('*').single();
     throwIfError(error);
+
+    if (initialPaid > 0 && created) {
+      await createIncomeForDonor(created, initialPaid, req.body.category || 'vargani');
+    }
 
     return res.status(201).json({
       success: true,
@@ -341,6 +401,9 @@ export async function updateDonor(req, res) {
             amount_in_words_en: numberToWordsEnglish(newTxAmount)
           }).eq('receipt_number', recentTx.receipt_number);
         }
+      } else if (newPaid > 0) {
+        // No existing income transaction -> create one so it shows in Income Records!
+        await createIncomeForDonor(donor, newPaid, category || 'vargani');
       }
     }
 
@@ -358,37 +421,55 @@ export async function deleteDonor(req, res) {
     const mobile = req.body?.mobile || req.query?.mobile;
 
     let donor = null;
-    // 1. Try finding by ID if it's a standard database ID
-    if (id && Number(id) < 1000000000) {
-      const { data } = await db.from('donors').select('id, name, mobile').eq('id', id).limit(1);
-      donor = data?.[0] || null;
+    // 1. Try finding by ID
+    if (id) {
+      const numId = Number(id);
+      if (!isNaN(numId) && numId > 0) {
+        const { data } = await db.from('donors').select('id, name, mobile').eq('id', numId).limit(1);
+        donor = data?.[0] || null;
+      }
     }
 
-    // 2. If not found by ID, try finding by name or mobile
+    // 2. If not found by ID, try finding by name (bilingual)
     if (!donor && name?.trim()) {
-      const { data } = await db.from('donors').select('id, name, mobile').ilike('name', name.trim()).limit(1);
-      donor = data?.[0] || null;
+      const terms = expandBilingualSearchTerms(name.trim());
+      for (const t of terms) {
+        const { data } = await db.from('donors').select('id, name, mobile').ilike('name', `%${safeSearchTerm(t)}%`).limit(1);
+        if (data?.[0]) {
+          donor = data[0];
+          break;
+        }
+      }
     }
 
     if (!donor && mobile?.trim()) {
       const cleanMobile = mobile.trim();
-      const { data } = await db.from('donors').select('id, name, mobile').eq('mobile', cleanMobile).limit(1);
+      const digits10 = cleanMobile.replace(/\D/g, '').slice(-10);
+      let mobQuery = db.from('donors').select('id, name, mobile');
+      if (digits10.length >= 10) {
+        mobQuery = mobQuery.or(`mobile.eq.${cleanMobile},mobile.ilike.%${digits10}%`);
+      } else {
+        mobQuery = mobQuery.eq('mobile', cleanMobile);
+      }
+      const { data } = await mobQuery.limit(1);
       donor = data?.[0] || null;
     }
 
-    // Perform deletions
-    if (donor?.id) {
-      await db.from('donors').delete().eq('id', donor.id);
-      await db.from('income_transactions').update({ is_deleted: true }).eq('donor_id', donor.id);
-    } else if (id && Number(id) < 1000000000) {
-      await db.from('donors').delete().eq('id', id);
-      await db.from('income_transactions').update({ is_deleted: true }).eq('donor_id', id);
+    // Perform deletions - ALWAYS soft-delete/delete linked income transactions first, then delete donor
+    const donorId = donor?.id || (id && Number(id) < 1000000000 ? Number(id) : null);
+    if (donorId) {
+      await db.from('income_transactions').update({ is_deleted: true }).eq('donor_id', donorId);
+      await db.from('donors').delete().eq('id', donorId);
     }
 
     const targetName = donor?.name || name;
     if (targetName?.trim()) {
-      await db.from('donors').delete().ilike('name', targetName.trim());
-      await db.from('income_transactions').update({ is_deleted: true }).ilike('donor_name', targetName.trim());
+      const terms = expandBilingualSearchTerms(targetName.trim());
+      for (const t of terms) {
+        const safeT = safeSearchTerm(t);
+        await db.from('income_transactions').update({ is_deleted: true }).ilike('donor_name', `%${safeT}%`);
+        await db.from('donors').delete().ilike('name', `%${safeT}%`);
+      }
     }
 
     return res.json({ success: true, message: 'देणगीदार यशस्वीरित्या हटवला / Donor deleted successfully' });
@@ -408,15 +489,19 @@ export async function deleteMultipleDonors(req, res) {
     const standardIds = (ids || []).map(Number).filter(id => id > 0 && id < 1000000000);
 
     if (standardIds.length > 0) {
-      await db.from('donors').delete().in('id', standardIds);
       await db.from('income_transactions').update({ is_deleted: true }).in('donor_id', standardIds);
+      await db.from('donors').delete().in('id', standardIds);
     }
 
-    // Also delete by names
+    // Also delete by names (bilingual)
     const cleanNames = (names || []).map(n => String(n).trim()).filter(Boolean);
     for (const dName of cleanNames) {
-      await db.from('donors').delete().ilike('name', dName);
-      await db.from('income_transactions').update({ is_deleted: true }).ilike('donor_name', dName);
+      const terms = expandBilingualSearchTerms(dName);
+      for (const t of terms) {
+        const safeT = safeSearchTerm(t);
+        await db.from('income_transactions').update({ is_deleted: true }).ilike('donor_name', `%${safeT}%`);
+        await db.from('donors').delete().ilike('name', `%${safeT}%`);
+      }
     }
 
     return res.json({ success: true, message: 'निवडलेले देणगीदार यशस्वीरित्या हटवले / Selected donors deleted successfully' });

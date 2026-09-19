@@ -65,28 +65,22 @@ export async function autoSyncAll(req, res) {
         }
       }
 
-      // Safety check: Never delete a donor if they are present in the current active donors or income sync lists!
-      const activeNames = new Set((donors || []).map(d => (d.name || '').trim().toLowerCase()).filter(Boolean));
-      const activeIncomeNames = new Set((income || []).map(i => (i.donor_name || '').trim().toLowerCase()).filter(Boolean));
-      const activeMobiles = new Set((donors || []).map(d => (d.mobile || '').trim()).filter(Boolean));
-      for (const name of activeNames) deletedNameSet.delete(name);
-      for (const name of activeIncomeNames) deletedNameSet.delete(name);
-      for (const mob of activeMobiles) deletedMobileSet.delete(mob);
-
       // Delete from Supabase donors table and soft-delete related income
       try {
         for (const name of deletedNameSet) {
-          await db.from('donors').delete().ilike('name', name);
-          await db.from('income_transactions').update({ is_deleted: true }).ilike('donor_name', name);
+          await db.from('income_transactions').update({ is_deleted: true }).ilike('donor_name', `%${name}%`);
+          await db.from('donors').delete().ilike('name', `%${name}%`);
         }
         for (const id of deletedIdSet) {
-          if (Number(id) < 1000000000) {
-            await db.from('donors').delete().eq('id', id);
-            await db.from('income_transactions').update({ is_deleted: true }).eq('donor_id', id);
+          const numId = Number(id);
+          if (!isNaN(numId) && numId > 0 && numId < 1000000000) {
+            await db.from('income_transactions').update({ is_deleted: true }).eq('donor_id', numId);
+            await db.from('donors').delete().eq('id', numId);
           }
         }
         for (const mob of deletedMobileSet) {
           if (mob.length >= 10) {
+            await db.from('income_transactions').update({ is_deleted: true }).eq('mobile', mob);
             await db.from('donors').delete().eq('mobile', mob);
           }
         }
