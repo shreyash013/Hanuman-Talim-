@@ -145,16 +145,23 @@ export async function autoSyncAll(req, res) {
         const curPaid = Number(existing.paid_amount || 0);
         const curStatus = existing.status || 'unpaid';
 
-        if (curTarget !== targetAmount || curPaid !== paidAmount || curStatus !== expectedStatus) {
+        const updateFields = {
+          target_amount: targetAmount,
+          paid_amount: paidAmount,
+          total_donated: paidAmount,
+          status: expectedStatus
+        };
+        if (d.name && d.name.trim() && d.name.trim() !== existing.name) updateFields.name = d.name.trim();
+        if (d.mobile !== undefined && d.mobile.trim() !== (existing.mobile || '')) updateFields.mobile = d.mobile.trim();
+        if (d.area && d.area.trim()) updateFields.area = d.area.trim();
+        if (d.address !== undefined) updateFields.address = d.address.trim();
+
+        if (curTarget !== targetAmount || curPaid !== paidAmount || curStatus !== expectedStatus || updateFields.name || updateFields.mobile) {
           donorUpdates.push(
-            db.from('donors').update({
-              target_amount: targetAmount,
-              paid_amount: paidAmount,
-              total_donated: paidAmount,
-              status: expectedStatus
-            }).eq('id', existing.id)
+            db.from('donors').update(updateFields).eq('id', existing.id)
           );
         }
+
       }
     }
 

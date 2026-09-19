@@ -584,6 +584,68 @@ export async function request(endpoint, options = {}) {
             } catch (e) {}
           }
 
+          // Immediately sync local store on donor update (PUT /donors)
+          if (options.method === 'PUT' && endpoint.includes('/donors')) {
+            try {
+              const bodyData = typeof options.body === 'string' ? JSON.parse(options.body) : (options.body || {});
+              const parts = endpoint.split('?')[0].split('/');
+              const urlDonorId = parts[parts.length - 1];
+              let localDonors = getLocalStore('donors', []);
+              const updatedRow = data.data || {};
+
+              localDonors = localDonors.map(d => {
+                const matchId = (urlDonorId && String(d.id) === String(urlDonorId)) || (bodyData.id && String(d.id) === String(bodyData.id));
+                const matchName = (bodyData.originalName && d.name?.toLowerCase() === bodyData.originalName?.toLowerCase()) ||
+                                  (bodyData.name && d.name?.toLowerCase() === bodyData.name?.toLowerCase());
+                const matchMobile = bodyData.mobile && d.mobile && (d.mobile.replace(/\D/g, '') === bodyData.mobile.replace(/\D/g, ''));
+
+                if (matchId || matchName || matchMobile) {
+                  const target = bodyData.target_amount !== undefined ? Number(bodyData.target_amount) : (updatedRow.target_amount !== undefined ? Number(updatedRow.target_amount) : Number(d.target_amount || 500));
+                  const paid = bodyData.paid_amount !== undefined ? Number(bodyData.paid_amount) : (updatedRow.paid_amount !== undefined ? Number(updatedRow.paid_amount) : Number(d.paid_amount || 0));
+                  return {
+                    ...d,
+                    ...updatedRow,
+                    name: bodyData.name || updatedRow.name || d.name,
+                    mobile: bodyData.mobile !== undefined ? bodyData.mobile : (updatedRow.mobile || d.mobile),
+                    area: bodyData.area || updatedRow.area || d.area,
+                    address: bodyData.address !== undefined ? bodyData.address : (updatedRow.address || d.address),
+                    target_amount: target,
+                    paid_amount: paid,
+                    pending_amount: Math.max(0, target - paid),
+                    status: (paid >= target && target > 0) ? 'paid' : (paid > 0 ? 'partial' : 'unpaid')
+                  };
+                }
+                return d;
+              });
+
+              localStorage.setItem('shirol_donors', JSON.stringify(localDonors));
+
+              if (bodyData.name && ((bodyData.originalName && bodyData.name !== bodyData.originalName) || urlDonorId)) {
+                let localIncome = getLocalStore('income', []);
+                localIncome = localIncome.map(inc => {
+                  const matchInc = (bodyData.originalName && inc.donor_name?.toLowerCase() === bodyData.originalName?.toLowerCase()) ||
+                                   (urlDonorId && String(inc.donor_id) === String(urlDonorId));
+                  if (matchInc) {
+                    return {
+                      ...inc,
+                      donor_name: bodyData.name,
+                      mobile: bodyData.mobile !== undefined ? bodyData.mobile : inc.mobile,
+                      address: bodyData.address !== undefined ? bodyData.address : inc.address
+                    };
+                  }
+                  return inc;
+                });
+                localStorage.setItem('shirol_income', JSON.stringify(localIncome));
+              }
+
+              window.dispatchEvent(new Event('shirol_data_updated'));
+              window.dispatchEvent(new Event('storage'));
+            } catch (e) {
+              console.warn('Local store update on PUT /donors error:', e);
+            }
+          }
+
+
           // Immediately sync local store on expense approval/rejection
           if (options.method === 'PUT' && endpoint.includes('/expenses/') && (endpoint.includes('/approve') || endpoint.includes('/reject'))) {
             const parts = endpoint.split('/');
@@ -1683,17 +1745,26 @@ export async function request(endpoint, options = {}) {
     }
 
     if (options.method === 'PUT') {
-      const parts = endpoint.split('/');
-      const donorId = parts[2];
+      const parts = endpoint.split('?')[0].split('/');
+      const donorId = parts[parts.length - 1];
       const bodyData = JSON.parse(options.body || '{}');
 
       donorsList = donorsList.map(d => {
-        if (String(d.id) === String(donorId) || (bodyData.id && String(d.id) === String(bodyData.id)) || d.name === bodyData.name) {
-          const newTarget = bodyData.target_amount !== undefined ? Number(bodyData.target_amount) : (bodyData.amount !== undefined ? Number(bodyData.amount) : (bodyData.total_donated !== undefined ? Number(bodyData.total_donated) : d.target_amount));
+        const matchId = (donorId && String(d.id) === String(donorId)) || (bodyData.id && String(d.id) === String(bodyData.id));
+        const matchName = (bodyData.originalName && d.name?.toLowerCase() === bodyData.originalName?.toLowerCase()) ||
+                          (bodyData.name && d.name?.toLowerCase() === bodyData.name?.toLowerCase());
+        const matchMobile = bodyData.mobile && d.mobile && (d.mobile.replace(/\D/g, '') === bodyData.mobile.replace(/\D/g, ''));
+
+        if (matchId || matchName || matchMobile) {
+          const target = bodyData.target_amount !== undefined ? Number(bodyData.target_amount) : Number(d.target_amount || 500);
+          const paid = bodyData.paid_amount !== undefined ? Number(bodyData.paid_amount) : Number(d.paid_amount || d.total_donated || 0);
           return {
             ...d,
-            target_amount: newTarget,
-            total_donated: newTarget,
+            target_amount: target,
+            total_donated: paid,
+            paid_amount: paid,
+            pending_amount: Math.max(0, target - paid),
+            status: (paid >= target && target > 0) ? 'paid' : (paid > 0 ? 'partial' : 'unpaid'),
             name: bodyData.name || d.name,
             mobile: bodyData.mobile !== undefined ? bodyData.mobile : d.mobile,
             area: bodyData.area || d.area,
@@ -1705,13 +1776,32 @@ export async function request(endpoint, options = {}) {
 
       setLocalStore('donors', donorsList);
 
+      if (bodyData.name && ((bodyData.originalName && bodyData.name !== bodyData.originalName) || donorId)) {
+        let localIncome = getLocalStore('income', []);
+        localIncome = localIncome.map(inc => {
+          const matchInc = (bodyData.originalName && inc.donor_name?.toLowerCase() === bodyData.originalName?.toLowerCase()) ||
+                           (donorId && String(inc.donor_id) === String(donorId));
+          if (matchInc) {
+            return {
+              ...inc,
+              donor_name: bodyData.name,
+              mobile: bodyData.mobile !== undefined ? bodyData.mobile : inc.mobile,
+              address: bodyData.address !== undefined ? bodyData.address : inc.address
+            };
+          }
+          return inc;
+        });
+        setLocalStore('income', localIncome);
+      }
+
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('shirol_data_updated'));
         window.dispatchEvent(new Event('storage'));
       }
 
-      return { success: true, message: 'देणगीदाराची नक्की केलेली वर्गणी रक्कम यशस्वीरित्या अद्ययावत केली!', data: donorsList };
+      return { success: true, message: 'देणगीदाराची माहिती यशस्वीरित्या अद्ययावत केली!', data: donorsList };
     }
+
 
     if (options.method === 'DELETE') {
       handleLocalDonorDeletion(endpoint, options);

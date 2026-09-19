@@ -2,13 +2,18 @@ import { db } from '../database/db.js';
 import { numberToWordsMarathi, numberToWordsEnglish } from '../utils/marathiNumberWords.js';
 import { logAudit } from '../middleware/auditMiddleware.js';
 import { uploadFileToSupabase } from '../middleware/uploadMiddleware.js';
-import { istDayBounds, safeSearchTerm, sum, throwIfError } from '../utils/dbHelpers.js';
+import { istDayBounds, safeSearchTerm, sum, throwIfError, expandBilingualSearchTerms } from '../utils/dbHelpers.js';
 
 function applyIncomeFilters(query, filters) {
   const { search, category, payment_method, startDate, endDate, donor_id } = filters;
   if (search) {
     const s = safeSearchTerm(search);
-    query = query.or(`donor_name.ilike.%${s}%,mobile.ilike.%${s}%,receipt_number.ilike.%${s}%,transaction_id.ilike.%${s}%,address.ilike.%${s}%`);
+    const searchTerms = expandBilingualSearchTerms(s);
+    const clauses = searchTerms.map(term => {
+      const safeTerm = safeSearchTerm(term);
+      return `donor_name.ilike.%${safeTerm}%,mobile.ilike.%${safeTerm}%,receipt_number.ilike.%${safeTerm}%,transaction_id.ilike.%${safeTerm}%,address.ilike.%${safeTerm}%`;
+    }).join(',');
+    query = query.or(clauses);
   }
   if (category) query = query.eq('category', category);
   if (payment_method) query = query.eq('payment_method', payment_method);
@@ -17,6 +22,7 @@ function applyIncomeFilters(query, filters) {
   if (endDate) query = query.lt('created_at', istDayBounds(endDate).end);
   return query;
 }
+
 
 export async function getIncomeList(req, res) {
   try {
@@ -219,3 +225,56 @@ export async function deleteIncome(req, res) {
     return res.status(500).json({ success: false, message: 'व्यवहार हटवताना त्रुटी.' });
   }
 }
+
+export async function updateIncome(req, res) {
+  try {
+    const { id } = req.params;
+    const { donor_name, mobile, address, amount, category, purpose, notes, payment_method } = req.body;
+    const { data: tx, error } = await db.from('income_transactions').select('*').eq('id', id).eq('is_deleted', false).maybeSingle();
+    throwIfError(error);
+    if (!tx) return res.status(404).json({ success: false, message: 'व्यवहार सापडला नाही.' });
+
+    const updatePayload = {};
+    if (donor_name !== undefined) updatePayload.donor_name = donor_name.trim();
+    if (mobile !== undefined) updatePayload.mobile = mobile.trim();
+    if (address !== undefined) updatePayload.address = address.trim();
+    if (amount !== undefined) updatePayload.amount = Number(amount);
+    if (category !== undefined) updatePayload.category = category.trim();
+    if (purpose !== undefined) updatePayload.purpose = purpose.trim();
+    if (notes !== undefined) updatePayload.notes = notes.trim();
+    if (payment_method !== undefined) updatePayload.payment_method = payment_method.trim();
+
+    const { data: updated, error: updateError } = await db.from('income_transactions').update(updatePayload).eq('id', id).select('*').single();
+    throwIfError(updateError);
+
+    // Update matching receipt
+    if (tx.receipt_id || tx.receipt_number) {
+      const receiptUpdate = {};
+      if (updatePayload.donor_name) receiptUpdate.donor_name = updatePayload.donor_name;
+      if (updatePayload.mobile !== undefined) receiptUpdate.mobile = updatePayload.mobile;
+      if (updatePayload.address !== undefined) receiptUpdate.address = updatePayload.address;
+      if (updatePayload.amount !== undefined) {
+        receiptUpdate.amount = updatePayload.amount;
+        receiptUpdate.amount_in_words_mr = numberToWordsMarathi(updatePayload.amount);
+        receiptUpdate.amount_in_words_en = numberToWordsEnglish(updatePayload.amount);
+      }
+      if (updatePayload.category) receiptUpdate.category = updatePayload.category;
+      if (updatePayload.purpose) receiptUpdate.purpose = updatePayload.purpose;
+      if (updatePayload.payment_method) receiptUpdate.payment_method = updatePayload.payment_method;
+
+      if (Object.keys(receiptUpdate).length > 0) {
+        if (tx.receipt_id) {
+          await db.from('receipts').update(receiptUpdate).eq('id', tx.receipt_id);
+        } else if (tx.receipt_number) {
+          await db.from('receipts').update(receiptUpdate).eq('receipt_number', tx.receipt_number);
+        }
+      }
+    }
+
+    return res.json({ success: true, message: 'व्यवहार यशस्वीरित्या अद्ययावत केला / Transaction updated successfully.', data: updated });
+  } catch (err) {
+    console.error('updateIncome error:', err);
+    return res.status(500).json({ success: false, message: 'व्यवहार अद्ययावत करताना त्रुटी.' });
+  }
+}
+

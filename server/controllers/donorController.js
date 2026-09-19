@@ -1,14 +1,20 @@
 import { db } from '../database/db.js';
-import { safeSearchTerm, sum, throwIfError } from '../utils/dbHelpers.js';
+import { safeSearchTerm, sum, throwIfError, expandBilingualSearchTerms } from '../utils/dbHelpers.js';
 
 function applyDonorFilters(query, search, area) {
   if (search) {
     const s = safeSearchTerm(search);
-    query = query.or(`name.ilike.%${s}%,mobile.ilike.%${s}%,area.ilike.%${s}%,address.ilike.%${s}%`);
+    const searchTerms = expandBilingualSearchTerms(s);
+    const clauses = searchTerms.map(term => {
+      const safeTerm = safeSearchTerm(term);
+      return `name.ilike.%${safeTerm}%,mobile.ilike.%${safeTerm}%,area.ilike.%${safeTerm}%,address.ilike.%${safeTerm}%`;
+    }).join(',');
+    query = query.or(clauses);
   }
   if (area) query = query.eq('area', area);
   return query;
 }
+
 
 export async function getDonorsList(req, res) {
   try {
@@ -61,7 +67,16 @@ export async function searchDonors(req, res) {
     const q = req.query.q || '';
     if (q.trim().length < 2) return res.json({ success: true, data: [] });
     const s = safeSearchTerm(q);
-    const { data, error } = await db.from('donors').select('id, name, mobile, address, area, total_donated, donations_count, last_donated_at').or(`name.ilike.%${s}%,mobile.ilike.%${s}%,area.ilike.%${s}%`).order('total_donated', { ascending: false }).limit(10);
+    const searchTerms = expandBilingualSearchTerms(s);
+    const clauses = searchTerms.map(term => {
+      const safeTerm = safeSearchTerm(term);
+      return `name.ilike.%${safeTerm}%,mobile.ilike.%${safeTerm}%,area.ilike.%${safeTerm}%`;
+    }).join(',');
+    const { data, error } = await db.from('donors')
+      .select('id, name, mobile, address, area, total_donated, donations_count, last_donated_at')
+      .or(clauses)
+      .order('total_donated', { ascending: false })
+      .limit(10);
     throwIfError(error);
     return res.json({ success: true, data: data || [] });
   } catch (err) {
@@ -69,6 +84,7 @@ export async function searchDonors(req, res) {
     return res.status(500).json({ success: false, message: 'शोधताना त्रुटी' });
   }
 }
+
 
 export async function getDonorById(req, res) {
   try {
@@ -172,31 +188,109 @@ export async function createDonor(req, res) {
 export async function updateDonor(req, res) {
   try {
     const { id } = req.params;
-    const { name, mobile, email = '', address = '', area = '', notes = '', target_amount } = req.body;
-    const { data: donor, error } = await db.from('donors').select('*').eq('id', id).maybeSingle();
-    throwIfError(error);
-    if (!donor) return res.status(404).json({ success: false, message: 'देणगीदार सापडला नाही.' });
+    const {
+      name,
+      mobile,
+      email,
+      address,
+      area,
+      notes,
+      target_amount,
+      paid_amount,
+      category,
+      originalName
+    } = req.body;
 
-    const updatePayload = {
-      name: name?.trim() || donor.name,
-      mobile: mobile?.trim() || donor.mobile,
-      email: email.trim(),
-      address: address.trim(),
-      area: area.trim(),
-      notes: notes.trim()
-    };
-    if (target_amount !== undefined) {
-      updatePayload.target_amount = Number(target_amount);
+    let donor = null;
+    // 1. Try finding by ID if it's a standard numeric database ID (< 1,000,000,000)
+    if (id && Number(id) < 1000000000) {
+      const { data } = await db.from('donors').select('*').eq('id', id).maybeSingle();
+      donor = data;
     }
 
-    const { data: updated, error: updateError } = await db.from('donors').update(updatePayload).eq('id', id).select('*').single();
+    // 2. If not found by ID, try finding by originalName or current name
+    const targetName = (originalName || name)?.trim();
+    if (!donor && targetName) {
+      const { data } = await db.from('donors').select('*').ilike('name', targetName).maybeSingle();
+      donor = data;
+    }
+
+    // 3. Fallback: try finding by mobile
+    const cleanMobile = mobile ? mobile.trim() : '';
+    if (!donor && cleanMobile) {
+      const { data } = await db.from('donors').select('*').eq('mobile', cleanMobile).maybeSingle();
+      donor = data;
+    }
+
+    // 4. If still not found and valid name provided, insert as new donor
+    if (!donor) {
+      if (!name?.trim()) {
+        return res.status(404).json({ success: false, message: 'देणगीदार सापडला नाही.' });
+      }
+      const target = Number(target_amount || 500);
+      const paid = Number(paid_amount || 0);
+      const { data: created, error: createError } = await db.from('donors').insert({
+        name: name.trim(),
+        mobile: cleanMobile,
+        email: (email || '').trim(),
+        address: (address || '').trim(),
+        area: (area || 'शिरोळ').trim(),
+        notes: (notes || '').trim(),
+        target_amount: target,
+        paid_amount: paid,
+        total_donated: paid,
+        donations_count: paid > 0 ? 1 : 0,
+        status: (paid >= target && target > 0) ? 'paid' : (paid > 0 ? 'partial' : 'unpaid')
+      }).select('*').single();
+      throwIfError(createError);
+      return res.json({ success: true, message: 'देणगीदार यशस्वीरित्या तयार केला', data: created });
+    }
+
+    // 5. Update donor with provided fields only (never wipe non-provided fields to '')
+    const updatePayload = {};
+    if (name !== undefined && name.trim()) updatePayload.name = name.trim();
+    if (mobile !== undefined) updatePayload.mobile = mobile.trim();
+    if (email !== undefined) updatePayload.email = email.trim();
+    if (address !== undefined) updatePayload.address = address.trim();
+    if (area !== undefined) updatePayload.area = area.trim();
+    if (notes !== undefined) updatePayload.notes = notes.trim();
+    if (target_amount !== undefined) updatePayload.target_amount = Number(target_amount);
+    if (paid_amount !== undefined) updatePayload.paid_amount = Number(paid_amount);
+
+    const effectiveTarget = updatePayload.target_amount !== undefined ? updatePayload.target_amount : Number(donor.target_amount || 500);
+    const effectivePaid = updatePayload.paid_amount !== undefined ? updatePayload.paid_amount : Number(donor.paid_amount || donor.total_donated || 0);
+    updatePayload.status = (effectivePaid >= effectiveTarget && effectiveTarget > 0) ? 'paid' : (effectivePaid > 0 ? 'partial' : 'unpaid');
+
+    const { data: updated, error: updateError } = await db.from('donors').update(updatePayload).eq('id', donor.id).select('*').single();
     throwIfError(updateError);
+
+    // 6. Cascade update to linked transactions and receipts if name, mobile, address, or category changed
+    const oldName = donor.name;
+    const newName = updatePayload.name || oldName;
+    const newMobile = updatePayload.mobile !== undefined ? updatePayload.mobile : donor.mobile;
+    const newAddress = updatePayload.address !== undefined ? updatePayload.address : donor.address;
+
+    const txUpdates = {};
+    if (newName) txUpdates.donor_name = newName;
+    if (newMobile) txUpdates.mobile = newMobile;
+    if (newAddress) txUpdates.address = newAddress;
+    if (category) txUpdates.category = category;
+
+    if (Object.keys(txUpdates).length > 0) {
+      await db.from('income_transactions').update(txUpdates).eq('donor_id', donor.id);
+      if (oldName) {
+        await db.from('income_transactions').update(txUpdates).ilike('donor_name', oldName);
+        await db.from('receipts').update(txUpdates).ilike('donor_name', oldName);
+      }
+    }
+
     return res.json({ success: true, message: 'माहिती अद्ययावत केली / Donor updated successfully', data: updated });
   } catch (err) {
     console.error('updateDonor error:', err);
     return res.status(500).json({ success: false, message: 'अद्ययावत करताना त्रुटी' });
   }
 }
+
 
 export async function deleteDonor(req, res) {
   try {

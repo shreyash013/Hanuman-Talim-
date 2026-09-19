@@ -42,3 +42,54 @@ export function countByAndSum(rows, keyName, amountName = 'amount') {
   }
   return [...map.values()];
 }
+
+export function expandBilingualSearchTerms(searchTerm = '') {
+  if (!searchTerm) return [];
+  const s = String(searchTerm).trim();
+  if (!s) return [];
+  const terms = new Set([s]);
+
+  // Transliteration pairs for common Marathi names/surnames in Shirol Mandal
+  const pairs = [
+    ['पृथ्वीराज', 'Prithviraj'],
+    ['गवडे', 'Gavade'],
+    ['गावडे', 'Gavade'],
+    ['माने', 'Mane'],
+    ['दुबल', 'Dubal'],
+    ['इंगळे', 'Ingale'],
+    ['इंगले', 'Ingale'],
+    ['निखिल', 'Nikhil'],
+    ['शिवराज', 'Shivraj'],
+    ['अथर्व', 'Atharv'],
+    ['विशाल', 'Vishal'],
+    ['महेश', 'Mahesh'],
+    ['दीपक', 'Deepak'],
+    ['ओमकार', 'Omkar'],
+    ['फत्तेसिंग', 'Fattesing'],
+    ['सुरज', 'Suraj'],
+    ['प्रतिक', 'Pratik'],
+    ['वैभव', 'Vaibhav'],
+    ['प्रसाद', 'Prasad'],
+    ['सचिन', 'Sachin'],
+    ['प्रवीण', 'Pravin'],
+    ['प्रविण', 'Pravin'],
+    ['अंबादास', 'Ambadas'],
+    ['सुमेध', 'Sumedh'],
+    ['श्रेयश', 'Shreyash'],
+    ['श्रेयस', 'Shreyash']
+  ];
+
+  for (const [mr, en] of pairs) {
+    if (s.includes(mr)) {
+      terms.add(s.replace(new RegExp(mr, 'g'), en));
+      terms.add(en);
+    }
+    if (s.toLowerCase().includes(en.toLowerCase())) {
+      terms.add(s.replace(new RegExp(en, 'gi'), mr));
+      terms.add(mr);
+    }
+  }
+
+  return Array.from(terms).filter(Boolean);
+}
+

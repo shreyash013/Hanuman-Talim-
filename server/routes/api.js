@@ -53,7 +53,9 @@ router.delete('/users/:id', requireRoles('admin'), authController.deleteUser);
 router.get('/dashboard/stats', dashboardController.getDashboardStats);
 router.get('/income', incomeController.getIncomeList);
 router.post('/income', upload.single('attachment'), incomeController.createIncome);
+router.put('/income/:id', requireRoles('admin', 'treasurer'), incomeController.updateIncome);
 router.delete('/income/:id', requireRoles('admin'), incomeController.deleteIncome);
+
 router.get('/donors', donorController.getDonorsList);
 router.get('/donors/search', donorController.searchDonors);
 router.get('/donors/:id', donorController.getDonorById);

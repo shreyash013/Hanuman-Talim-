@@ -21,8 +21,59 @@ import {
   Trash2
 } from 'lucide-react';
 
+// Transliteration pairs for bilingual search
+function expandBilingualSearchTerms(searchTerm = '') {
+  if (!searchTerm) return [];
+  const s = String(searchTerm).trim();
+  if (!s) return [];
+  const terms = new Set([s]);
+
+  const pairs = [
+    ['पृथ्वीराज', 'Prithviraj'],
+    ['गवडे', 'Gavade'],
+    ['गावडे', 'Gavade'],
+    ['माने', 'Mane'],
+    ['दुबल', 'Dubal'],
+    ['इंगळे', 'Ingale'],
+    ['इंगले', 'Ingale'],
+    ['निखिल', 'Nikhil'],
+    ['शिवराज', 'Shivraj'],
+    ['अथर्व', 'Atharv'],
+    ['विशाल', 'Vishal'],
+    ['महेश', 'Mahesh'],
+    ['दीपक', 'Deepak'],
+    ['ओमकार', 'Omkar'],
+    ['फत्तेसिंग', 'Fattesing'],
+    ['सुरज', 'Suraj'],
+    ['प्रतिक', 'Pratik'],
+    ['वैभव', 'Vaibhav'],
+    ['प्रसाद', 'Prasad'],
+    ['सचिन', 'Sachin'],
+    ['प्रवीण', 'Pravin'],
+    ['प्रविण', 'Pravin'],
+    ['अंबादास', 'Ambadas'],
+    ['सुमेध', 'Sumedh'],
+    ['श्रेयश', 'Shreyash'],
+    ['श्रेयस', 'Shreyash']
+  ];
+
+  for (const [mr, en] of pairs) {
+    if (s.includes(mr)) {
+      terms.add(s.replace(new RegExp(mr, 'g'), en));
+      terms.add(en);
+    }
+    if (s.toLowerCase().includes(en.toLowerCase())) {
+      terms.add(s.replace(new RegExp(en, 'gi'), mr));
+      terms.add(mr);
+    }
+  }
+
+  return Array.from(terms).filter(Boolean);
+}
+
 export function DonorsPage() {
   const { t } = useLanguage();
+
   const { showToast } = useNotification();
   const { mandal } = useMandal();
 
@@ -59,7 +110,9 @@ export function DonorsPage() {
   const [editArea, setEditArea] = useState('');
   const [editAddress, setEditAddress] = useState('');
   const [editAmountValue, setEditAmountValue] = useState('');
+  const [editPaidAmountValue, setEditPaidAmountValue] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+
 
   // Profile CRM Modal
   const [selectedDonorProfile, setSelectedDonorProfile] = useState(null);
@@ -272,7 +325,8 @@ export function DonorsPage() {
     setEditMobile(donor.mobile || '');
     setEditArea(donor.area || 'नदीवेस शिरोळ');
     setEditAddress(donor.address || '');
-    setEditAmountValue(donor.target_amount || donor.total_donated || 500);
+    setEditAmountValue(donor.target_amount !== undefined ? donor.target_amount : (donor.total_donated || 500));
+    setEditPaidAmountValue(donor.paid_amount !== undefined ? donor.paid_amount : (donor.total_donated || 0));
     setShowEditAmountModal(true);
   };
 
@@ -284,31 +338,66 @@ export function DonorsPage() {
       showToast('कृपया देणगीदाराचे नाव टाका.', 'warning');
       return;
     }
-    const newAmt = Number(editAmountValue);
-    if (isNaN(newAmt) || newAmt < 0) {
-      showToast('कृपया वैध रक्कम टाका.', 'warning');
+    const newTarget = Number(editAmountValue);
+    const newPaid = Number(editPaidAmountValue);
+    if (isNaN(newTarget) || newTarget < 0) {
+      showToast('कृपया वैध नक्की वर्गणी रक्कम टाका.', 'warning');
       return;
     }
 
+    const originalDonor = editingDonor;
+    const cleanName = editName.trim();
+    const cleanMobile = editMobile.trim();
+    const cleanArea = editArea.trim() || 'नदीवेस शिरोळ';
+    const cleanAddress = editAddress.trim();
+    const paidVal = isNaN(newPaid) ? Number(originalDonor.paid_amount || 0) : Math.max(0, newPaid);
+    const pendingVal = Math.max(0, newTarget - paidVal);
+    const newStatus = (paidVal >= newTarget && newTarget > 0) ? 'paid' : (paidVal > 0 ? 'partial' : 'unpaid');
+
+    // Optimistic instant UI update on donors state
+    setDonors(prev => prev.map(d => {
+      if (d.id === originalDonor.id || d.name === originalDonor.name) {
+        return {
+          ...d,
+          name: cleanName,
+          mobile: cleanMobile,
+          area: cleanArea,
+          address: cleanAddress,
+          target_amount: newTarget,
+          paid_amount: paidVal,
+          pending_amount: pendingVal,
+          status: newStatus
+        };
+      }
+      return d;
+    }));
+
     try {
       setIsSavingEdit(true);
-      const res = await api.put(`/donors/${editingDonor.id}`, {
-        id: editingDonor.id,
-        name: editName.trim(),
-        mobile: editMobile.trim(),
-        area: editArea.trim(),
-        address: editAddress.trim(),
-        target_amount: newAmt
+      const res = await api.put(`/donors/${originalDonor.id}`, {
+        id: originalDonor.id,
+        originalName: originalDonor.name,
+        name: cleanName,
+        mobile: cleanMobile,
+        area: cleanArea,
+        address: cleanAddress,
+        target_amount: newTarget,
+        paid_amount: paidVal,
+        status: newStatus
       });
 
-      if (res.success) {
-        showToast(`'${editName}' यांची माहिती यशस्वीरित्या अद्ययावत केली!`, 'success');
+      if (res && res.success !== false) {
+        showToast(`'${cleanName}' यांची माहिती यशस्वीरित्या अद्ययावत केली!`, 'success');
         setShowEditAmountModal(false);
         setEditingDonor(null);
+        fetchDonors();
+      } else {
+        showToast(res?.message || 'माहिती बदलताना त्रुटी.', 'error');
         fetchDonors();
       }
     } catch (err) {
       showToast(err.message || 'माहिती बदलताना त्रुटी.', 'error');
+      fetchDonors();
     } finally {
       setIsSavingEdit(false);
     }
@@ -337,8 +426,25 @@ export function DonorsPage() {
   const filteredDonors = donors.filter((d) => {
     if (areaFilter !== 'all' && (d.area || 'शिरोळ') !== areaFilter) return false;
     if (statusFilter !== 'all' && (d.status || 'unpaid') !== statusFilter) return false;
+    if (search && search.trim()) {
+      const terms = expandBilingualSearchTerms(search.trim());
+      const dName = (d.name || '').toLowerCase();
+      const dMobile = (d.mobile || '').replace(/\D/g, '');
+      const dArea = (d.area || '').toLowerCase();
+      const dAddress = (d.address || '').toLowerCase();
+      const qDigits = search.replace(/\D/g, '');
+
+      const matchesTerm = terms.some(t => {
+        const cleanT = t.toLowerCase();
+        return dName.includes(cleanT) || dArea.includes(cleanT) || dAddress.includes(cleanT);
+      });
+      const matchesPhone = qDigits.length >= 3 && dMobile.includes(qDigits);
+
+      if (!matchesTerm && !matchesPhone) return false;
+    }
     return true;
   });
+
 
   // WhatsApp Thank You Message
   const sendWhatsAppThankYou = (donor) => {
@@ -816,22 +922,48 @@ export function DonorsPage() {
             </div>
           </div>
 
-          <div>
-            <label className="text-slate-300 font-bold block mb-1">
-              💰 नक्की वर्गणी रक्कम (Target Vargani Amount in ₹) *
-            </label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-amber-400 font-extrabold text-base">₹</span>
-              <input
-                type="number"
-                required
-                value={editAmountValue}
-                onChange={(e) => setEditAmountValue(e.target.value)}
-                placeholder="500"
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-8 pr-4 py-2.5 text-white font-black text-lg focus:outline-none focus:border-amber-500"
-              />
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-slate-300 font-bold block mb-1">
+                💰 नक्की वर्गणी (Target ₹) *
+              </label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-amber-400 font-extrabold text-base">₹</span>
+                <input
+                  type="number"
+                  required
+                  value={editAmountValue}
+                  onChange={(e) => setEditAmountValue(e.target.value)}
+                  placeholder="500"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-8 pr-3 py-2.5 text-white font-black text-base focus:outline-none focus:border-amber-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-slate-300 font-bold block mb-1">
+                ✅ जमा वर्गणी (Paid ₹)
+              </label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-emerald-400 font-extrabold text-base">₹</span>
+                <input
+                  type="number"
+                  value={editPaidAmountValue}
+                  onChange={(e) => setEditPaidAmountValue(e.target.value)}
+                  placeholder="0"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-8 pr-3 py-2.5 text-white font-black text-base focus:outline-none focus:border-emerald-500"
+                />
+              </div>
             </div>
           </div>
+
+          <div className="flex items-center justify-between px-3 py-2 bg-slate-900 rounded-xl border border-slate-800 text-[11px]">
+            <span className="text-slate-400 font-bold">शिल्लक बाकी (Pending):</span>
+            <span className={`font-black text-sm ${Math.max(0, Number(editAmountValue || 0) - Number(editPaidAmountValue || 0)) > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+              ₹{Math.max(0, Number(editAmountValue || 0) - Number(editPaidAmountValue || 0)).toLocaleString('en-IN')}
+            </span>
+          </div>
+
 
           {/* Quick Preset Amount Buttons */}
           <div>
