@@ -638,6 +638,40 @@ export async function request(endpoint, options = {}) {
                 localStorage.setItem('shirol_income', JSON.stringify(localIncome));
               }
 
+              // Also cascade paid_amount changes to the local income store (most recent entry)
+              if (bodyData.paid_amount !== undefined) {
+                // Find the existing donor before update to get old paid amount
+                const preUpdateDonor = getLocalStore('donors', []).find(d =>
+                  (urlDonorId && String(d.id) === String(urlDonorId)) ||
+                  (bodyData.originalName && d.name?.toLowerCase() === bodyData.originalName?.toLowerCase())
+                );
+                const oldPaid = Number(preUpdateDonor?.paid_amount || preUpdateDonor?.total_donated || 0);
+                const newPaid = Number(bodyData.paid_amount);
+                if (newPaid !== oldPaid && Math.abs(newPaid - oldPaid) > 0) {
+                  let localIncome = getLocalStore('income', []);
+                  let updated = false;
+                  // Update only the most recent matching transaction amount
+                  const sorted = [...localIncome].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+                  const mostRecentMatch = sorted.find(inc =>
+                    !inc.is_deleted && (
+                      (urlDonorId && String(inc.donor_id) === String(urlDonorId)) ||
+                      (bodyData.originalName && inc.donor_name?.toLowerCase() === bodyData.originalName?.toLowerCase()) ||
+                      (bodyData.name && inc.donor_name?.toLowerCase() === bodyData.name?.toLowerCase())
+                    )
+                  );
+                  if (mostRecentMatch) {
+                    const diff = newPaid - oldPaid;
+                    const newAmt = Math.max(0, (Number(mostRecentMatch.amount) || 0) + diff);
+                    localIncome = localIncome.map(inc =>
+                      inc === mostRecentMatch || (inc.id && inc.id === mostRecentMatch.id)
+                        ? { ...inc, amount: newAmt }
+                        : inc
+                    );
+                    localStorage.setItem('shirol_income', JSON.stringify(localIncome));
+                  }
+                }
+              }
+
               window.dispatchEvent(new Event('shirol_data_updated'));
               window.dispatchEvent(new Event('storage'));
             } catch (e) {

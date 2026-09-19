@@ -52,7 +52,7 @@ export function DigitalReceipt({ receipt, mandal, receiptRef }) {
       <div className="absolute -bottom-12 -left-12 w-40 h-40 bg-orange-500/20 rounded-full blur-3xl pointer-events-none" />
 
       {/* Main Inner Border Frame */}
-      <div className="border-2 border-amber-600/30 rounded-2xl p-4 space-y-4 bg-white/95 backdrop-blur-sm relative z-10 shadow-sm">
+      <div className="border-2 border-amber-600/30 rounded-2xl p-4 space-y-4 bg-white relative z-10 shadow-sm">
         
         {/* Top Header Row with Logo & Mandal Info */}
         <div className="flex items-center gap-4 pb-3 border-b-2 border-amber-500/30">

@@ -83,11 +83,15 @@ export function openWhatsAppReceipt(receipt, mandal, autoSend = true, options = 
   const message = buildWhatsAppReceiptMessage(receipt, mandal);
   const encodedText = encodeURIComponent(message);
 
+  const isMobile = typeof navigator !== 'undefined' && /android|iphone|ipad|ipod/i.test(navigator.userAgent || '');
+
   let targetUrl = '';
   if (formattedNum) {
-    if (options.useAppProtocol) {
+    if (isMobile) {
+      // On mobile: use whatsapp:// deep link to directly open the WhatsApp app with the contact
       targetUrl = `whatsapp://send?phone=${formattedNum}&text=${encodedText}`;
     } else {
+      // On desktop: use api.whatsapp.com which pre-fills the contact number
       targetUrl = `https://api.whatsapp.com/send?phone=${formattedNum}&text=${encodedText}`;
     }
   } else {
@@ -95,9 +99,7 @@ export function openWhatsAppReceipt(receipt, mandal, autoSend = true, options = 
   }
 
   if (autoSend && typeof window !== 'undefined') {
-    const isMobile = /android|iphone|ipad|ipod/i.test(navigator.userAgent || '');
     if (isMobile) {
-      // On mobile devices, window.location.href seamlessly opens the WhatsApp app directly without popup blockers
       window.location.href = targetUrl;
     } else {
       window.open(targetUrl, '_blank');
@@ -107,20 +109,50 @@ export function openWhatsAppReceipt(receipt, mandal, autoSend = true, options = 
 }
 
 /**
- * Generates an ultra high-definition (HD 3x) HTML canvas element from receipt DOM ref
+ * Generates an ultra high-definition (HD 2x) HTML canvas element from receipt DOM ref
  */
 export async function generateReceiptCanvas(receiptElement) {
   if (!receiptElement) throw new Error('Receipt element not found');
 
+  // Scroll element into view and wait for all CSS transitions to finish
+  receiptElement.scrollIntoView({ block: 'center' });
+  await new Promise(resolve => setTimeout(resolve, 120));
+
+  const elemRect = receiptElement.getBoundingClientRect();
+
   return await html2canvas(receiptElement, {
-    scale: 2, // Ultra HD Retina 2x (Crystal-clear & 100% reliable on all mobile phones)
+    scale: 2,
     useCORS: true,
     logging: false,
     backgroundColor: '#ffffff',
     allowTaint: true,
-    scrollX: 0,
-    scrollY: 0,
-    windowWidth: receiptElement.scrollWidth || 540
+    foreignObjectRendering: false,
+    imageTimeout: 0,
+    scrollX: -window.scrollX,
+    scrollY: -window.scrollY,
+    x: 0,
+    y: 0,
+    width: elemRect.width || receiptElement.scrollWidth || 540,
+    height: elemRect.height || receiptElement.scrollHeight,
+    windowWidth: document.documentElement.scrollWidth,
+    windowHeight: document.documentElement.scrollHeight,
+    onclone: (clonedDoc) => {
+      // Remove backdrop-blur and similar filters that html2canvas can't render
+      clonedDoc.querySelectorAll('*').forEach(el => {
+        const style = el.style;
+        if (style) {
+          if (style.backdropFilter) style.backdropFilter = 'none';
+          if (style.webkitBackdropFilter) style.webkitBackdropFilter = 'none';
+        }
+        // Also remove from computed styles via class override
+        const cls = el.getAttribute('class') || '';
+        if (cls.includes('backdrop-blur') || cls.includes('backdrop-filter')) {
+          el.style.backdropFilter = 'none';
+          el.style.webkitBackdropFilter = 'none';
+          el.style.background = el.style.background || '#ffffff';
+        }
+      });
+    }
   });
 }
 
@@ -271,13 +303,17 @@ export async function shareReceiptFile(receiptElement, receipt, mandal, format =
     console.warn('Clipboard write failed:', clipErr);
   }
 
-  // c) Open WhatsApp chat for recipient
+  // c) Open WhatsApp chat directly to the recipient's number
   if (formattedNum) {
-    const isMobile = /android|iphone|ipad|ipod/i.test(navigator.userAgent || '');
-    const targetUrl = isMobile
+    const isMobile2 = /android|iphone|ipad|ipod/i.test(navigator.userAgent || '');
+    const targetUrl = isMobile2
       ? `whatsapp://send?phone=${formattedNum}`
-      : `https://web.whatsapp.com/send?phone=${formattedNum}`;
-    window.open(targetUrl, '_blank');
+      : `https://api.whatsapp.com/send?phone=${formattedNum}`;
+    if (isMobile2) {
+      window.location.href = targetUrl;
+    } else {
+      window.open(targetUrl, '_blank');
+    }
   } else {
     window.open('https://web.whatsapp.com', '_blank');
   }

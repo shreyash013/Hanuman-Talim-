@@ -123,7 +123,9 @@ export function DonorsPage() {
   const fetchDonors = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/donors', { search });
+      const queryParams = { search };
+      if (areaFilter && areaFilter !== 'all') queryParams.area = areaFilter;
+      const res = await api.get('/donors', queryParams);
       if (res.success) {
         let donorsList = res.data || [];
 
@@ -197,7 +199,7 @@ export function DonorsPage() {
 
   useEffect(() => {
     fetchDonors();
-  }, [search]);
+  }, [search, areaFilter]);
 
   useEffect(() => {
     // Auto-sync bidirectional on mount in background

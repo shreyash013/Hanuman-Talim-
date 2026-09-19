@@ -298,10 +298,46 @@ export async function updateDonor(req, res) {
     if (category) txUpdates.category = category;
 
     if (Object.keys(txUpdates).length > 0) {
-      await db.from('income_transactions').update(txUpdates).eq('donor_id', donor.id);
+      await db.from('income_transactions').update(txUpdates).eq('donor_id', donor.id).eq('is_deleted', false);
       if (oldName) {
-        await db.from('income_transactions').update(txUpdates).ilike('donor_name', oldName);
-        await db.from('receipts').update(txUpdates).ilike('donor_name', oldName);
+        await db.from('income_transactions').update(txUpdates).ilike('donor_name', oldName).eq('is_deleted', false);
+        await db.from('receipts').update({ donor_name: newName, mobile: newMobile, address: newAddress }).ilike('donor_name', oldName);
+      }
+    }
+
+    // 7. If paid_amount changed, cascade the new amount to the most recent income transaction & receipt
+    const oldPaid = Number(donor.paid_amount || donor.total_donated || 0);
+    const newPaid = updatePayload.paid_amount !== undefined ? Number(updatePayload.paid_amount) : oldPaid;
+    if (newPaid !== oldPaid && donor.id) {
+      // Find the most recent income transaction for this donor to update its amount
+      const { data: recentTxRows } = await db.from('income_transactions')
+        .select('id, amount, receipt_id, receipt_number')
+        .eq('donor_id', donor.id)
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      const recentTx = recentTxRows?.[0];
+      if (recentTx) {
+        // Calculate the new transaction amount: adjust by the difference
+        const diff = newPaid - oldPaid;
+        const newTxAmount = Math.max(0, Number(recentTx.amount || 0) + diff);
+        await db.from('income_transactions').update({ amount: newTxAmount }).eq('id', recentTx.id);
+        // Also update the linked receipt
+        if (recentTx.receipt_id) {
+          const { numberToWordsMarathi, numberToWordsEnglish } = await import('../utils/marathiNumberWords.js');
+          await db.from('receipts').update({
+            amount: newTxAmount,
+            amount_in_words_mr: numberToWordsMarathi(newTxAmount),
+            amount_in_words_en: numberToWordsEnglish(newTxAmount)
+          }).eq('id', recentTx.receipt_id);
+        } else if (recentTx.receipt_number) {
+          const { numberToWordsMarathi, numberToWordsEnglish } = await import('../utils/marathiNumberWords.js');
+          await db.from('receipts').update({
+            amount: newTxAmount,
+            amount_in_words_mr: numberToWordsMarathi(newTxAmount),
+            amount_in_words_en: numberToWordsEnglish(newTxAmount)
+          }).eq('receipt_number', recentTx.receipt_number);
+        }
       }
     }
 
