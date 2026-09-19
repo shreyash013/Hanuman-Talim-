@@ -92,6 +92,7 @@ export function DonorsPage() {
   const [address, setAddress] = useState('');
   const [area, setArea] = useState('');
   const [singleAmount, setSingleAmount] = useState('2000');
+  const [paidAmount, setPaidAmount] = useState('2000');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -222,7 +223,6 @@ export function DonorsPage() {
     };
   }, []);
 
-  // Single Add Donor submit handler
   const handleAddDonor = async (e) => {
     e.preventDefault();
     if (!donorName.trim() || !mobile.trim()) {
@@ -232,17 +232,41 @@ export function DonorsPage() {
 
     try {
       setIsSubmitting(true);
+      const targetAmt = Number(singleAmount) || 2000;
+      const paidAmt = Number(paidAmount) || 0;
+
+      // 1. Create the donor
       const res = await api.post('/donors', {
         name: donorName.trim(),
         mobile: mobile.trim(),
         email: email.trim(),
         address: address.trim(),
         area: area.trim() || 'शिरोळ',
-        target_amount: Number(singleAmount) || 500,
+        target_amount: targetAmt,
+        paid_amount: paidAmt,
         notes: notes.trim()
       });
 
       if (res.success) {
+        // 2. If paid amount > 0, ALSO create income transaction so it shows in Income Records
+        if (paidAmt > 0) {
+          try {
+            await api.post('/income', {
+              donor_name: donorName.trim(),
+              mobile: mobile.trim(),
+              address: address.trim(),
+              area: area.trim() || 'शिरोळ',
+              amount: paidAmt,
+              payment_method: 'cash',
+              category: 'vargani',
+              purpose: 'श्री गणेशोत्सव वर्गणी',
+              collector_name: 'सुमेध गवडे (अध्यक्ष)'
+            });
+          } catch (incErr) {
+            console.warn('Income record creation failed:', incErr);
+          }
+        }
+
         showToast('देणगीदार यशस्वीरित्या जोडला!', 'success');
         setShowAddModal(false);
         setDonorName('');
@@ -251,7 +275,8 @@ export function DonorsPage() {
         setAddress('');
         setArea('');
         setNotes('');
-        setSingleAmount('500');
+        setSingleAmount('2000');
+        setPaidAmount('2000');
         fetchDonors();
       }
     } catch (err) {
@@ -395,6 +420,27 @@ export function DonorsPage() {
         paid_amount: paidVal,
         status: newStatus
       });
+
+      // If paid_amount changed, create an income transaction for the difference
+      const oldPaid = Number(originalDonor.paid_amount || originalDonor.total_donated || 0);
+      const diff = paidVal - oldPaid;
+      if (diff > 0) {
+        try {
+          await api.post('/income', {
+            donor_name: cleanName,
+            mobile: cleanMobile,
+            address: cleanAddress,
+            area: cleanArea,
+            amount: diff,
+            payment_method: 'cash',
+            category: 'vargani',
+            purpose: 'श्री गणेशोत्सव वर्गणी (सुधारित)',
+            collector_name: 'सुमेध गवडे (अध्यक्ष)'
+          });
+        } catch (incErr) {
+          console.warn('Income record update failed:', incErr);
+        }
+      }
 
       if (res && res.success !== false) {
         showToast(`'${cleanName}' यांची माहिती यशस्वीरित्या अद्ययावत केली!`, 'success');
@@ -1349,6 +1395,34 @@ export function DonorsPage() {
                 सानुकूल
               </button>
             </div>
+          </div>
+
+          <div>
+            <label className="text-emerald-400 block mb-1 font-bold">जमा केलेली रक्कम (Paid / Collected Amount)</label>
+            <input
+              type="number"
+              value={paidAmount}
+              onChange={(e) => setPaidAmount(e.target.value)}
+              placeholder="2000"
+              className="w-full bg-slate-950 border border-emerald-700/60 rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-emerald-400 font-extrabold"
+            />
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {[0, 2000, 3000, 5000].map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => setPaidAmount(String(preset))}
+                  className={`py-1 px-2.5 rounded-lg text-xs font-bold border transition ${
+                    Number(paidAmount) === preset
+                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow'
+                      : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
+                  }`}
+                >
+                  {preset === 0 ? 'अद्याप नाही' : `₹${preset}`}
+                </button>
+              ))}
+            </div>
+            <p className="text-slate-500 text-[10px] mt-1">⚡ जमा रक्कम टाकल्यास आपोआप उत्पन्न नोंद तयार होईल</p>
           </div>
 
           <div>
