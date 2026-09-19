@@ -1,5 +1,6 @@
 import { db } from '../database/db.js';
 import { safeSearchTerm, sum, throwIfError, expandBilingualSearchTerms } from '../utils/dbHelpers.js';
+import { numberToWordsMarathi, numberToWordsEnglish } from '../utils/marathiNumberWords.js';
 
 function applyDonorFilters(query, search, area) {
   if (search) {
@@ -324,14 +325,12 @@ export async function updateDonor(req, res) {
         await db.from('income_transactions').update({ amount: newTxAmount }).eq('id', recentTx.id);
         // Also update the linked receipt
         if (recentTx.receipt_id) {
-          const { numberToWordsMarathi, numberToWordsEnglish } = await import('../utils/marathiNumberWords.js');
           await db.from('receipts').update({
             amount: newTxAmount,
             amount_in_words_mr: numberToWordsMarathi(newTxAmount),
             amount_in_words_en: numberToWordsEnglish(newTxAmount)
           }).eq('id', recentTx.receipt_id);
         } else if (recentTx.receipt_number) {
-          const { numberToWordsMarathi, numberToWordsEnglish } = await import('../utils/marathiNumberWords.js');
           await db.from('receipts').update({
             amount: newTxAmount,
             amount_in_words_mr: numberToWordsMarathi(newTxAmount),
