@@ -5,6 +5,7 @@ import { LanguageProvider } from './context/LanguageContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { MandalProvider } from './context/MandalContext';
 import { NotificationProvider } from './context/NotificationContext';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 // Layout
 import { AppLayout } from './components/layout/AppLayout';
@@ -66,7 +67,8 @@ export function App() {
         <AuthProvider>
           <MandalProvider>
             <NotificationProvider>
-              <BrowserRouter>
+              <ErrorBoundary>
+                <BrowserRouter>
                 <Routes>
                   {/* Public Routes */}
                   <Route path="/login" element={<LoginPage />} />
@@ -186,7 +188,8 @@ export function App() {
                   <Route path="*" element={<Navigate to="/dashboard" replace />} />
                 </Routes>
               </BrowserRouter>
-            </NotificationProvider>
+            </ErrorBoundary>
+          </NotificationProvider>
           </MandalProvider>
         </AuthProvider>
       </LanguageProvider>

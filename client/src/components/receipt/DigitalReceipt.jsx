@@ -1,5 +1,5 @@
 import React from 'react';
-import { QRCodeSVG } from 'qrcode.react';
+import { QRCodeCanvas } from 'qrcode.react';
 import { formatCurrency } from '../../utils/formatCurrency';
 import { formatDate } from '../../utils/dateUtils';
 import { numberToWordsMarathi } from '../../utils/marathiNumberToWords';
@@ -13,7 +13,9 @@ export function DigitalReceipt({ receipt, mandal, receiptRef }) {
     name_mr: 'श्री हनुमान तालीम मंडळ शिरोळ',
     name_en: 'Shri Hanuman Talim Mandal Shirol',
     tagline_mr: 'स्थापना १९६४ 🚩 | वर्ष-६२ वे 🔱 | ॥ नदीवेस चा महाराजा ॥ 🔱',
+    tagline_en: 'Est. 1964 🚩 | 62nd Year 🔱 | Nadives Cha Maharaja 🔱',
     address_mr: 'नदीवेस, शिरोळ, जि. कोल्हापूर | ४१६१०३',
+    address_en: 'Nadives, Shirol, Dist. Kolhapur | 416103',
     contact_phone: '+91 9356997428',
     registration_no: 'MAH/KOLHAPUR/1964',
     festival_year: 2026
@@ -59,7 +61,6 @@ export function DigitalReceipt({ receipt, mandal, receiptRef }) {
               src={logoImg}
               alt="Ganpati Mandal Logo"
               className="w-full h-full object-cover rounded-xl"
-              crossOrigin="anonymous"
             />
           </div>
 
@@ -151,7 +152,7 @@ export function DigitalReceipt({ receipt, mandal, receiptRef }) {
             </p>
           </div>
           <div className="p-1.5 bg-white border border-amber-400/80 rounded-lg shadow-xs shrink-0">
-            <QRCodeSVG value={verificationUrl} size={64} level="H" includeMargin={false} />
+            <QRCodeCanvas value={verificationUrl} size={64} level="H" includeMargin={false} />
           </div>
         </div>
 

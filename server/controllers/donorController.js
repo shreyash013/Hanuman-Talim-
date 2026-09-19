@@ -12,9 +12,9 @@ function applyDonorFilters(query, search, area) {
 
 export async function getDonorsList(req, res) {
   try {
-    const { page = 1, limit = 20, search = '', area = '' } = req.query;
+    const { page = 1, limit = 500, search = '', area = '' } = req.query;
     const pageNum = Math.max(1, Number(page) || 1);
-    const limitNum = Math.min(100, Math.max(1, Number(limit) || 20));
+    const limitNum = Math.min(1000, Math.max(1, Number(limit) || 500));
     const offset = (pageNum - 1) * limitNum;
 
     let pageQuery = db.from('donors').select('*', { count: 'exact' }).order('total_donated', { ascending: false }).order('donations_count', { ascending: false });
@@ -22,13 +22,34 @@ export async function getDonorsList(req, res) {
     const { data: donors, count, error } = await pageQuery.range(offset, offset + limitNum - 1);
     throwIfError(error);
 
-    let summaryQuery = db.from('donors').select('total_donated');
+    let summaryQuery = db.from('donors').select('target_amount, paid_amount, total_donated');
     summaryQuery = applyDonorFilters(summaryQuery, search, area);
     const { data: summaryRows, error: summaryError } = await summaryQuery;
     throwIfError(summaryError);
 
     const total = count || 0;
-    return res.json({ success: true, data: donors || [], summary: { totalDonors: total, grandTotal: sum(summaryRows, r => r.total_donated) }, pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) || 1 } });
+    const rows = summaryRows || [];
+    const totalTarget = rows.reduce((acc, r) => acc + (Number(r.target_amount) || Number(r.total_donated) || 500), 0);
+    const totalPaid = rows.reduce((acc, r) => acc + (Number(r.paid_amount) || Number(r.total_donated) || 0), 0);
+    const totalPending = Math.max(0, totalTarget - totalPaid);
+
+    return res.json({
+      success: true,
+      data: donors || [],
+      summary: {
+        totalDonors: total,
+        totalTarget,
+        totalPaid,
+        totalPending,
+        grandTotal: totalPaid
+      },
+      pagination: {
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(total / limitNum) || 1
+      }
+    });
   } catch (err) {
     console.error('getDonorsList error:', err);
     return res.status(500).json({ success: false, message: 'देणगीदार यादी मिळवताना त्रुटी' });
@@ -77,17 +98,71 @@ export async function getDonorById(req, res) {
 
 export async function createDonor(req, res) {
   try {
-    const { name, mobile, email = '', address = '', area = '', notes = '' } = req.body;
+    // 1. Support Bulk Donors addition
+    if (Array.isArray(req.body.donors) && req.body.donors.length > 0) {
+      const donorsToInsert = req.body.donors.map(d => {
+        const target = Number(d.target_amount || d.amount || 500);
+        const paid = Number(d.paid_amount || d.total_donated || 0);
+        return {
+          name: (d.name || '').trim(),
+          mobile: (d.mobile || '').trim(),
+          email: (d.email || '').trim(),
+          address: (d.address || '').trim(),
+          area: (d.area || 'शिरोळ').trim(),
+          target_amount: target,
+          paid_amount: paid,
+          total_donated: paid,
+          donations_count: paid > 0 ? 1 : 0,
+          status: paid >= target && target > 0 ? 'paid' : (paid > 0 ? 'partial' : 'unpaid'),
+          notes: d.notes || 'बल्क नोंदणी'
+        };
+      }).filter(d => d.name);
+
+      if (donorsToInsert.length === 0) {
+        return res.status(400).json({ success: false, message: 'वैध देणगीदार माहिती आढळली नाही.' });
+      }
+
+      const { data: createdBatch, error: batchError } = await db.from('donors').insert(donorsToInsert).select('*');
+      throwIfError(batchError);
+      return res.status(201).json({
+        success: true,
+        message: `${createdBatch?.length || donorsToInsert.length} देणगीदार यशस्वीरित्या जोडले!`,
+        data: createdBatch || donorsToInsert
+      });
+    }
+
+    // 2. Single Donor addition
+    const { name, mobile = '', email = '', address = '', area = '', notes = '', target_amount, amount } = req.body;
     if (!name?.trim()) return res.status(400).json({ success: false, message: 'नाव आवश्यक आहे.' });
-    if (!mobile?.trim()) return res.status(400).json({ success: false, message: 'मोबाईल क्रमांक आवश्यक आहे.' });
 
-    const { data: existing, error: existingError } = await db.from('donors').select('id').eq('mobile', mobile.trim()).maybeSingle();
-    throwIfError(existingError);
-    if (existing) return res.status(400).json({ success: false, message: 'हा मोबाईल क्रमांक आधीच अस्तित्वात आहे.' });
+    const cleanMobile = mobile ? mobile.trim() : '';
+    if (cleanMobile) {
+      const { data: existing, error: existingError } = await db.from('donors').select('id').eq('mobile', cleanMobile).maybeSingle();
+      throwIfError(existingError);
+      if (existing) return res.status(400).json({ success: false, message: 'हा मोबाईल क्रमांक आधीच अस्तित्वात आहे.' });
+    }
 
-    const { data: created, error } = await db.from('donors').insert({ name: name.trim(), mobile: mobile.trim(), email: email.trim(), address: address.trim(), area: area.trim(), notes: notes.trim() }).select('*').single();
+    const target = Number(target_amount || amount || 500);
+    const { data: created, error } = await db.from('donors').insert({
+      name: name.trim(),
+      mobile: cleanMobile,
+      email: email.trim(),
+      address: address.trim(),
+      area: (area || 'शिरोळ').trim(),
+      notes: notes.trim(),
+      target_amount: target,
+      paid_amount: 0,
+      total_donated: 0,
+      donations_count: 0,
+      status: 'unpaid'
+    }).select('*').single();
     throwIfError(error);
-    return res.status(201).json({ success: true, message: 'देणगीदार यशस्वीरित्या जोडला / Donor added successfully', data: created });
+
+    return res.status(201).json({
+      success: true,
+      message: 'देणगीदार यशस्वीरित्या जोडला / Donor added successfully',
+      data: created
+    });
   } catch (err) {
     console.error('createDonor error:', err);
     return res.status(500).json({ success: false, message: 'नोंदणी करताना त्रुटी' });

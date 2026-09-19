@@ -113,11 +113,14 @@ export async function generateReceiptCanvas(receiptElement) {
   if (!receiptElement) throw new Error('Receipt element not found');
 
   return await html2canvas(receiptElement, {
-    scale: 3, // Ultra HD High Resolution (3x Pixel Density)
+    scale: 2, // Ultra HD Retina 2x (Crystal-clear & 100% reliable on all mobile phones)
     useCORS: true,
     logging: false,
     backgroundColor: '#ffffff',
-    allowTaint: true
+    allowTaint: true,
+    scrollX: 0,
+    scrollY: 0,
+    windowWidth: receiptElement.scrollWidth || 540
   });
 }
 
@@ -179,7 +182,7 @@ export async function copyReceiptImageToClipboard(receiptElement) {
 
 /**
  * Shares actual image file via Native Web Share API (Mobile phones / Android / iOS)
- * Shares ONLY the HD image without verbose text links as requested by user
+ * Shares ONLY the image file with zero text words or captions as requested
  */
 export async function shareReceiptNativeApp(receiptElement, receipt) {
   if (!receiptElement) throw new Error('Receipt element not found');
@@ -191,8 +194,8 @@ export async function shareReceiptNativeApp(receiptElement, receipt) {
   const file = new File([blob], `Receipt_${receiptNo}.png`, { type: 'image/png' });
 
   if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    // Strictly share the image file only - no title, no text words
     await navigator.share({
-      title: `श्री हनुमान तालीम मंडळ पावती - ${receiptNo}`,
       files: [file]
     });
     return { status: 'shared', mode: 'native_file' };
@@ -202,9 +205,9 @@ export async function shareReceiptNativeApp(receiptElement, receipt) {
 
 /**
  * Primary HD Receipt Share Handler:
- * 1. Generates 3x HD image.
- * 2. On Mobile / Devices with Web Share API: shares the ACTUAL RECEIPT IMAGE directly to WhatsApp!
- * 3. On Desktop: Downloads PNG & copies to clipboard, then opens WhatsApp chat ready for Ctrl+V paste.
+ * 1. Generates 2x HD image.
+ * 2. On Mobile / Devices with Web Share API: shares ONLY THE RECEIPT IMAGE directly to WhatsApp (0 words)!
+ * 3. On Desktop / Fallback: Opens WhatsApp chat with recipient
  */
 export async function shareReceiptFile(receiptElement, receipt, mandal, format = 'image') {
   if (!receiptElement) throw new Error('Receipt element not found');
@@ -217,7 +220,7 @@ export async function shareReceiptFile(receiptElement, receipt, mandal, format =
     return { status: 'downloaded_pdf', mode: 'pdf', displayMobile, formattedNum };
   }
 
-  // 1. Generate Ultra HD Canvas (3x scale)
+  // 1. Generate Ultra HD Canvas (2x scale)
   const canvas = await generateReceiptCanvas(receiptElement);
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
   if (!blob) throw new Error('Failed to create image blob');
@@ -229,8 +232,8 @@ export async function shareReceiptFile(receiptElement, receipt, mandal, format =
 
   if (canShareFiles) {
     try {
+      // Send strictly ONLY the image file - not a single caption word
       await navigator.share({
-        title: `श्री हनुमान तालीम मंडळ पावती - ${receiptNo}`,
         files: [file]
       });
       return { status: 'shared', mode: 'native_file', displayMobile };
@@ -238,7 +241,7 @@ export async function shareReceiptFile(receiptElement, receipt, mandal, format =
       if (err.name === 'AbortError') {
         return { status: 'aborted', mode: 'native_file', displayMobile };
       }
-      console.warn('Native share error, using clipboard fallback:', err);
+      console.warn('Native share error, using fallback:', err);
     }
   }
 

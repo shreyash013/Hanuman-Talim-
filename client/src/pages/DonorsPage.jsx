@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { useNotification } from '../context/NotificationContext';
 import { useMandal } from '../context/MandalContext';
-import api, { forceSyncNow } from '../services/api';
+import api, { forceSyncNow, autoSyncFromServer } from '../services/api';
 import { formatDate } from '../utils/dateUtils';
 import { Modal } from '../components/common/Modal';
 import {
@@ -72,8 +72,61 @@ export function DonorsPage() {
       setLoading(true);
       const res = await api.get('/donors', { search });
       if (res.success) {
-        setDonors(res.data || []);
-        setSummary(res.summary || { totalDonors: 0, totalTarget: 0, totalPaid: 0, totalPending: 0, grandTotal: 0 });
+        let donorsList = res.data || [];
+
+        // Cross-reconcile with local income to compute matching payments if needed
+        const rawIncome = typeof window !== 'undefined' ? localStorage.getItem('shirol_income') : null;
+        const incomeList = rawIncome ? JSON.parse(rawIncome) : [];
+
+        donorsList = donorsList.map(d => {
+          const matchingPayments = incomeList.filter(inc => {
+            if (inc.is_deleted) return false;
+            const nameMatch = inc.donor_name && d.name && (
+              inc.donor_name.trim().toLowerCase() === d.name.trim().toLowerCase()
+            );
+            const mobileMatch = d.mobile && inc.mobile && (
+              d.mobile.replace(/\D/g, '') === inc.mobile.replace(/\D/g, '') && d.mobile.replace(/\D/g, '').length >= 10
+            );
+            return nameMatch || mobileMatch;
+          });
+
+          const localPaid = matchingPayments.reduce((sum, inc) => sum + (Number(inc.amount) || 0), 0);
+          const serverPaid = Number(d.paid_amount || d.total_donated || 0);
+          const paid_amount = Math.max(serverPaid, localPaid);
+          const target_amount = Number(d.target_amount || d.total_donated || 500);
+          const pending_amount = Math.max(0, target_amount - paid_amount);
+          const status = (paid_amount >= target_amount && target_amount > 0) ? 'paid' : (paid_amount > 0 ? 'partial' : 'unpaid');
+
+          return {
+            ...d,
+            target_amount,
+            paid_amount,
+            pending_amount,
+            status,
+            donations_count: Math.max(Number(d.donations_count) || 0, matchingPayments.length)
+          };
+        });
+
+        setDonors(donorsList);
+
+        // Always compute summary from reconciled donors if server summary fields are 0 or undefined
+        const totalTarget = (res.summary?.totalTarget && Number(res.summary.totalTarget) > 0)
+          ? Number(res.summary.totalTarget)
+          : donorsList.reduce((acc, d) => acc + (Number(d.target_amount) || 0), 0);
+        const totalPaid = (res.summary?.totalPaid && Number(res.summary.totalPaid) > 0)
+          ? Number(res.summary.totalPaid)
+          : donorsList.reduce((acc, d) => acc + (Number(d.paid_amount) || 0), 0);
+        const totalPending = (res.summary?.totalPending !== undefined && Number(res.summary.totalPending) > 0)
+          ? Number(res.summary.totalPending)
+          : Math.max(0, totalTarget - totalPaid);
+
+        setSummary({
+          totalDonors: res.summary?.totalDonors || donorsList.length,
+          totalTarget,
+          totalPaid,
+          totalPending,
+          grandTotal: totalPaid
+        });
       }
     } catch (err) {
       console.error('fetchDonors error:', err);
@@ -88,11 +141,11 @@ export function DonorsPage() {
   }, [search]);
 
   useEffect(() => {
-    // Auto-sync local donors to server once on mount in background
-    forceSyncNow().catch(() => {});
+    // Auto-sync bidirectional on mount in background
+    forceSyncNow().then(() => fetchDonors()).catch(() => {});
 
     const handleUpdate = () => {
-      fetchDonors();
+      autoSyncFromServer().then(() => fetchDonors()).catch(() => fetchDonors());
     };
 
     window.addEventListener('focus', handleUpdate);

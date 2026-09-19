@@ -255,6 +255,27 @@ export async function autoSyncAll(req, res) {
               await db.from('income_transactions').update({ receipt_id: insertedRcpt.id }).eq('id', insertedTx.id);
               counts.receipts++;
             }
+
+            // Update matching donor's paid amount and payment status
+            if (donorId) {
+              try {
+                const { data: dRow } = await db.from('donors').select('target_amount, paid_amount, total_donated, donations_count').eq('id', donorId).maybeSingle();
+                if (dRow) {
+                  const newPaid = (Number(dRow.paid_amount || dRow.total_donated) || 0) + parsedAmount;
+                  const targetAmt = Number(dRow.target_amount) || 500;
+                  const newStatus = (newPaid >= targetAmt && targetAmt > 0) ? 'paid' : (newPaid > 0 ? 'partial' : 'unpaid');
+                  await db.from('donors').update({
+                    paid_amount: newPaid,
+                    total_donated: newPaid,
+                    donations_count: (Number(dRow.donations_count) || 0) + 1,
+                    status: newStatus,
+                    last_donated_at: inc.created_at || new Date().toISOString()
+                  }).eq('id', donorId);
+                }
+              } catch (dErr) {
+                console.warn('Sync donor stats update note:', dErr.message);
+              }
+            }
           }
         } catch (incErr) {
           console.warn('Sync income item note:', incErr.message);
