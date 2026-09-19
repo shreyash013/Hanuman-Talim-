@@ -72,9 +72,9 @@ export function DashboardPage() {
   const [selectedReceipt, setSelectedReceipt] = useState(null);
   const [showUpiModal, setShowUpiModal] = useState(false);
 
-  const fetchDashboard = async () => {
+  const fetchDashboard = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const [res, loanRes] = await Promise.all([
         api.get('/dashboard/stats'),
         api.get('/loans/summary')
@@ -87,27 +87,25 @@ export function DashboardPage() {
       }
     } catch (err) {
       console.error('fetchDashboard error:', err);
-      showToast('डॅशबोर्ड डेटा लोड करताना अडचण आली.', 'error');
+      if (!silent) showToast('डॅशबोर्ड डेटा लोड करताना अडचण आली.', 'error');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchDashboard();
 
-    const handleUpdate = () => {
-      fetchDashboard();
+    const handleSilentUpdate = () => {
+      fetchDashboard(true);
     };
 
-    window.addEventListener('focus', handleUpdate);
-    window.addEventListener('shirol_data_updated', handleUpdate);
-    window.addEventListener('storage', handleUpdate);
+    window.addEventListener('shirol_data_updated', handleSilentUpdate);
+    window.addEventListener('storage', handleSilentUpdate);
 
     return () => {
-      window.removeEventListener('focus', handleUpdate);
-      window.removeEventListener('shirol_data_updated', handleUpdate);
-      window.removeEventListener('storage', handleUpdate);
+      window.removeEventListener('shirol_data_updated', handleSilentUpdate);
+      window.removeEventListener('storage', handleSilentUpdate);
     };
   }, []);
 

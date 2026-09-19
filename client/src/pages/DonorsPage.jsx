@@ -121,9 +121,9 @@ export function DonorsPage() {
   const upiId = mandal?.upi_id || '9699572617@ibl';
   const upiName = mandal?.upi_name || 'SUMEDH SHAHAJI GAVADE';
 
-  const fetchDonors = async () => {
+  const fetchDonors = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const queryParams = { search };
       if (areaFilter && areaFilter !== 'all') queryParams.area = areaFilter;
       const res = await api.get('/donors', queryParams);
@@ -185,9 +185,9 @@ export function DonorsPage() {
       }
     } catch (err) {
       console.error('fetchDonors error:', err);
-      showToast('देणगीदार यादी लोड करताना त्रुटी.', 'error');
+      if (!silent) showToast('देणगीदार यादी लोड करताना त्रुटी.', 'error');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -196,21 +196,20 @@ export function DonorsPage() {
   }, [search, areaFilter]);
 
   useEffect(() => {
-    // Auto-sync bidirectional on mount in background
-    forceSyncNow().then(() => fetchDonors()).catch(() => {});
+    // Initial silent background sync on mount
+    forceSyncNow().then(() => fetchDonors(true)).catch(() => {});
 
-    const handleUpdate = () => {
-      autoSyncFromServer().then(() => fetchDonors()).catch(() => fetchDonors());
+    // Silent background updates without UI refresh/flicker
+    const handleSilentUpdate = () => {
+      fetchDonors(true);
     };
 
-    window.addEventListener('focus', handleUpdate);
-    window.addEventListener('shirol_data_updated', handleUpdate);
-    window.addEventListener('storage', handleUpdate);
+    window.addEventListener('shirol_data_updated', handleSilentUpdate);
+    window.addEventListener('storage', handleSilentUpdate);
 
     return () => {
-      window.removeEventListener('focus', handleUpdate);
-      window.removeEventListener('shirol_data_updated', handleUpdate);
-      window.removeEventListener('storage', handleUpdate);
+      window.removeEventListener('shirol_data_updated', handleSilentUpdate);
+      window.removeEventListener('storage', handleSilentUpdate);
     };
   }, []);
 

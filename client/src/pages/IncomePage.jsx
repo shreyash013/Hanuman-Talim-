@@ -60,9 +60,9 @@ export function IncomePage() {
   const [attachment, setAttachment] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const fetchIncome = async () => {
+  const fetchIncome = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await api.get('/income', {
         page,
         limit: 50,
@@ -76,27 +76,25 @@ export function IncomePage() {
       }
     } catch (err) {
       console.error('fetchIncome error:', err);
-      showToast('जमा यादी लोड करताना त्रुटी.', 'error');
+      if (!silent) showToast('जमा यादी लोड करताना त्रुटी.', 'error');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchIncome();
 
-    const handleUpdate = () => {
-      fetchIncome();
+    const handleSilentUpdate = () => {
+      fetchIncome(true);
     };
 
-    window.addEventListener('focus', handleUpdate);
-    window.addEventListener('shirol_data_updated', handleUpdate);
-    window.addEventListener('storage', handleUpdate);
+    window.addEventListener('shirol_data_updated', handleSilentUpdate);
+    window.addEventListener('storage', handleSilentUpdate);
 
     return () => {
-      window.removeEventListener('focus', handleUpdate);
-      window.removeEventListener('shirol_data_updated', handleUpdate);
-      window.removeEventListener('storage', handleUpdate);
+      window.removeEventListener('shirol_data_updated', handleSilentUpdate);
+      window.removeEventListener('storage', handleSilentUpdate);
     };
   }, [page, search, category, paymentMethod]);
 

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { TopNavbar } from './TopNavbar';
-import { SyncStatusBanner } from '../common/SyncStatusBanner';
 import { BottomMobileNav } from './BottomMobileNav';
 import { AnimatePresence, motion } from 'framer-motion';
 
@@ -43,7 +42,6 @@ export function AppLayout() {
       {/* Main Content Viewport */}
       <div className="flex-1 flex flex-col h-full overflow-hidden">
         <TopNavbar onOpenMobileMenu={() => setMobileMenuOpen(true)} />
-        <SyncStatusBanner />
 
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 pb-24 lg:pb-8">
           <div className="max-w-7xl mx-auto space-y-6">

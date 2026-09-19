@@ -161,29 +161,29 @@ export function ExpensesPage() {
   };
 
 
-  const fetchExpenses = async () => {
+  const fetchExpenses = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await api.get('/expenses');
       if (res.success) {
         setExpenses(res.data || []);
       }
     } catch (err) {
       console.error('fetchExpenses error:', err);
-      showToast('खर्च यादी लोड करताना त्रुटी.', 'error');
+      if (!silent) showToast('खर्च यादी लोड करताना त्रुटी.', 'error');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchExpenses();
-    const handleUpdate = () => fetchExpenses();
-    window.addEventListener('shirol_data_updated', handleUpdate);
-    window.addEventListener('storage', handleUpdate);
+    const handleSilentUpdate = () => fetchExpenses(true);
+    window.addEventListener('shirol_data_updated', handleSilentUpdate);
+    window.addEventListener('storage', handleSilentUpdate);
     return () => {
-      window.removeEventListener('shirol_data_updated', handleUpdate);
-      window.removeEventListener('storage', handleUpdate);
+      window.removeEventListener('shirol_data_updated', handleSilentUpdate);
+      window.removeEventListener('storage', handleSilentUpdate);
     };
   }, []);
 
