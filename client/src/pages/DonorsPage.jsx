@@ -170,16 +170,18 @@ export function DonorsPage() {
 
         setDonors(donorsList);
 
-        // Always compute summary from reconciled donors if server summary fields are 0 or undefined
-        const totalTarget = (res.summary?.totalTarget && Number(res.summary.totalTarget) > 0)
-          ? Number(res.summary.totalTarget)
-          : donorsList.reduce((acc, d) => acc + (Number(d.target_amount) || 0), 0);
-        const totalPaid = (res.summary?.totalPaid && Number(res.summary.totalPaid) > 0)
-          ? Number(res.summary.totalPaid)
-          : donorsList.reduce((acc, d) => acc + (Number(d.paid_amount) || 0), 0);
-        const totalPending = (res.summary?.totalPending !== undefined && Number(res.summary.totalPending) > 0)
-          ? Number(res.summary.totalPending)
-          : Math.max(0, totalTarget - totalPaid);
+        // totalPaid MUST equal raw income sum (same source as Dashboard) — never sum from donors
+        // Server now returns totalPaid from income_transactions directly
+        const totalPaid = Number(res.summary?.totalPaid) || (() => {
+          try {
+            const rawInc = localStorage.getItem('shirol_income');
+            const incList = rawInc ? JSON.parse(rawInc) : [];
+            return incList.filter(i => !i.is_deleted).reduce((s, i) => s + (Number(i.amount) || 0), 0);
+          } catch { return 0; }
+        })();
+        const totalTarget = Number(res.summary?.totalTarget) ||
+          donorsList.reduce((acc, d) => acc + (Number(d.target_amount) || 0), 0);
+        const totalPending = Math.max(0, totalTarget - totalPaid);
 
         setSummary({
           totalDonors: res.summary?.totalDonors || donorsList.length,

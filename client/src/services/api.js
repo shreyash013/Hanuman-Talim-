@@ -71,6 +71,31 @@ let syncDebounceTimer = null;
 let isSyncingToServer = false;
 let isSyncingFromServer = false;
 
+// BroadcastChannel for cross-tab real-time sync (notifies other open tabs when data changes)
+let _bc = null;
+function getBroadcastChannel() {
+  if (!_bc && typeof BroadcastChannel !== 'undefined') {
+    try {
+      _bc = new BroadcastChannel('shirol_mandal_sync');
+      _bc.onmessage = () => {
+        // Another tab changed data — fire update events so this tab refreshes
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('shirol_data_updated'));
+        }
+      };
+    } catch {}
+  }
+  return _bc;
+}
+function broadcastDataChange() {
+  try {
+    const bc = getBroadcastChannel();
+    if (bc) bc.postMessage({ type: 'data_updated', ts: Date.now() });
+  } catch {}
+}
+// Initialize broadcast channel on load
+if (typeof window !== 'undefined') getBroadcastChannel();
+
 // Auto-acquire valid JWT token if missing or demo token
 export async function ensureValidToken() {
   if (typeof window === 'undefined') return null;
@@ -529,6 +554,8 @@ function setLocalStore(key, value) {
     // Auto-upload to live server automatically on EVERY single entry!
     if (['income', 'expenses', 'donors', 'loans', 'receipts', 'members', 'cash_history', 'mandal_settings_custom'].includes(key)) {
       triggerAutoSync();
+      // Notify all other open tabs to refresh their data
+      broadcastDataChange();
     }
   } catch (e) {
     console.error('LocalStore write error:', e);
@@ -674,6 +701,7 @@ export async function request(endpoint, options = {}) {
 
               window.dispatchEvent(new Event('shirol_data_updated'));
               window.dispatchEvent(new Event('storage'));
+              broadcastDataChange();
             } catch (e) {
               console.warn('Local store update on PUT /donors error:', e);
             }
@@ -1447,6 +1475,7 @@ export async function request(endpoint, options = {}) {
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('shirol_data_updated'));
         window.dispatchEvent(new Event('storage'));
+        broadcastDataChange();
       }
 
       return {
@@ -1498,6 +1527,7 @@ export async function request(endpoint, options = {}) {
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('shirol_data_updated'));
         window.dispatchEvent(new Event('storage'));
+        broadcastDataChange();
       }
 
       return { success: true, message: 'व्यवहार हटवला.' };
@@ -1705,6 +1735,7 @@ export async function request(endpoint, options = {}) {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new Event('shirol_data_updated'));
           window.dispatchEvent(new Event('storage'));
+          broadcastDataChange();
         }
 
         return {
@@ -1773,6 +1804,7 @@ export async function request(endpoint, options = {}) {
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('shirol_data_updated'));
         window.dispatchEvent(new Event('storage'));
+        broadcastDataChange();
       }
 
       return { success: true, message: 'देणगीदार यशस्वीरित्या जोडला!', data: newDonor };
@@ -1831,6 +1863,7 @@ export async function request(endpoint, options = {}) {
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('shirol_data_updated'));
         window.dispatchEvent(new Event('storage'));
+        broadcastDataChange();
       }
 
       return { success: true, message: 'देणगीदाराची माहिती यशस्वीरित्या अद्ययावत केली!', data: donorsList };
@@ -1902,9 +1935,11 @@ export async function request(endpoint, options = {}) {
       }
     });
 
+    // Summary: totalPaid MUST equal raw income sum (same as dashboard) to prevent mismatch
+    // Do NOT use processedDonors.paid_amount sum as it can double-count
     const totalTarget = processedDonors.reduce((sum, d) => sum + (Number(d.target_amount) || 0), 0);
-    const totalPaid = processedDonors.reduce((sum, d) => sum + (Number(d.paid_amount) || 0), 0);
-    const totalPending = processedDonors.reduce((sum, d) => sum + (Number(d.pending_amount) || 0), 0);
+    const totalPaid = incomeList.filter(i => !i.is_deleted).reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
+    const totalPending = Math.max(0, totalTarget - totalPaid);
 
     const summary = {
       totalDonors: processedDonors.length,

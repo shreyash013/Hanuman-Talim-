@@ -29,7 +29,12 @@ export async function getDonorsList(req, res) {
     const { data: donors, count, error } = await pageQuery.range(offset, offset + limitNum - 1);
     throwIfError(error);
 
-    let summaryQuery = db.from('donors').select('target_amount, paid_amount, total_donated');
+    // Get totalPaid from income_transactions (SAME source as dashboard) to prevent mismatch
+    const { data: incomeRows, error: incomeError } = await db.from('income_transactions').select('amount').eq('is_deleted', false);
+    throwIfError(incomeError);
+    const totalPaid = (incomeRows || []).reduce((acc, r) => acc + (Number(r.amount) || 0), 0);
+
+    let summaryQuery = db.from('donors').select('target_amount, total_donated');
     summaryQuery = applyDonorFilters(summaryQuery, search, area);
     const { data: summaryRows, error: summaryError } = await summaryQuery;
     throwIfError(summaryError);
@@ -37,7 +42,6 @@ export async function getDonorsList(req, res) {
     const total = count || 0;
     const rows = summaryRows || [];
     const totalTarget = rows.reduce((acc, r) => acc + (Number(r.target_amount) || Number(r.total_donated) || 500), 0);
-    const totalPaid = rows.reduce((acc, r) => acc + (Number(r.paid_amount) || Number(r.total_donated) || 0), 0);
     const totalPending = Math.max(0, totalTarget - totalPaid);
 
     return res.json({
