@@ -171,18 +171,9 @@ export function DonorsPage() {
 
         setDonors(donorsList);
 
-        // totalPaid MUST equal raw income sum (same source as Dashboard) — never sum from donors
-        // Server now returns totalPaid from income_transactions directly
-        const totalPaid = Number(res.summary?.totalPaid) || (() => {
-          try {
-            const rawInc = localStorage.getItem('shirol_income');
-            const incList = rawInc ? JSON.parse(rawInc) : [];
-            return incList.filter(i => !i.is_deleted).reduce((s, i) => s + (Number(i.amount) || 0), 0);
-          } catch { return 0; }
-        })();
-        const totalTarget = Number(res.summary?.totalTarget) ||
-          donorsList.reduce((acc, d) => acc + (Number(d.target_amount) || 0), 0);
-        const totalPending = Math.max(0, totalTarget - totalPaid);
+        const totalPaid = Number(res.summary?.totalPaid) || donorsList.reduce((acc, d) => acc + (Number(d.paid_amount) || 0), 0);
+        const totalTarget = Number(res.summary?.totalTarget) || donorsList.reduce((acc, d) => acc + (Number(d.target_amount) || 0), 0);
+        const totalPending = donorsList.reduce((acc, d) => acc + (Number(d.pending_amount) || 0), 0);
 
         setSummary({
           totalDonors: res.summary?.totalDonors || donorsList.length,
@@ -418,29 +409,7 @@ export function DonorsPage() {
         address: cleanAddress,
         target_amount: newTarget,
         paid_amount: paidVal,
-        status: newStatus
       });
-
-      // If paid_amount changed, create an income transaction for the difference
-      const oldPaid = Number(originalDonor.paid_amount || originalDonor.total_donated || 0);
-      const diff = paidVal - oldPaid;
-      if (diff > 0) {
-        try {
-          await api.post('/income', {
-            donor_name: cleanName,
-            mobile: cleanMobile,
-            address: cleanAddress,
-            area: cleanArea,
-            amount: diff,
-            payment_method: 'cash',
-            category: 'vargani',
-            purpose: 'श्री गणेशोत्सव वर्गणी (सुधारित)',
-            collector_name: 'सुमेध गवडे (अध्यक्ष)'
-          });
-        } catch (incErr) {
-          console.warn('Income record update failed:', incErr);
-        }
-      }
 
       if (res && res.success !== false) {
         showToast(`'${cleanName}' यांची माहिती यशस्वीरित्या अद्ययावत केली!`, 'success');
@@ -818,6 +787,7 @@ export function DonorsPage() {
                     title="सर्व देणगीदार निवडा / निवड रद्द करा"
                   />
                 </th>
+                <th className="p-4 w-12 text-center text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">अ.क्र.</th>
                 <th className="p-4">देणगीदाराचे नाव</th>
                 <th className="p-4">मोबाईल</th>
                 <th className="p-4">भाग (Area)</th>
@@ -829,7 +799,7 @@ export function DonorsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200/20">
-              {filteredDonors.map((d) => {
+              {filteredDonors.map((d, idx) => {
                 const styles = getDonorRowStyles(d);
                 const isSelected = selectedIds.includes(d.id);
                 return (
@@ -841,6 +811,9 @@ export function DonorsPage() {
                         onChange={() => toggleSelectDonor(d.id)}
                         className="w-4 h-4 rounded cursor-pointer accent-amber-500"
                       />
+                    </td>
+                    <td className="p-4 text-center font-bold text-slate-400">
+                      {idx + 1}
                     </td>
                     <td className={`p-4 ${styles.nameClass}`}>
                       {d.name}
@@ -900,7 +873,7 @@ export function DonorsPage() {
               })}
               {filteredDonors.length === 0 && (
                 <tr>
-                  <td colSpan="9" className="text-center py-8 text-slate-500 bg-slate-900">
+                  <td colSpan="10" className="text-center py-8 text-slate-500 bg-slate-900">
                     कोणतेही देणगीदार आढळले नाहीत.
                   </td>
                 </tr>

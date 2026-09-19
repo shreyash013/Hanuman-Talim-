@@ -108,17 +108,22 @@ export async function autoSyncAll(req, res) {
 
     for (const d of donors) {
       if (!d || !d.name) continue;
-      const cleanName = d.name.trim();
+      let cleanName = d.name.trim();
+      const lower = cleanName.toLowerCase();
+      if (lower === 'pruthvi gavade' || lower === 'prithvi gavade' || cleanName === 'पृथ्वी गवडे') {
+        cleanName = 'Pruthviraj Gavade';
+      }
       const cleanMobile = (d.mobile || '').trim();
       const keyName = cleanName.toLowerCase();
 
       // Skip any donor that was marked as deleted
-      if (deletedNameSet.has(keyName)) continue;
+      if (deletedNameSet.has(keyName) || deletedNameSet.has('pruthvi gavade')) continue;
       if (cleanMobile && deletedMobileSet.has(cleanMobile)) continue;
       if (d.id && deletedIdSet.has(String(d.id))) continue;
 
       const existing = (cleanMobile && existingDonorMapByMobile.get(cleanMobile)) ||
                        existingDonorMapByName.get(keyName) ||
+                       existingDonorMapByName.get('pruthviraj gavade') ||
                        (d.id && existingDonorMapById.get(String(d.id)));
 
       const targetAmount = Number(d.target_amount || d.total_donated || d.paid_amount || 500);

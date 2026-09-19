@@ -380,20 +380,29 @@ export async function autoSyncFromServer() {
             return true;
           });
 
+          // Normalize alias function for consistent donor matching
+          const normalizeDonorName = (nm) => {
+            const low = (nm || '').trim().toLowerCase();
+            if (low === 'pruthvi gavade' || low === 'prithvi gavade' || low === 'पृथ्वी गवडे') return 'pruthviraj gavade';
+            return low;
+          };
+
           // Build donor map from active cloud donors
           const donorMap = new Map();
           validCloudDonors.forEach(d => {
-            donorMap.set(d.name.trim().toLowerCase(), d);
+            const key = normalizeDonorName(d.name);
+            donorMap.set(key, d);
           });
 
-          // Preserve local donors that aren't yet in cloud AND not deleted
+          // Preserve local donors that were genuinely created offline (temporary ID)
           currentDonors.forEach(d => {
             if (d && d.name) {
-              const name = d.name.trim().toLowerCase();
+              const name = normalizeDonorName(d.name);
               const id = String(d.id);
               const mob = (d.mobile || '').replace(/\D/g, '');
-              const isDeleted = deletedNames.has(name) || deletedIds.has(id) || (mob && deletedMobiles.has(mob));
-              if (!isDeleted && !donorMap.has(name)) {
+              const isDeleted = deletedNames.has(name) || deletedNames.has((d.name || '').trim().toLowerCase()) || deletedIds.has(id) || (mob && deletedMobiles.has(mob));
+              const isLocalTemp = Number(d.id) > 1000000000 || d.is_local;
+              if (!isDeleted && isLocalTemp && !donorMap.has(name)) {
                 donorMap.set(name, d);
               }
             }
@@ -743,6 +752,15 @@ export async function request(endpoint, options = {}) {
             });
             setLocalStore('expenses', expensesList);
           }
+
+          if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(options.method?.toUpperCase())) {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new Event('shirol_data_updated'));
+              window.dispatchEvent(new Event('storage'));
+              broadcastDataChange();
+            }
+          }
+
           return data;
         }
       }
@@ -1402,14 +1420,25 @@ export async function request(endpoint, options = {}) {
       const donorsList = getLocalStore('donors', []);
       const settings = getLocalStore('mandal_settings_custom', SHIROL_MANDAL_SETTINGS);
 
-      const count = incomeList.length + 1;
-      const receiptNo = `${settings.receipt_prefix || 'HANUMAN-2026-'}${String(count).padStart(6, '0')}`;
+      let maxReceiptNum = 0;
+      incomeList.forEach(inc => {
+        if (inc.receipt_number) {
+          const m = inc.receipt_number.match(/(\d+)$/);
+          if (m) {
+            const n = parseInt(m[1], 10);
+            if (!isNaN(n) && n > maxReceiptNum && n < 999999) maxReceiptNum = n;
+          }
+        }
+      });
+      const count = Math.max(incomeList.length, maxReceiptNum) + 1;
+      const formattedNum = String(count).padStart(6, '0');
+      const receiptNo = `${settings.receipt_prefix || 'HANUMAN-2026-'}${formattedNum}`;
       const amount = Number(bodyData.amount) || 0;
       const createdAt = new Date().toISOString();
 
       const newIncome = {
         id: Date.now(),
-        transaction_id: `TXN-${count}`,
+        transaction_id: `TXN-2026-${formattedNum}`,
         receipt_number: receiptNo,
         donor_name: bodyData.donor_name,
         mobile: bodyData.mobile || '',
@@ -1794,12 +1823,23 @@ export async function request(endpoint, options = {}) {
 
       // If donor was added with paid amount, also add an income transaction so dashboard total updates
       if (paid > 0) {
-        const count = incomeList.length + 1;
+        let maxReceiptNum = 0;
+        incomeList.forEach(inc => {
+          if (inc.receipt_number) {
+            const m = inc.receipt_number.match(/(\d+)$/);
+            if (m) {
+              const n = parseInt(m[1], 10);
+              if (!isNaN(n) && n > maxReceiptNum && n < 999999) maxReceiptNum = n;
+            }
+          }
+        });
+        const count = Math.max(incomeList.length, maxReceiptNum) + 1;
+        const formattedNum = String(count).padStart(6, '0');
         const settings = getLocalStore('mandal_settings_custom', SHIROL_MANDAL_SETTINGS);
-        const receiptNo = `${settings.receipt_prefix || 'HANUMAN-2026-'}${String(count).padStart(6, '0')}`;
+        const receiptNo = `${settings.receipt_prefix || 'HANUMAN-2026-'}${formattedNum}`;
         const newIncome = {
           id: Date.now() + 1,
-          transaction_id: `TXN-${count}`,
+          transaction_id: `TXN-2026-${formattedNum}`,
           receipt_number: receiptNo,
           donor_name: bodyData.name,
           donor_id: newDonor.id,
@@ -1858,21 +1898,47 @@ export async function request(endpoint, options = {}) {
 
       setLocalStore('donors', donorsList);
 
-      if (bodyData.name && ((bodyData.originalName && bodyData.name !== bodyData.originalName) || donorId)) {
+      if (bodyData.paid_amount !== undefined || bodyData.name) {
         let localIncome = getLocalStore('income', []);
+        let found = false;
+        const newPaid = Number(bodyData.paid_amount);
         localIncome = localIncome.map(inc => {
           const matchInc = (bodyData.originalName && inc.donor_name?.toLowerCase() === bodyData.originalName?.toLowerCase()) ||
+                           (bodyData.name && inc.donor_name?.toLowerCase() === bodyData.name?.toLowerCase()) ||
                            (donorId && String(inc.donor_id) === String(donorId));
           if (matchInc) {
+            found = true;
             return {
               ...inc,
-              donor_name: bodyData.name,
+              amount: !isNaN(newPaid) && newPaid >= 0 ? newPaid : inc.amount,
+              donor_name: bodyData.name || inc.donor_name,
               mobile: bodyData.mobile !== undefined ? bodyData.mobile : inc.mobile,
               address: bodyData.address !== undefined ? bodyData.address : inc.address
             };
           }
           return inc;
         });
+
+        if (!found && !isNaN(newPaid) && newPaid > 0) {
+          const formattedNum = String(localIncome.length + 1).padStart(6, '0');
+          localIncome.unshift({
+            id: Date.now(),
+            transaction_id: `TXN-2026-${formattedNum}`,
+            receipt_number: `HANUMAN-2026-${formattedNum}`,
+            donor_id: donorId,
+            donor_name: bodyData.name || 'देणगीदार',
+            mobile: bodyData.mobile || '',
+            address: bodyData.address || '',
+            amount: newPaid,
+            payment_method: 'cash',
+            category: 'vargani',
+            purpose: 'श्री गणेशोत्सव वर्गणी',
+            collector_name: 'अध्यक्ष (Admin)',
+            status: 'completed',
+            is_deleted: false,
+            created_at: new Date().toISOString()
+          });
+        }
         setLocalStore('income', localIncome);
       }
 

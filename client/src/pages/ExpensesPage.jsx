@@ -178,6 +178,13 @@ export function ExpensesPage() {
 
   useEffect(() => {
     fetchExpenses();
+    const handleUpdate = () => fetchExpenses();
+    window.addEventListener('shirol_data_updated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    return () => {
+      window.removeEventListener('shirol_data_updated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
   }, []);
 
   // Approved Expenses (Main List)
@@ -582,6 +589,7 @@ export function ExpensesPage() {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="bg-slate-950/80 text-slate-400 font-semibold border-b border-slate-800">
+                <th className="p-4 w-14 text-center font-black text-xs text-slate-400 uppercase tracking-wider">अ.क्र.</th>
                 <th className="p-4">खर्च तपशील (Description)</th>
                 <th className="p-4">कोणाला दिले (Paid To)</th>
                 <th className="p-4">वर्गवारी (Category)</th>
@@ -593,22 +601,25 @@ export function ExpensesPage() {
             <tbody className="divide-y divide-slate-800/60">
               {loading ? (
                 <tr>
-                  <td colSpan="6" className="p-8 text-center text-slate-400">
+                  <td colSpan="7" className="p-8 text-center text-slate-400">
                     <Loader2 className="w-6 h-6 animate-spin mx-auto text-amber-400 mb-2" />
                     खर्च यादी लोड होत आहे...
                   </td>
                 </tr>
               ) : filteredExpenses.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="p-8 text-center text-slate-400">
+                  <td colSpan="7" className="p-8 text-center text-slate-400">
                     {activeTab === 'approved'
                       ? 'कोणतेही मंजूर खर्च सापडले नाहीत.'
                       : 'सध्या मंजुरीच्या प्रतीक्षेत कोणताही खर्च नाही.'}
                   </td>
                 </tr>
               ) : (
-                filteredExpenses.map((e) => (
+                filteredExpenses.map((e, idx) => (
                   <tr key={e.id} className="hover:bg-slate-800/40 transition group">
+                    <td className="p-4 text-center font-bold text-slate-400">
+                      {idx + 1}
+                    </td>
                     <td className="p-4 font-bold text-white">
                       {e.description}
                       <div className="flex items-center space-x-2 text-[10px] font-normal text-slate-400 mt-0.5">

@@ -272,6 +272,7 @@ export function IncomePage() {
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 text-slate-500 uppercase tracking-wider font-semibold">
               <tr>
+                <th className="py-3 px-3 text-center w-14 font-black text-xs text-slate-500 uppercase tracking-wider">अ.क्र.</th>
                 <th className="py-3 px-4">पावती क्र. / दिनांक</th>
                 <th className="py-3 px-4">देणगीदार / व्यक्ती</th>
                 <th className="py-3 px-4">प्रकार</th>
@@ -284,19 +285,22 @@ export function IncomePage() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
                     लोड होत आहे...
                   </td>
                 </tr>
               ) : incomeList.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
                     कोणतेही जमा व्यवहार सापडले नाहीत.
                   </td>
                 </tr>
               ) : (
-                incomeList.map((row) => (
+                incomeList.map((row, idx) => (
                   <tr key={row.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                    <td className="py-3 px-3 text-center font-black text-slate-400">
+                      {(page - 1) * 15 + idx + 1}
+                    </td>
                     <td className="py-3 px-4">
                       <span className="font-mono font-bold text-amber-800 dark:text-amber-400 block">
                         {row.receipt_number || row.transaction_id}

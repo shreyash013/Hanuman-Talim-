@@ -66,6 +66,31 @@ export async function getIncomeList(req, res) {
   }
 }
 
+export async function getNextReceiptNumber(prefix = 'HANUMAN-2026-') {
+  const { data: rows } = await db.from('income_transactions')
+    .select('receipt_number')
+    .eq('is_deleted', false);
+  let maxNum = 0;
+  if (Array.isArray(rows)) {
+    for (const r of rows) {
+      if (r.receipt_number) {
+        const m = r.receipt_number.match(/(\d+)$/);
+        if (m) {
+          const n = parseInt(m[1], 10);
+          if (!isNaN(n) && n > maxNum && n < 999999) maxNum = n;
+        }
+      }
+    }
+  }
+  const nextNum = maxNum + 1;
+  const formattedNum = String(nextNum).padStart(6, '0');
+  return {
+    nextNum,
+    receiptNumber: `${prefix}${formattedNum}`,
+    transactionId: `TXN-2026-${formattedNum}`
+  };
+}
+
 export async function createIncome(req, res) {
   let createdTx = null;
   let donorBefore = null;
@@ -114,46 +139,47 @@ export async function createIncome(req, res) {
     if (!donorBefore && cleanName) {
       const terms = expandBilingualSearchTerms(cleanName);
       for (const term of terms) {
-        const safeT = safeSearchTerm(term);
-        const { data: nameRows } = await db.from('donors').select('*').ilike('name', `%${safeT}%`).limit(1);
-        if (nameRows?.[0]) {
-          donorBefore = nameRows[0];
+        const safe = safeSearchTerm(term);
+        const { data: nameMatchRows } = await db.from('donors').select('*').ilike('name', `%${safe}%`).limit(1);
+        if (nameMatchRows?.[0]) {
+          donorBefore = nameMatchRows[0];
           finalDonorId = donorBefore.id;
           break;
         }
       }
     }
 
-    // 4. Create new donor or update existing donor
-    if (!finalDonorId) {
-      const defaultTarget = parsedAmount >= 500 ? parsedAmount : 500;
-      const { data: newDonor, error } = await db.from('donors').insert({
+    // 4. If donor doesn't exist, create one
+    if (!donorBefore) {
+      const defaultTarget = parsedAmount > 0 ? parsedAmount : 500;
+      const { data: created, error: donorError } = await db.from('donors').insert({
         name: cleanName,
         mobile: cleanMobile,
-        email: email.trim(),
-        address: address.trim(),
-        area: (area || 'नदीवेस शिरोळ').trim(),
+        email: (email || '').trim(),
+        address: (address || '').trim(),
+        area: (area || 'शिरोळ').trim(),
         target_amount: defaultTarget,
         paid_amount: parsedAmount,
         total_donated: parsedAmount,
         donations_count: 1,
-        status: parsedAmount >= defaultTarget ? 'paid' : 'partial',
         last_donated_at: new Date().toISOString(),
-        notes: notes.trim()
+        status: parsedAmount >= defaultTarget ? 'paid' : 'partial'
       }).select('*').single();
-      throwIfError(error);
-      finalDonorId = newDonor.id;
+      throwIfError(donorError);
+      finalDonorId = created.id;
       createdDonor = true;
-    } else if (donorBefore) {
-      const oldPaid = Number(donorBefore.paid_amount || donorBefore.total_donated || 0);
-      const newPaid = oldPaid + parsedAmount;
-      const targetAmt = Number(donorBefore.target_amount) || Math.max(500, newPaid);
-      const newStatus = (newPaid >= targetAmt && targetAmt > 0) ? 'paid' : (newPaid > 0 ? 'partial' : 'unpaid');
+    } else {
+      // Update existing donor
+      const currentPaid = Number(donorBefore.paid_amount || donorBefore.total_donated || 0);
+      const newPaid = currentPaid + parsedAmount;
+      const currentTarget = Number(donorBefore.target_amount || 0);
+      const effectiveTarget = Math.max(currentTarget, newPaid);
+      const newStatus = (newPaid >= effectiveTarget && effectiveTarget > 0) ? 'paid' : (newPaid > 0 ? 'partial' : 'unpaid');
 
       const updatePayload = {
         paid_amount: newPaid,
         total_donated: newPaid,
-        target_amount: Math.max(targetAmt, newPaid),
+        target_amount: effectiveTarget,
         status: newStatus,
         donations_count: (Number(donorBefore.donations_count) || 0) + 1,
         last_donated_at: new Date().toISOString(),
@@ -166,14 +192,8 @@ export async function createIncome(req, res) {
       throwIfError(error);
     }
 
-    // Use MAX id to prevent duplicate receipt numbers after soft-deletes
-    const { data: maxRows, error: maxError } = await db.from('income_transactions').select('id').order('id', { ascending: false }).limit(1);
-    throwIfError(maxError);
-    const maxRow = maxRows?.[0] || null;
-    const nextNum = ((maxRow?.id) || 0) + 1;
-    const formattedNum = String(nextNum).padStart(6, '0');
-    const receiptNumber = `${settings.receipt_prefix || 'HANUMAN-2026-'}${formattedNum}`;
-    const transactionId = `TXN-${settings.festival_year || 2026}-${formattedNum}`;
+    // Generate continuous next receipt and transaction numbers
+    const { receiptNumber, transactionId } = await getNextReceiptNumber(settings.receipt_prefix || 'HANUMAN-2026-');
     const attachmentUrl = req.file ? await uploadFileToSupabase(req.file, 'income') : '';
     const collectorName = req.user?.name || 'स्वयंसेवक';
 
@@ -354,4 +374,51 @@ export async function updateIncome(req, res) {
     return res.status(500).json({ success: false, message: 'व्यवहार अद्ययावत करताना त्रुटी.' });
   }
 }
+
+export async function renumberReceipts(req, res) {
+  try {
+    const { data: transactions, error } = await db.from('income_transactions')
+      .select('*')
+      .eq('is_deleted', false)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true });
+    throwIfError(error);
+
+    const results = [];
+    let idx = 1;
+    for (const tx of transactions) {
+      const formattedNum = String(idx).padStart(6, '0');
+      const newReceiptNumber = `HANUMAN-2026-${formattedNum}`;
+      const newTxnId = `TXN-2026-${formattedNum}`;
+
+      await db.from('income_transactions').update({
+        receipt_number: newReceiptNumber,
+        transaction_id: newTxnId
+      }).eq('id', tx.id);
+
+      if (tx.receipt_id) {
+        await db.from('receipts').update({
+          receipt_number: newReceiptNumber
+        }).eq('id', tx.receipt_id);
+      } else if (tx.receipt_number) {
+        await db.from('receipts').update({
+          receipt_number: newReceiptNumber
+        }).eq('receipt_number', tx.receipt_number);
+      }
+
+      results.push({ id: tx.id, donor: tx.donor_name, receiptNumber: newReceiptNumber, txnId: newTxnId });
+      idx++;
+    }
+
+    return res.json({
+      success: true,
+      message: `${results.length} पावत्यांचे क्रमांक अखंड क्रमाने (Continuous 1 to ${results.length}) यशस्वीरित्या अद्ययावत केले!`,
+      data: results
+    });
+  } catch (err) {
+    console.error('renumberReceipts error:', err);
+    return res.status(500).json({ success: false, message: 'पावती क्रमांक अद्ययावत करताना त्रुटी.' });
+  }
+}
+
 

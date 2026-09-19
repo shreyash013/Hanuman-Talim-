@@ -52,6 +52,7 @@ router.put('/users/:id/status', requireRoles('admin'), authController.updateUser
 router.delete('/users/:id', requireRoles('admin'), authController.deleteUser);
 router.get('/dashboard/stats', dashboardController.getDashboardStats);
 router.get('/income', incomeController.getIncomeList);
+router.post('/income/renumber-receipts', requireRoles('admin', 'treasurer'), incomeController.renumberReceipts);
 router.post('/income', upload.single('attachment'), incomeController.createIncome);
 router.put('/income/:id', requireRoles('admin', 'treasurer'), incomeController.updateIncome);
 router.delete('/income/:id', requireRoles('admin'), incomeController.deleteIncome);

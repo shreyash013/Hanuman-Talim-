@@ -105,7 +105,7 @@ export function SyncStatusBanner() {
           ) : status === 'synced' ? (
             <span className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <span>सर्व नोंदी लाईव्ह सर्व्हरवर यशस्वीरित्या सिंक झाल्या! ({donorsCount} देणगीदार, {incomeCount} वर्गणी नोंदी)</span>
+              <span>सर्व नोंदी लाईव्ह सर्व्हरवर सुरक्षित सिंक आहेत (एकूण {donorsCount} देणगीदार | {incomeCount} जमा नोंदी)</span>
             </span>
           ) : (
             <span className="flex items-center gap-2 text-rose-700 dark:text-rose-300 font-bold">

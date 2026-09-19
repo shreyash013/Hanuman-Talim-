@@ -1,6 +1,7 @@
 import { db } from '../database/db.js';
 import { safeSearchTerm, sum, throwIfError, expandBilingualSearchTerms } from '../utils/dbHelpers.js';
 import { numberToWordsMarathi, numberToWordsEnglish } from '../utils/marathiNumberWords.js';
+import { getNextReceiptNumber } from './incomeController.js';
 
 function applyDonorFilters(query, search, area) {
   if (search) {
@@ -42,7 +43,11 @@ export async function getDonorsList(req, res) {
     const total = count || 0;
     const rows = summaryRows || [];
     const totalTarget = rows.reduce((acc, r) => acc + (Number(r.target_amount) || Number(r.total_donated) || 500), 0);
-    const totalPending = Math.max(0, totalTarget - totalPaid);
+    const totalPending = rows.reduce((acc, r) => {
+      const t = Number(r.target_amount) || Number(r.total_donated) || 0;
+      const p = Number(r.total_donated) || 0;
+      return acc + Math.max(0, t - p);
+    }, 0);
 
     return res.json({
       success: true,
@@ -172,11 +177,7 @@ export async function createDonor(req, res) {
 
 async function createIncomeForDonor(donor, amount, category = 'vargani') {
   try {
-    const { data: maxRows } = await db.from('income_transactions').select('id').order('id', { ascending: false }).limit(1);
-    const nextNum = ((maxRows?.[0]?.id) || 0) + 1;
-    const formattedNum = String(nextNum).padStart(6, '0');
-    const receiptNumber = `HANUMAN-2026-${formattedNum}`;
-    const transactionId = `TXN-2026-${formattedNum}`;
+    const { receiptNumber, transactionId } = await getNextReceiptNumber('HANUMAN-2026-');
     const cleanName = (donor.name || '').trim();
     const cleanMobile = (donor.mobile || '').trim();
     const cleanAddress = (donor.address || '').trim();
@@ -341,7 +342,10 @@ export async function updateDonor(req, res) {
     if (area !== undefined) updatePayload.area = area.trim();
     if (notes !== undefined) updatePayload.notes = notes.trim();
     if (target_amount !== undefined) updatePayload.target_amount = Number(target_amount);
-    if (paid_amount !== undefined) updatePayload.paid_amount = Number(paid_amount);
+    if (paid_amount !== undefined) {
+      updatePayload.paid_amount = Number(paid_amount);
+      updatePayload.total_donated = Number(paid_amount);
+    }
 
     const effectiveTarget = updatePayload.target_amount !== undefined ? updatePayload.target_amount : Number(donor.target_amount || 500);
     const effectivePaid = updatePayload.paid_amount !== undefined ? updatePayload.paid_amount : Number(donor.paid_amount || donor.total_donated || 0);
