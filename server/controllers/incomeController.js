@@ -83,30 +83,61 @@ export async function createIncome(req, res) {
     const settings = mandal || { receipt_prefix: 'HANUMAN-2026-', festival_year: 2026 };
 
     finalDonorId = donor_id || null;
-    if (!finalDonorId && mobile.trim()) {
-      const { data: existingDonor, error } = await db.from('donors').select('*').eq('mobile', mobile.trim()).maybeSingle();
-      throwIfError(error);
-      if (existingDonor) {
-        finalDonorId = existingDonor.id;
-        donorBefore = existingDonor;
+    const cleanMobile = (mobile || '').trim();
+    const digits10 = cleanMobile.replace(/\D/g, '').slice(-10);
+    const cleanName = (donor_name || '').trim();
+
+    // 1. If finalDonorId is provided, fetch donor
+    if (finalDonorId) {
+      const { data: donorRows } = await db.from('donors').select('*').eq('id', finalDonorId).limit(1);
+      donorBefore = donorRows?.[0] || null;
+    }
+
+    // 2. If not found by donor_id, find candidate by phone (exact or last 10 digits)
+    if (!donorBefore && cleanMobile) {
+      // Exact mobile match
+      const { data: exactMobRows } = await db.from('donors').select('*').eq('mobile', cleanMobile).limit(1);
+      if (exactMobRows?.[0]) {
+        donorBefore = exactMobRows[0];
+        finalDonorId = donorBefore.id;
+      } else if (digits10.length >= 10) {
+        // Last 10 digits match
+        const { data: digitMobRows } = await db.from('donors').select('*').ilike('mobile', `%${digits10}%`).limit(1);
+        if (digitMobRows?.[0]) {
+          donorBefore = digitMobRows[0];
+          finalDonorId = donorBefore.id;
+        }
       }
     }
 
-    if (finalDonorId && !donorBefore) {
-      const { data, error } = await db.from('donors').select('*').eq('id', finalDonorId).maybeSingle();
-      throwIfError(error);
-      donorBefore = data;
+    // 3. Fallback: find candidate by name (using bilingual transliteration)
+    if (!donorBefore && cleanName) {
+      const terms = expandBilingualSearchTerms(cleanName);
+      for (const term of terms) {
+        const safeT = safeSearchTerm(term);
+        const { data: nameRows } = await db.from('donors').select('*').ilike('name', `%${safeT}%`).limit(1);
+        if (nameRows?.[0]) {
+          donorBefore = nameRows[0];
+          finalDonorId = donorBefore.id;
+          break;
+        }
+      }
     }
 
+    // 4. Create new donor or update existing donor
     if (!finalDonorId) {
+      const defaultTarget = parsedAmount >= 500 ? parsedAmount : 500;
       const { data: newDonor, error } = await db.from('donors').insert({
-        name: donor_name.trim(),
-        mobile: mobile.trim(),
+        name: cleanName,
+        mobile: cleanMobile,
         email: email.trim(),
         address: address.trim(),
-        area: area.trim(),
+        area: (area || 'नदीवेस शिरोळ').trim(),
+        target_amount: defaultTarget,
+        paid_amount: parsedAmount,
         total_donated: parsedAmount,
         donations_count: 1,
+        status: parsedAmount >= defaultTarget ? 'paid' : 'partial',
         last_donated_at: new Date().toISOString(),
         notes: notes.trim()
       }).select('*').single();
@@ -114,19 +145,31 @@ export async function createIncome(req, res) {
       finalDonorId = newDonor.id;
       createdDonor = true;
     } else if (donorBefore) {
-      const { error } = await db.from('donors').update({
-        total_donated: (Number(donorBefore.total_donated) || 0) + parsedAmount,
+      const oldPaid = Number(donorBefore.paid_amount || donorBefore.total_donated || 0);
+      const newPaid = oldPaid + parsedAmount;
+      const targetAmt = Number(donorBefore.target_amount) || Math.max(500, newPaid);
+      const newStatus = (newPaid >= targetAmt && targetAmt > 0) ? 'paid' : (newPaid > 0 ? 'partial' : 'unpaid');
+
+      const updatePayload = {
+        paid_amount: newPaid,
+        total_donated: newPaid,
+        target_amount: Math.max(targetAmt, newPaid),
+        status: newStatus,
         donations_count: (Number(donorBefore.donations_count) || 0) + 1,
         last_donated_at: new Date().toISOString(),
-        name: donor_name.trim() || donorBefore.name,
+        name: cleanName || donorBefore.name,
         address: address.trim() || donorBefore.address
-      }).eq('id', finalDonorId);
+      };
+      if (cleanMobile && !donorBefore.mobile) updatePayload.mobile = cleanMobile;
+
+      const { error } = await db.from('donors').update(updatePayload).eq('id', finalDonorId);
       throwIfError(error);
     }
 
     // Use MAX id to prevent duplicate receipt numbers after soft-deletes
-    const { data: maxRow, error: maxError } = await db.from('income_transactions').select('id').order('id', { ascending: false }).limit(1).maybeSingle();
+    const { data: maxRows, error: maxError } = await db.from('income_transactions').select('id').order('id', { ascending: false }).limit(1);
     throwIfError(maxError);
+    const maxRow = maxRows?.[0] || null;
     const nextNum = ((maxRow?.id) || 0) + 1;
     const formattedNum = String(nextNum).padStart(6, '0');
     const receiptNumber = `${settings.receipt_prefix || 'HANUMAN-2026-'}${formattedNum}`;
@@ -137,8 +180,8 @@ export async function createIncome(req, res) {
     const { data: tx, error: txError } = await db.from('income_transactions').insert({
       transaction_id: transactionId,
       donor_id: finalDonorId,
-      donor_name: donor_name.trim(),
-      mobile: mobile.trim(),
+      donor_name: cleanName,
+      mobile: cleanMobile,
       address: address.trim(),
       amount: parsedAmount,
       payment_method,
@@ -158,8 +201,8 @@ export async function createIncome(req, res) {
     const { data: receipt, error: receiptError } = await db.from('receipts').insert({
       receipt_number: receiptNumber,
       transaction_id: tx.id,
-      donor_name: donor_name.trim(),
-      mobile: mobile.trim(),
+      donor_name: cleanName,
+      mobile: cleanMobile,
       address: address.trim(),
       amount: parsedAmount,
       amount_in_words_mr: numberToWordsMarathi(parsedAmount),
@@ -175,7 +218,7 @@ export async function createIncome(req, res) {
     const { error: linkError } = await db.from('income_transactions').update({ receipt_id: receipt.id }).eq('id', tx.id);
     throwIfError(linkError);
 
-    await logAudit({ userId: req.user?.id, userName: req.user?.name, userRole: req.user?.role, action: 'CREATE', entity: 'INCOME', entityId: transactionId, descriptionMr: `${donor_name.trim()} यांच्याकडून ₹${parsedAmount.toLocaleString('en-IN')} ${category === 'vargani' ? 'वर्गणी' : 'जमा'} नोंदवली (पावती क्र: ${receiptNumber}).`, descriptionEn: `Recorded income of ₹${parsedAmount.toLocaleString('en-IN')} from ${donor_name.trim()} (Receipt: ${receiptNumber}).`, newValues: { transactionId, receiptNumber, amount: parsedAmount, donor_name, payment_method, category }, req });
+    await logAudit({ userId: req.user?.id, userName: req.user?.name, userRole: req.user?.role, action: 'CREATE', entity: 'INCOME', entityId: transactionId, descriptionMr: `${cleanName} यांच्याकडून ₹${parsedAmount.toLocaleString('en-IN')} ${category === 'vargani' ? 'वर्गणी' : 'जमा'} नोंदवली (पावती क्र: ${receiptNumber}).`, descriptionEn: `Recorded income of ₹${parsedAmount.toLocaleString('en-IN')} from ${cleanName} (Receipt: ${receiptNumber}).`, newValues: { transactionId, receiptNumber, amount: parsedAmount, donor_name: cleanName, payment_method, category }, req });
 
     return res.status(201).json({ success: true, message: 'जमा रक्कम यशस्वीरित्या नोंदवली व पावती तयार झाली! / Income recorded & receipt generated!', data: { transactionId, receiptNumber, amount: parsedAmount, receipt } });
   } catch (err) {
@@ -186,7 +229,16 @@ export async function createIncome(req, res) {
       if (createdTx?.id) await db.from('income_transactions').delete().eq('id', createdTx.id);
       if (createdDonor && finalDonorId) await db.from('donors').delete().eq('id', finalDonorId);
       else if (donorBefore && finalDonorId) {
-        await db.from('donors').update({ total_donated: donorBefore.total_donated, donations_count: donorBefore.donations_count, last_donated_at: donorBefore.last_donated_at, name: donorBefore.name, address: donorBefore.address }).eq('id', finalDonorId);
+        await db.from('donors').update({
+          paid_amount: donorBefore.paid_amount,
+          total_donated: donorBefore.total_donated,
+          target_amount: donorBefore.target_amount,
+          status: donorBefore.status,
+          donations_count: donorBefore.donations_count,
+          last_donated_at: donorBefore.last_donated_at,
+          name: donorBefore.name,
+          address: donorBefore.address
+        }).eq('id', finalDonorId);
       }
     } catch (rollbackError) {
       console.error('Income rollback error:', rollbackError);
@@ -199,22 +251,29 @@ export async function createIncome(req, res) {
 export async function deleteIncome(req, res) {
   try {
     const { id } = req.params;
-    const { data: tx, error } = await db.from('income_transactions').select('*').eq('id', id).eq('is_deleted', false).maybeSingle();
+    const { data: txRows, error } = await db.from('income_transactions').select('*').eq('id', id).eq('is_deleted', false).limit(1);
     throwIfError(error);
+    const tx = txRows?.[0] || null;
     if (!tx) return res.status(404).json({ success: false, message: 'व्यवहार सापडला नाही.' });
 
     const { error: deleteError } = await db.from('income_transactions').update({ is_deleted: true }).eq('id', id);
     throwIfError(deleteError);
 
     if (tx.donor_id) {
-      const { data: donor, error: donorError } = await db.from('donors').select('total_donated, donations_count').eq('id', tx.donor_id).maybeSingle();
+      const { data: donorRows, error: donorError } = await db.from('donors').select('id, target_amount, paid_amount, total_donated, donations_count').eq('id', tx.donor_id).limit(1);
       throwIfError(donorError);
+      const donor = donorRows?.[0];
       if (donor) {
-        const { error: donorUpdateError } = await db.from('donors').update({
-          total_donated: Math.max(0, (Number(donor.total_donated) || 0) - (Number(tx.amount) || 0)),
+        const currentPaid = Number(donor.paid_amount || donor.total_donated || 0);
+        const newPaid = Math.max(0, currentPaid - (Number(tx.amount) || 0));
+        const targetAmt = Number(donor.target_amount) || 500;
+        const newStatus = (newPaid >= targetAmt && targetAmt > 0) ? 'paid' : (newPaid > 0 ? 'partial' : 'unpaid');
+        await db.from('donors').update({
+          paid_amount: newPaid,
+          total_donated: newPaid,
+          status: newStatus,
           donations_count: Math.max(0, (Number(donor.donations_count) || 0) - 1)
         }).eq('id', tx.donor_id);
-        throwIfError(donorUpdateError);
       }
     }
 
@@ -230,8 +289,9 @@ export async function updateIncome(req, res) {
   try {
     const { id } = req.params;
     const { donor_name, mobile, address, amount, category, purpose, notes, payment_method } = req.body;
-    const { data: tx, error } = await db.from('income_transactions').select('*').eq('id', id).eq('is_deleted', false).maybeSingle();
+    const { data: txRows, error } = await db.from('income_transactions').select('*').eq('id', id).eq('is_deleted', false).limit(1);
     throwIfError(error);
+    const tx = txRows?.[0] || null;
     if (!tx) return res.status(404).json({ success: false, message: 'व्यवहार सापडला नाही.' });
 
     const updatePayload = {};
@@ -246,6 +306,23 @@ export async function updateIncome(req, res) {
 
     const { data: updated, error: updateError } = await db.from('income_transactions').update(updatePayload).eq('id', id).select('*').single();
     throwIfError(updateError);
+
+    // Update donor paid_amount & status if amount changed
+    if (updatePayload.amount !== undefined && tx.donor_id && Number(updatePayload.amount) !== Number(tx.amount)) {
+      const diff = Number(updatePayload.amount) - Number(tx.amount);
+      const { data: dRows } = await db.from('donors').select('id, target_amount, paid_amount, total_donated').eq('id', tx.donor_id).limit(1);
+      const d = dRows?.[0];
+      if (d) {
+        const newPaid = Math.max(0, (Number(d.paid_amount || d.total_donated) || 0) + diff);
+        const targetAmt = Number(d.target_amount) || 500;
+        const newStatus = (newPaid >= targetAmt && targetAmt > 0) ? 'paid' : (newPaid > 0 ? 'partial' : 'unpaid');
+        await db.from('donors').update({
+          paid_amount: newPaid,
+          total_donated: newPaid,
+          status: newStatus
+        }).eq('id', tx.donor_id);
+      }
+    }
 
     // Update matching receipt
     if (tx.receipt_id || tx.receipt_number) {

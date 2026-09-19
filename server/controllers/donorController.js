@@ -89,8 +89,9 @@ export async function searchDonors(req, res) {
 export async function getDonorById(req, res) {
   try {
     const { id } = req.params;
-    const { data: donor, error } = await db.from('donors').select('*').eq('id', id).maybeSingle();
+    const { data: donorRows, error } = await db.from('donors').select('*').eq('id', id).limit(1);
     throwIfError(error);
+    const donor = donorRows?.[0] || null;
     if (!donor) return res.status(404).json({ success: false, message: 'देणगीदार सापडला नाही.' });
 
     const { data: txRows, error: txError } = await db.from('income_transactions').select('id, transaction_id, amount, payment_method, category, purpose, receipt_number, created_at, collector_name').eq('donor_id', id).eq('is_deleted', false).order('created_at', { ascending: false });
@@ -152,10 +153,16 @@ export async function createDonor(req, res) {
     if (!name?.trim()) return res.status(400).json({ success: false, message: 'नाव आवश्यक आहे.' });
 
     const cleanMobile = mobile ? mobile.trim() : '';
+    const digits10 = cleanMobile.replace(/\D/g, '').slice(-10);
     if (cleanMobile) {
-      const { data: existing, error: existingError } = await db.from('donors').select('id').eq('mobile', cleanMobile).maybeSingle();
-      throwIfError(existingError);
-      if (existing) return res.status(400).json({ success: false, message: 'हा मोबाईल क्रमांक आधीच अस्तित्वात आहे.' });
+      let existingQuery = db.from('donors').select('id, name, mobile');
+      if (digits10.length >= 10) {
+        existingQuery = existingQuery.or(`mobile.eq.${cleanMobile},mobile.ilike.%${digits10}%`);
+      } else {
+        existingQuery = existingQuery.eq('mobile', cleanMobile);
+      }
+      const { data: existingRows } = await existingQuery.limit(1);
+      if (existingRows?.[0]) return res.status(400).json({ success: false, message: `हा मोबाईल क्रमांक आधीच '${existingRows[0].name}' यांच्यासाठी नोंदवलेला आहे.` });
     }
 
     const target = Number(target_amount || amount || 500);
@@ -204,22 +211,36 @@ export async function updateDonor(req, res) {
     let donor = null;
     // 1. Try finding by ID if it's a standard numeric database ID (< 1,000,000,000)
     if (id && Number(id) < 1000000000) {
-      const { data } = await db.from('donors').select('*').eq('id', id).maybeSingle();
-      donor = data;
+      const { data } = await db.from('donors').select('*').eq('id', id).limit(1);
+      donor = data?.[0] || null;
     }
 
-    // 2. If not found by ID, try finding by originalName or current name
+    // 2. If not found by ID, try finding by originalName or current name (with bilingual terms)
     const targetName = (originalName || name)?.trim();
     if (!donor && targetName) {
-      const { data } = await db.from('donors').select('*').ilike('name', targetName).maybeSingle();
-      donor = data;
+      const terms = expandBilingualSearchTerms(targetName);
+      for (const t of terms) {
+        const safeT = safeSearchTerm(t);
+        const { data } = await db.from('donors').select('*').ilike('name', `%${safeT}%`).limit(1);
+        if (data?.[0]) {
+          donor = data[0];
+          break;
+        }
+      }
     }
 
-    // 3. Fallback: try finding by mobile
+    // 3. Fallback: try finding by mobile (exact or last 10 digits)
     const cleanMobile = mobile ? mobile.trim() : '';
+    const digits10 = cleanMobile.replace(/\D/g, '').slice(-10);
     if (!donor && cleanMobile) {
-      const { data } = await db.from('donors').select('*').eq('mobile', cleanMobile).maybeSingle();
-      donor = data;
+      let mobQuery = db.from('donors').select('*');
+      if (digits10.length >= 10) {
+        mobQuery = mobQuery.or(`mobile.eq.${cleanMobile},mobile.ilike.%${digits10}%`);
+      } else {
+        mobQuery = mobQuery.eq('mobile', cleanMobile);
+      }
+      const { data } = await mobQuery.limit(1);
+      donor = data?.[0] || null;
     }
 
     // 4. If still not found and valid name provided, insert as new donor
@@ -291,7 +312,6 @@ export async function updateDonor(req, res) {
   }
 }
 
-
 export async function deleteDonor(req, res) {
   try {
     const { id } = req.params;
@@ -301,20 +321,20 @@ export async function deleteDonor(req, res) {
     let donor = null;
     // 1. Try finding by ID if it's a standard database ID
     if (id && Number(id) < 1000000000) {
-      const { data } = await db.from('donors').select('id, name, mobile').eq('id', id).maybeSingle();
-      donor = data;
+      const { data } = await db.from('donors').select('id, name, mobile').eq('id', id).limit(1);
+      donor = data?.[0] || null;
     }
 
     // 2. If not found by ID, try finding by name or mobile
     if (!donor && name?.trim()) {
-      const { data } = await db.from('donors').select('id, name, mobile').ilike('name', name.trim()).maybeSingle();
-      donor = data;
+      const { data } = await db.from('donors').select('id, name, mobile').ilike('name', name.trim()).limit(1);
+      donor = data?.[0] || null;
     }
 
     if (!donor && mobile?.trim()) {
       const cleanMobile = mobile.trim();
-      const { data } = await db.from('donors').select('id, name, mobile').eq('mobile', cleanMobile).maybeSingle();
-      donor = data;
+      const { data } = await db.from('donors').select('id, name, mobile').eq('mobile', cleanMobile).limit(1);
+      donor = data?.[0] || null;
     }
 
     // Perform deletions
@@ -364,6 +384,108 @@ export async function deleteMultipleDonors(req, res) {
   } catch (err) {
     console.error('deleteMultipleDonors error:', err);
     return res.status(500).json({ success: false, message: 'देणगीदार हटवताना त्रुटी' });
+  }
+}
+
+export async function reconcileAndDeduplicateDonors(req, res) {
+  try {
+    const { data: allDonors, error: dErr } = await db.from('donors').select('*').order('id', { ascending: true });
+    throwIfError(dErr);
+    const { data: allTx, error: tErr } = await db.from('income_transactions').select('*').eq('is_deleted', false);
+    throwIfError(tErr);
+
+    const donors = allDonors || [];
+    const txs = allTx || [];
+
+    // Group donors by normalized 10-digit mobile, or lowercase trimmed name
+    const grouped = new Map();
+
+    donors.forEach(d => {
+      const mob = (d.mobile || '').replace(/\D/g, '').slice(-10);
+      const key = (mob.length === 10) ? `mob_${mob}` : `name_${(d.name || '').trim().toLowerCase()}`;
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key).push(d);
+    });
+
+    let mergedCount = 0;
+    const details = [];
+
+    for (const [key, group] of grouped.entries()) {
+      if (group.length <= 1) continue;
+
+      // Found duplicates! Pick canonical donor
+      const sorted = [...group].sort((a, b) => {
+        const aHasMr = /[\u0900-\u097F]/.test(a.name || '');
+        const bHasMr = /[\u0900-\u097F]/.test(b.name || '');
+        if (aHasMr && !bHasMr) return -1;
+        if (!aHasMr && bHasMr) return 1;
+        const aTarget = Number(a.target_amount || 0);
+        const bTarget = Number(b.target_amount || 0);
+        if (bTarget !== aTarget) return bTarget - aTarget;
+        return a.id - b.id;
+      });
+
+      const canonical = sorted[0];
+      const duplicates = sorted.slice(1);
+      const duplicateIds = duplicates.map(d => d.id);
+
+      // Re-link all transactions linked to duplicate IDs to canonical.id
+      for (const dupId of duplicateIds) {
+        await db.from('income_transactions').update({
+          donor_id: canonical.id,
+          donor_name: canonical.name,
+          mobile: canonical.mobile || undefined,
+          address: canonical.address || undefined
+        }).eq('donor_id', dupId);
+      }
+
+      // Re-link any transactions where donor_name matches the canonical name or duplicate names
+      const allNamesInGroup = group.map(g => (g.name || '').trim()).filter(Boolean);
+      for (const nameToMatch of allNamesInGroup) {
+        await db.from('income_transactions').update({
+          donor_id: canonical.id,
+          donor_name: canonical.name,
+          mobile: canonical.mobile || undefined
+        }).ilike('donor_name', nameToMatch);
+      }
+
+      // Re-calculate payments for canonical donor
+      const { data: matchedTxs } = await db.from('income_transactions').select('amount').eq('donor_id', canonical.id).eq('is_deleted', false);
+      const totalPaid = (matchedTxs || []).reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
+      const maxTargetInGroup = Math.max(...group.map(g => Number(g.target_amount || 0)), 500);
+      const effectiveTarget = Math.max(maxTargetInGroup, totalPaid);
+      const newStatus = (totalPaid >= effectiveTarget && effectiveTarget > 0) ? 'paid' : (totalPaid > 0 ? 'partial' : 'unpaid');
+
+      await db.from('donors').update({
+        target_amount: effectiveTarget,
+        paid_amount: totalPaid,
+        total_donated: totalPaid,
+        donations_count: matchedTxs?.length || 0,
+        status: newStatus
+      }).eq('id', canonical.id);
+
+      // Delete duplicate donor rows
+      await db.from('donors').delete().in('id', duplicateIds);
+
+      mergedCount += duplicates.length;
+      details.push({
+        canonicalId: canonical.id,
+        canonicalName: canonical.name,
+        mergedIds: duplicateIds,
+        effectiveTarget,
+        totalPaid
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: `${mergedCount} दुबार देणगीदार खाती यशस्वीरित्या एकत्रित केली! / Successfully deduplicated ${mergedCount} duplicate donor profiles!`,
+      mergedCount,
+      details
+    });
+  } catch (err) {
+    console.error('reconcileAndDeduplicateDonors error:', err);
+    return res.status(500).json({ success: false, message: 'डेटा दुरुस्त करताना त्रुटी: ' + (err.message || err) });
   }
 }
 

@@ -134,13 +134,19 @@ export function DonorsPage() {
         donorsList = donorsList.map(d => {
           const matchingPayments = incomeList.filter(inc => {
             if (inc.is_deleted) return false;
-            const nameMatch = inc.donor_name && d.name && (
-              inc.donor_name.trim().toLowerCase() === d.name.trim().toLowerCase()
+            const incName = (inc.donor_name || '').trim().toLowerCase();
+            const dName = (d.name || '').trim().toLowerCase();
+            const nameMatch = incName && dName && (
+              incName === dName ||
+              incName.includes(dName) ||
+              dName.includes(incName) ||
+              incName.replace(/\s*\([^)]*\)/g, '').trim() === dName.replace(/\s*\([^)]*\)/g, '').trim()
             );
-            const mobileMatch = d.mobile && inc.mobile && (
-              d.mobile.replace(/\D/g, '') === inc.mobile.replace(/\D/g, '') && d.mobile.replace(/\D/g, '').length >= 10
-            );
-            return nameMatch || mobileMatch;
+            const dDigits = (d.mobile || '').replace(/\D/g, '').slice(-10);
+            const incDigits = (inc.mobile || '').replace(/\D/g, '').slice(-10);
+            const mobileMatch = dDigits.length === 10 && incDigits.length === 10 && dDigits === incDigits;
+            const idMatch = inc.donor_id && String(inc.donor_id) === String(d.id);
+            return idMatch || nameMatch || mobileMatch;
           });
 
           const localPaid = matchingPayments.reduce((sum, inc) => sum + (Number(inc.amount) || 0), 0);

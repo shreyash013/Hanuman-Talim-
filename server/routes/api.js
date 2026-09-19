@@ -58,6 +58,7 @@ router.delete('/income/:id', requireRoles('admin'), incomeController.deleteIncom
 
 router.get('/donors', donorController.getDonorsList);
 router.get('/donors/search', donorController.searchDonors);
+router.post('/donors/deduplicate', requireRoles('admin', 'treasurer'), donorController.reconcileAndDeduplicateDonors);
 router.get('/donors/:id', donorController.getDonorById);
 router.post('/donors', donorController.createDonor);
 router.put('/donors/:id', donorController.updateDonor);

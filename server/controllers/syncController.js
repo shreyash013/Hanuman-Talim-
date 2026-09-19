@@ -65,6 +65,14 @@ export async function autoSyncAll(req, res) {
         }
       }
 
+      // Safety check: Never delete a donor if they are present in the current active donors or income sync lists!
+      const activeNames = new Set((donors || []).map(d => (d.name || '').trim().toLowerCase()).filter(Boolean));
+      const activeIncomeNames = new Set((income || []).map(i => (i.donor_name || '').trim().toLowerCase()).filter(Boolean));
+      const activeMobiles = new Set((donors || []).map(d => (d.mobile || '').trim()).filter(Boolean));
+      for (const name of activeNames) deletedNameSet.delete(name);
+      for (const name of activeIncomeNames) deletedNameSet.delete(name);
+      for (const mob of activeMobiles) deletedMobileSet.delete(mob);
+
       // Delete from Supabase donors table and soft-delete related income
       try {
         for (const name of deletedNameSet) {
@@ -266,7 +274,8 @@ export async function autoSyncAll(req, res) {
             // Update matching donor's paid amount and payment status
             if (donorId) {
               try {
-                const { data: dRow } = await db.from('donors').select('target_amount, paid_amount, total_donated, donations_count').eq('id', donorId).maybeSingle();
+                const { data: dRows } = await db.from('donors').select('target_amount, paid_amount, total_donated, donations_count').eq('id', donorId).limit(1);
+                const dRow = dRows?.[0] || null;
                 if (dRow) {
                   const newPaid = (Number(dRow.paid_amount || dRow.total_donated) || 0) + parsedAmount;
                   const targetAmt = Number(dRow.target_amount) || 500;
