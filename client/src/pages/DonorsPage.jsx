@@ -239,25 +239,6 @@ export function DonorsPage() {
       });
 
       if (res.success) {
-        // 2. If paid amount > 0, ALSO create income transaction so it shows in Income Records
-        if (paidAmt > 0) {
-          try {
-            await api.post('/income', {
-              donor_name: donorName.trim(),
-              mobile: mobile.trim(),
-              address: address.trim(),
-              area: area.trim() || 'शिरोळ',
-              amount: paidAmt,
-              payment_method: 'cash',
-              category: 'vargani',
-              purpose: 'श्री गणेशोत्सव वर्गणी',
-              collector_name: 'सुमेध गवडे (अध्यक्ष)'
-            });
-          } catch (incErr) {
-            console.warn('Income record creation failed:', incErr);
-          }
-        }
-
         showToast('देणगीदार यशस्वीरित्या जोडला!', 'success');
         setShowAddModal(false);
         setDonorName('');

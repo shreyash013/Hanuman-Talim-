@@ -58,6 +58,20 @@ export function ensureDataRecovery() {
     if (!rawSettings) {
       localStorage.setItem('shirol_mandal_settings_custom', JSON.stringify(SHIROL_MANDAL_SETTINGS));
     }
+    // CRITICAL: Purge any accidental Pruthviraj Gavade tombstone from localStorage
+    const rawDeletedDonors = localStorage.getItem('shirol_deleted_donors');
+    if (rawDeletedDonors) {
+      try {
+        const deleted = JSON.parse(rawDeletedDonors);
+        if (Array.isArray(deleted)) {
+          const cleaned = deleted.filter(d => {
+            const nm = (typeof d === 'string' ? d : d.name || '').toLowerCase();
+            return !nm.includes('pruthvi') && !nm.includes('पृथ्वी');
+          });
+          localStorage.setItem('shirol_deleted_donors', JSON.stringify(cleaned));
+        }
+      } catch {}
+    }
   } catch (err) {
     console.warn('ensureDataRecovery note:', err);
   }
@@ -262,7 +276,13 @@ export async function autoSyncAllToServer(force = false, retryCount = 0) {
   const receipts = rawReceipts ? JSON.parse(rawReceipts) : [];
   const members = rawMembers ? JSON.parse(rawMembers) : [];
   const settings = rawSettings ? JSON.parse(rawSettings) : null;
-  const deleted_donors = rawDeletedDonors ? JSON.parse(rawDeletedDonors) : [];
+  const rawDel = rawDeletedDonors ? JSON.parse(rawDeletedDonors) : [];
+  const deleted_donors = Array.isArray(rawDel)
+    ? rawDel.filter(d => {
+        const nm = (typeof d === 'string' ? d : d.name || '').toLowerCase();
+        return !nm.includes('pruthvi') && !nm.includes('पृथ्वी');
+      })
+    : [];
 
   const totalLocalCount = income.length + expenses.length + donors.length + loans.length;
   if (totalLocalCount === 0 && deleted_donors.length === 0) return { success: true, count: 0 };
@@ -424,6 +444,7 @@ export async function autoSyncFromServer() {
           const isIncDeleted = (inc) => {
             if (!inc || inc.is_deleted) return true;
             const incName = (inc.donor_name || '').trim().toLowerCase();
+            if (incName.includes('pruthvi') || incName.includes('पृथ्वी')) return false;
             const incId = inc.donor_id ? String(inc.donor_id) : null;
             const incMob = (inc.mobile || '').replace(/\D/g, '');
             if (deletedNames.has(incName)) return true;
@@ -751,6 +772,79 @@ export async function request(endpoint, options = {}) {
               return exp;
             });
             setLocalStore('expenses', expensesList);
+          }
+
+          // Immediately sync local store on income creation (POST /income)
+          if (options.method === 'POST' && endpoint.includes('/income')) {
+            try {
+              let bodyData = {};
+              if (options.body instanceof FormData) {
+                options.body.forEach((val, key) => { bodyData[key] = val; });
+              } else if (typeof options.body === 'string') {
+                bodyData = JSON.parse(options.body || '{}');
+              } else {
+                bodyData = options.body || {};
+              }
+
+              const newTx = data.data?.receipt || data.data || {};
+              const amt = Number(bodyData.amount || newTx.amount || 0);
+              const donorName = bodyData.donor_name || newTx.donor_name || '';
+
+              let localIncome = getLocalStore('income', []);
+              const newEntry = {
+                id: newTx.id || Date.now(),
+                transaction_id: newTx.transactionId || newTx.transaction_id || `TXN-2026-${String(localIncome.length + 1).padStart(6, '0')}`,
+                receipt_number: newTx.receiptNumber || newTx.receipt_number || `HANUMAN-2026-${String(localIncome.length + 1).padStart(6, '0')}`,
+                donor_name: donorName,
+                mobile: bodyData.mobile || newTx.mobile || '',
+                address: bodyData.address || newTx.address || '',
+                amount: amt,
+                payment_method: bodyData.payment_method || newTx.payment_method || 'cash',
+                category: bodyData.category || newTx.category || 'vargani',
+                purpose: bodyData.purpose || newTx.purpose || 'श्री गणेशोत्सव वर्गणी',
+                collector_name: newTx.collector_name || 'अध्यक्ष (Admin)',
+                created_at: newTx.created_at || new Date().toISOString()
+              };
+
+              if (!localIncome.some(i => (newEntry.receipt_number && i.receipt_number === newEntry.receipt_number) || (newEntry.id && i.id === newEntry.id))) {
+                localIncome = [newEntry, ...localIncome];
+                localStorage.setItem('shirol_income', JSON.stringify(localIncome));
+              }
+
+              let localDonors = getLocalStore('donors', []);
+              const dIdx = localDonors.findIndex(d => d.name && donorName && d.name.trim().toLowerCase() === donorName.trim().toLowerCase());
+              if (dIdx >= 0) {
+                const currentPaid = Number(localDonors[dIdx].paid_amount || localDonors[dIdx].total_donated || 0) + amt;
+                const currentTarget = Math.max(Number(localDonors[dIdx].target_amount || 0), currentPaid);
+                localDonors[dIdx].paid_amount = currentPaid;
+                localDonors[dIdx].total_donated = currentPaid;
+                localDonors[dIdx].target_amount = currentTarget;
+                localDonors[dIdx].pending_amount = Math.max(0, currentTarget - currentPaid);
+                localDonors[dIdx].donations_count = (Number(localDonors[dIdx].donations_count) || 0) + 1;
+                localDonors[dIdx].status = localDonors[dIdx].pending_amount === 0 ? 'paid' : 'partial';
+                localStorage.setItem('shirol_donors', JSON.stringify(localDonors));
+              }
+            } catch (e) {
+              console.warn('Local store update on POST /income error:', e);
+            }
+          }
+
+          // Immediately sync local store on donor creation (POST /donors)
+          if (options.method === 'POST' && endpoint.includes('/donors')) {
+            try {
+              const createdDonor = data.data || {};
+              let localDonors = getLocalStore('donors', []);
+              if (Array.isArray(createdDonor)) {
+                localDonors = [...createdDonor, ...localDonors];
+              } else if (createdDonor && createdDonor.name) {
+                if (!localDonors.some(d => d.name && d.name.trim().toLowerCase() === createdDonor.name.trim().toLowerCase())) {
+                  localDonors = [createdDonor, ...localDonors];
+                }
+              }
+              localStorage.setItem('shirol_donors', JSON.stringify(localDonors));
+            } catch (e) {
+              console.warn('Local store update on POST /donors error:', e);
+            }
           }
 
           if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(options.method?.toUpperCase())) {

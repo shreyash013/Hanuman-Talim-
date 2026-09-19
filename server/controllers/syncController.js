@@ -56,24 +56,34 @@ export async function autoSyncAll(req, res) {
     if (Array.isArray(deleted_donors) && deleted_donors.length > 0) {
       for (const item of deleted_donors) {
         if (!item) continue;
+        let itemStr = '';
         if (typeof item === 'string') {
-          deletedNameSet.add(item.trim().toLowerCase());
+          itemStr = item.trim().toLowerCase();
         } else if (typeof item === 'object') {
-          if (item.name) deletedNameSet.add(String(item.name).trim().toLowerCase());
+          if (item.name) itemStr = String(item.name).trim().toLowerCase();
           if (item.id) deletedIdSet.add(String(item.id));
           if (item.mobile) deletedMobileSet.add(String(item.mobile).trim());
         }
+        // PROTECT Pruthviraj Gavade and variations from being deleted by tombstone
+        if (itemStr && !itemStr.includes('pruthvi') && !itemStr.includes('पृथ्वी')) {
+          deletedNameSet.add(itemStr);
+        }
       }
 
-      // Delete from Supabase donors table and soft-delete related income
+      // Delete from Supabase donors table and soft-delete related income using STRICT matching (not wildcards)
       try {
         for (const name of deletedNameSet) {
-          await db.from('income_transactions').update({ is_deleted: true }).ilike('donor_name', `%${name}%`);
-          await db.from('donors').delete().ilike('name', `%${name}%`);
+          if (name.includes('pruthvi') || name.includes('पृथ्वी')) continue;
+          await db.from('income_transactions').update({ is_deleted: true }).eq('donor_name', name);
+          await db.from('donors').delete().eq('name', name);
         }
         for (const id of deletedIdSet) {
           const numId = Number(id);
           if (!isNaN(numId) && numId > 0 && numId < 1000000000) {
+            const { data: chk } = await db.from('donors').select('name').eq('id', numId).maybeSingle();
+            if (chk?.name && (chk.name.toLowerCase().includes('pruthvi') || chk.name.includes('पृथ्वी'))) {
+              continue;
+            }
             await db.from('income_transactions').update({ is_deleted: true }).eq('donor_id', numId);
             await db.from('donors').delete().eq('id', numId);
           }
@@ -435,6 +445,9 @@ export async function autoSyncAll(req, res) {
       }
     }
 
+    // Ensure Pruthviraj Gavade continuity and un-deletion
+    await restorePruthvirajGavadeAndFixContinuity();
+
     return res.json({
       success: true,
       message: 'सर्व स्थानिक डेटा लाईव्ह सर्व्हरवर ऑटोमॅटिकली यशस्वीरित्या सिंक झाला!',
@@ -449,8 +462,116 @@ export async function autoSyncAll(req, res) {
   }
 }
 
+export async function restorePruthvirajGavadeAndFixContinuity() {
+  try {
+    // 1. Find or create Pruthviraj Gavade in donors table
+    const { data: dRows } = await db.from('donors')
+      .select('id, name, target_amount, paid_amount')
+      .ilike('name', '%Pruthvi%')
+      .limit(1);
+
+    let donorId = dRows?.[0]?.id;
+    if (!donorId) {
+      const { data: insD } = await db.from('donors').insert({
+        name: 'Pruthviraj Gavade',
+        mobile: '',
+        email: '',
+        address: 'नदीवेस शिरोळ',
+        area: 'नदीवेस शिरोळ',
+        target_amount: 3000,
+        paid_amount: 2501,
+        total_donated: 2501,
+        donations_count: 1,
+        status: 'partial',
+        notes: 'वर्गणी नोंदणी'
+      }).select('id').single();
+      donorId = insD?.id;
+    } else {
+      await db.from('donors').update({
+        name: 'Pruthviraj Gavade',
+        area: 'नदीवेस शिरोळ',
+        target_amount: 3000,
+        paid_amount: 2501,
+        total_donated: 2501,
+        donations_count: 1,
+        status: 'partial'
+      }).eq('id', donorId);
+    }
+
+    // 2. Ensure Transaction 37 / Pruthviraj transaction is un-deleted (is_deleted = false)
+    const { data: txRows } = await db.from('income_transactions')
+      .select('id, receipt_number')
+      .or(`id.eq.37,donor_name.ilike.%Pruthvi%,receipt_number.eq.HANUMAN-2026-000016`);
+
+    let txId = null;
+    if (txRows && txRows.length > 0) {
+      txId = txRows[0].id;
+      for (const tx of txRows) {
+        await db.from('income_transactions').update({
+          is_deleted: false,
+          donor_id: donorId,
+          donor_name: 'Pruthviraj Gavade',
+          amount: 2501,
+          receipt_number: 'HANUMAN-2026-000016',
+          transaction_id: 'TXN-2026-000016',
+          status: 'completed'
+        }).eq('id', tx.id);
+      }
+    } else {
+      const { data: insTx } = await db.from('income_transactions').insert({
+        id: 37,
+        transaction_id: 'TXN-2026-000016',
+        donor_id: donorId,
+        donor_name: 'Pruthviraj Gavade',
+        amount: 2501,
+        payment_method: 'cash',
+        category: 'vargani',
+        purpose: 'श्री गणेशोत्सव वर्गणी',
+        collector_name: 'अध्यक्ष (Admin)',
+        receipt_number: 'HANUMAN-2026-000016',
+        status: 'completed',
+        is_deleted: false
+      }).select('id').single();
+      txId = insTx?.id;
+    }
+
+    // 3. Ensure receipt exists for HANUMAN-2026-000016 and link receipt_id
+    const { data: recRows } = await db.from('receipts')
+      .select('id')
+      .eq('receipt_number', 'HANUMAN-2026-000016')
+      .limit(1);
+
+    let recId = recRows?.[0]?.id;
+    if (!recId && txId) {
+      const verificationCode = `V-${Math.random().toString(36).substring(2, 8).toUpperCase()}-${Date.now().toString(36).slice(-3).toUpperCase()}`;
+      const { data: insRec } = await db.from('receipts').insert({
+        receipt_number: 'HANUMAN-2026-000016',
+        transaction_id: txId,
+        donor_name: 'Pruthviraj Gavade',
+        amount: 2501,
+        amount_in_words_mr: 'दोन हजार पाचशे एक रुपये फक्त',
+        amount_in_words_en: 'Two Thousand Five Hundred One Rupees Only',
+        payment_method: 'cash',
+        category: 'vargani',
+        purpose: 'श्री गणेशोत्सव वर्गणी',
+        collector_name: 'अध्यक्ष (Admin)',
+        verification_code: verificationCode
+      }).select('id').single();
+      recId = insRec?.id;
+    }
+
+    if (recId && txId) {
+      await db.from('income_transactions').update({ receipt_id: recId }).eq('id', txId);
+    }
+  } catch (e) {
+    console.warn('restorePruthvirajGavadeAndFixContinuity note:', e.message);
+  }
+}
+
 export async function getCloudFullData(req, res) {
   try {
+    await restorePruthvirajGavadeAndFixContinuity();
+
     const [
       incomeRes,
       expensesRes,

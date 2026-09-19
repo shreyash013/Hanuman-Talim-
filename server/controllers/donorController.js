@@ -2,6 +2,7 @@ import { db } from '../database/db.js';
 import { safeSearchTerm, sum, throwIfError, expandBilingualSearchTerms } from '../utils/dbHelpers.js';
 import { numberToWordsMarathi, numberToWordsEnglish } from '../utils/marathiNumberWords.js';
 import { getNextReceiptNumber } from './incomeController.js';
+import { restorePruthvirajGavadeAndFixContinuity } from './syncController.js';
 
 function applyDonorFilters(query, search, area) {
   if (search) {
@@ -20,6 +21,8 @@ function applyDonorFilters(query, search, area) {
 
 export async function getDonorsList(req, res) {
   try {
+    await restorePruthvirajGavadeAndFixContinuity();
+
     const { page = 1, limit = 500, search = '', area = '' } = req.query;
     const pageNum = Math.max(1, Number(page) || 1);
     const limitNum = Math.min(1000, Math.max(1, Number(limit) || 500));
@@ -177,7 +180,22 @@ export async function createDonor(req, res) {
 
 async function createIncomeForDonor(donor, amount, category = 'vargani') {
   try {
-    const { receiptNumber, transactionId } = await getNextReceiptNumber('HANUMAN-2026-');
+    let { receiptNumber, transactionId, nextNum } = await getNextReceiptNumber('HANUMAN-2026-');
+
+    // Ensure candidate receiptNumber and transactionId are not already taken
+    let candidateNum = nextNum;
+    while (true) {
+      const { data: existingRec } = await db.from('receipts').select('id').eq('receipt_number', receiptNumber).limit(1);
+      const { data: existingTx } = await db.from('income_transactions').select('id').eq('transaction_id', transactionId).limit(1);
+      if ((!existingRec || existingRec.length === 0) && (!existingTx || existingTx.length === 0)) {
+        break;
+      }
+      candidateNum++;
+      const fmt = String(candidateNum).padStart(6, '0');
+      receiptNumber = `HANUMAN-2026-${fmt}`;
+      transactionId = `TXN-2026-${fmt}`;
+    }
+
     const cleanName = (donor.name || '').trim();
     const cleanMobile = (donor.mobile || '').trim();
     const cleanAddress = (donor.address || '').trim();

@@ -3,6 +3,7 @@ import { numberToWordsMarathi, numberToWordsEnglish } from '../utils/marathiNumb
 import { logAudit } from '../middleware/auditMiddleware.js';
 import { uploadFileToSupabase } from '../middleware/uploadMiddleware.js';
 import { istDayBounds, safeSearchTerm, sum, throwIfError, expandBilingualSearchTerms } from '../utils/dbHelpers.js';
+import { restorePruthvirajGavadeAndFixContinuity } from './syncController.js';
 
 function applyIncomeFilters(query, filters) {
   const { search, category, payment_method, startDate, endDate, donor_id } = filters;
@@ -26,6 +27,8 @@ function applyIncomeFilters(query, filters) {
 
 export async function getIncomeList(req, res) {
   try {
+    await restorePruthvirajGavadeAndFixContinuity();
+
     const filters = {
       search: req.query.search || '',
       category: req.query.category || '',
@@ -67,21 +70,44 @@ export async function getIncomeList(req, res) {
 }
 
 export async function getNextReceiptNumber(prefix = 'HANUMAN-2026-') {
-  const { data: rows } = await db.from('income_transactions')
-    .select('receipt_number')
-    .eq('is_deleted', false);
   let maxNum = 0;
-  if (Array.isArray(rows)) {
-    for (const r of rows) {
-      if (r.receipt_number) {
-        const m = r.receipt_number.match(/(\d+)$/);
-        if (m) {
-          const n = parseInt(m[1], 10);
-          if (!isNaN(n) && n > maxNum && n < 999999) maxNum = n;
+
+  // 1. Check all income transactions (including inactive to avoid collisions)
+  try {
+    const { data: rows } = await db.from('income_transactions').select('receipt_number');
+    if (Array.isArray(rows)) {
+      for (const r of rows) {
+        if (r.receipt_number) {
+          const m = r.receipt_number.match(/(\d+)$/);
+          if (m) {
+            const n = parseInt(m[1], 10);
+            if (!isNaN(n) && n > maxNum && n < 999999) maxNum = n;
+          }
         }
       }
     }
+  } catch (err) {
+    console.warn('getNextReceiptNumber income_transactions note:', err.message);
   }
+
+  // 2. Also check receipts table
+  try {
+    const { data: recRows } = await db.from('receipts').select('receipt_number');
+    if (Array.isArray(recRows)) {
+      for (const r of recRows) {
+        if (r.receipt_number) {
+          const m = r.receipt_number.match(/(\d+)$/);
+          if (m) {
+            const n = parseInt(m[1], 10);
+            if (!isNaN(n) && n > maxNum && n < 999999) maxNum = n;
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('getNextReceiptNumber receipts note:', err.message);
+  }
+
   const nextNum = maxNum + 1;
   const formattedNum = String(nextNum).padStart(6, '0');
   return {
@@ -192,8 +218,23 @@ export async function createIncome(req, res) {
       throwIfError(error);
     }
 
-    // Generate continuous next receipt and transaction numbers
-    const { receiptNumber, transactionId } = await getNextReceiptNumber(settings.receipt_prefix || 'HANUMAN-2026-');
+    // Generate continuous next receipt and transaction numbers with collision-safety check
+    let { receiptNumber, transactionId, nextNum } = await getNextReceiptNumber(settings.receipt_prefix || 'HANUMAN-2026-');
+
+    // Ensure candidate receiptNumber and transactionId are not already taken in receipts or income_transactions
+    let candidateNum = nextNum;
+    while (true) {
+      const { data: existingRec } = await db.from('receipts').select('id').eq('receipt_number', receiptNumber).limit(1);
+      const { data: existingTx } = await db.from('income_transactions').select('id').eq('transaction_id', transactionId).limit(1);
+      if ((!existingRec || existingRec.length === 0) && (!existingTx || existingTx.length === 0)) {
+        break;
+      }
+      candidateNum++;
+      const fmt = String(candidateNum).padStart(6, '0');
+      receiptNumber = `${settings.receipt_prefix || 'HANUMAN-2026-'}${fmt}`;
+      transactionId = `TXN-2026-${fmt}`;
+    }
+
     const attachmentUrl = req.file ? await uploadFileToSupabase(req.file, 'income') : '';
     const collectorName = req.user?.name || 'स्वयंसेवक';
 
@@ -238,7 +279,9 @@ export async function createIncome(req, res) {
     const { error: linkError } = await db.from('income_transactions').update({ receipt_id: receipt.id }).eq('id', tx.id);
     throwIfError(linkError);
 
-    await logAudit({ userId: req.user?.id, userName: req.user?.name, userRole: req.user?.role, action: 'CREATE', entity: 'INCOME', entityId: transactionId, descriptionMr: `${cleanName} यांच्याकडून ₹${parsedAmount.toLocaleString('en-IN')} ${category === 'vargani' ? 'वर्गणी' : 'जमा'} नोंदवली (पावती क्र: ${receiptNumber}).`, descriptionEn: `Recorded income of ₹${parsedAmount.toLocaleString('en-IN')} from ${cleanName} (Receipt: ${receiptNumber}).`, newValues: { transactionId, receiptNumber, amount: parsedAmount, donor_name: cleanName, payment_method, category }, req });
+    try {
+      await logAudit({ userId: req.user?.id, userName: req.user?.name, userRole: req.user?.role, action: 'CREATE', entity: 'INCOME', entityId: transactionId, descriptionMr: `${cleanName} यांच्याकडून ₹${parsedAmount.toLocaleString('en-IN')} ${category === 'vargani' ? 'वर्गणी' : 'जमा'} नोंदवली (पावती क्र: ${receiptNumber}).`, descriptionEn: `Recorded income of ₹${parsedAmount.toLocaleString('en-IN')} from ${cleanName} (Receipt: ${receiptNumber}).`, newValues: { transactionId, receiptNumber, amount: parsedAmount, donor_name: cleanName, payment_method, category }, req });
+    } catch {}
 
     return res.status(201).json({ success: true, message: 'जमा रक्कम यशस्वीरित्या नोंदवली व पावती तयार झाली! / Income recorded & receipt generated!', data: { transactionId, receiptNumber, amount: parsedAmount, receipt } });
   } catch (err) {

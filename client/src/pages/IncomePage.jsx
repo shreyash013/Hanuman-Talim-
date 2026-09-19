@@ -65,7 +65,7 @@ export function IncomePage() {
       setLoading(true);
       const res = await api.get('/income', {
         page,
-        limit: 15,
+        limit: 50,
         search,
         category,
         payment_method: paymentMethod
