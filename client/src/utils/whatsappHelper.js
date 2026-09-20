@@ -7,7 +7,26 @@ import { formatDate } from './dateUtils';
  */
 export function getCleanMobileNumber(receipt) {
   if (!receipt) return '';
-  const possible = receipt.mobile ?? receipt.phone ?? receipt.donor_phone ?? receipt.contact ?? receipt.donorMobile ?? '';
+  let possible = receipt.mobile ?? receipt.phone ?? receipt.donor_phone ?? receipt.contact ?? receipt.donorMobile ?? '';
+
+  // If mobile is missing from receipt record, look it up in shirol_donors
+  if (!possible && typeof window !== 'undefined') {
+    try {
+      const rawDonors = localStorage.getItem('shirol_donors');
+      if (rawDonors) {
+        const donors = JSON.parse(rawDonors);
+        if (Array.isArray(donors)) {
+          const donorName = (receipt.donor_name || '').trim().toLowerCase();
+          const d = donors.find(item => 
+            (receipt.donor_id && String(item.id) === String(receipt.donor_id)) ||
+            (donorName && item.name && item.name.trim().toLowerCase() === donorName)
+          );
+          if (d && d.mobile) possible = d.mobile;
+        }
+      }
+    } catch {}
+  }
+
   let digits = String(possible).replace(/\D/g, '');
   if (!digits) return '';
 
