@@ -45,34 +45,33 @@ export function getDisplayMobileNumber(receipt) {
 }
 
 /**
- * Builds a clean, respectful Marathi WhatsApp message to accompany receipt image
+ * Builds a simple, respectful Marathi WhatsApp thank you message to accompany the receipt image
  */
 export function buildWhatsAppReceiptMessage(receipt, mandal) {
-  const mandalName = mandal?.name_mr || 'श्री हनुमान तालीम मंडळ शिरोळ';
-  const tagline = mandal?.tagline_mr || '॥ नदीवेस चा महाराजा ॥ (स्थापना १९६४ | वर्ष ६२ वे)';
   const donorName = receipt?.donor_name || 'देणगीदार';
   const amount = Number(receipt?.amount || 0).toLocaleString('en-IN');
   const receiptNo = receipt?.receipt_number || receipt?.receiptNo || 'HANUMAN-2026-000001';
-  const date = receipt?.created_at ? formatDate(receipt.created_at, 'mr') : '१७ सप्टेंबर २०२६';
 
   const origin = typeof window !== 'undefined' && window.location.origin
     ? window.location.origin
     : 'https://hanuman-talim.vercel.app';
-  const receiptUrl = `${origin}/verify-receipt/${encodeURIComponent(receiptNo)}`;
+  
+  const queryParams = new URLSearchParams({
+    d: receipt?.donor_name || 'देणगीदार',
+    a: String(Number(receipt?.amount || 0)),
+    p: receipt?.purpose || 'श्री गणेशोत्सव वर्गणी',
+    m: receipt?.payment_method || 'cash',
+    dt: receipt?.created_at || ''
+  }).toString();
+  const receiptUrl = `${origin}/verify-receipt/${encodeURIComponent(receiptNo)}?${queryParams}`;
 
-  return `🚩 *${mandalName}* 🚩
-${tagline}
+  return `🙏 *सस्नेह नमस्कार ${donorName} जी!* 🚩
+श्री हनुमान तालीम मंडळ शिरोळ (वर्ष ६२ वे) गणेशोत्सवासाठी दिलेल्या *₹${amount}* वर्गणीबद्दल आपले मनःपूर्वक आभार! 🌺
 
-🙏 *सस्नेह नमस्कार ${donorName} जी*,
-श्री गणेशोत्सव २०२६ साठी आपल्याकडून *₹${amount}* वर्गणी / देणगी प्राप्त झाली आहे. मंडळाकडून आपले मनःपूर्वक आभार! 🌺
+🧾 *पावती क्र:* ${receiptNo}
+🔗 *सत्यता पडताळणी लिंक:* ${receiptUrl}
 
-🧾 *पावती क्रमांक:* ${receiptNo}
-📅 *दिनांक:* ${date}
-
-📸 *आपली अधिकृत HD रंगीत पावती पाहण्यासाठी व डाऊनलोड करण्यासाठी खालील लिंकवर क्लिक करा:*
-👉 ${receiptUrl}
-
-🚩 *गणपती बाप्पा मोरया! मंगलमूर्ती मोरया!* 🚩`;
+🚩 *गणपती बाप्पा मोरया!* 🙏`;
 }
 
 /**

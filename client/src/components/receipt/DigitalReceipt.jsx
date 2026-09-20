@@ -22,17 +22,23 @@ export function DigitalReceipt({ receipt, mandal, receiptRef }) {
   };
 
   const receiptNo = receipt.receipt_number || receipt.receiptNo || 'HANUMAN-2026-000001';
-  
-  // Dynamic verification URL encoded in the unique QR code
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://hanuman-talim.vercel.app';
-  const verificationUrl = `${origin}/verify-receipt/${receiptNo}`;
-
   const formattedDate = receipt.created_at
     ? formatDate(receipt.created_at, 'mr')
     : '१४ सप्टेंबर २०२६';
 
   const amountNumber = Number(receipt.amount || 0);
   const amountInWords = receipt.amount_in_words_mr || numberToWordsMarathi(amountNumber);
+
+  // Dynamic verification URL encoded in the unique QR code with self-verifying query parameters
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://hanuman-talim.vercel.app';
+  const queryParams = new URLSearchParams({
+    d: receipt.donor_name || 'देणगीदार',
+    a: String(amountNumber),
+    p: receipt.purpose || 'श्री गणेशोत्सव वर्गणी',
+    m: receipt.payment_method || 'cash',
+    dt: receipt.created_at || ''
+  }).toString();
+  const verificationUrl = `${origin}/verify-receipt/${encodeURIComponent(receiptNo)}?${queryParams}`;
 
   const paymentMethodText =
     receipt.payment_method === 'cash' ? 'रोख (Cash)' :

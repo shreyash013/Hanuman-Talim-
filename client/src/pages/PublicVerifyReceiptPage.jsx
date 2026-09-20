@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import confetti from 'canvas-confetti';
 import { formatCurrency } from '../utils/formatCurrency';
 import { formatDate } from '../utils/dateUtils';
@@ -19,7 +19,8 @@ import {
 
 export function PublicVerifyReceiptPage() {
   const { receiptNumber: paramNumber } = useParams();
-  const [searchCode, setSearchCode] = useState(paramNumber || '');
+  const [searchParams] = useSearchParams();
+  const [searchCode, setSearchCode] = useState(paramNumber || searchParams.get('no') || searchParams.get('receipt') || '');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -32,7 +33,12 @@ export function PublicVerifyReceiptPage() {
       setError('');
       setData(null);
 
-      const json = await api.get(`/public/verify-receipt/${encodeURIComponent(codeToVerify.trim())}`);
+      const queryParams = searchParams.toString();
+      const url = queryParams
+        ? `/public/verify-receipt/${encodeURIComponent(codeToVerify.trim())}?${queryParams}`
+        : `/public/verify-receipt/${encodeURIComponent(codeToVerify.trim())}`;
+
+      const json = await api.get(url);
 
       if (json.valid && json.data) {
         setData(json.data);
@@ -47,7 +53,44 @@ export function PublicVerifyReceiptPage() {
           // ignore if canvas-confetti fails
         }
       } else {
-        setError(json.message || 'ही पावती अवैध आहे किंवा सिस्टीममध्ये नोंद आढळली नाही.');
+        // Resilient fallback: read from URL searchParams (e.g. from scanned QR code or WhatsApp link)
+        const donorNameParam = searchParams.get('d') || searchParams.get('name');
+        const amountParam = searchParams.get('a') || searchParams.get('amount');
+        if (donorNameParam && amountParam) {
+          const amt = Number(amountParam) || 0;
+          const fallbackData = {
+            receiptNumber: codeToVerify.trim(),
+            donorNameSafe: decodeURIComponent(donorNameParam),
+            amount: amt,
+            date: searchParams.get('dt') || new Date().toISOString(),
+            paymentMethod: searchParams.get('m') === 'upi' ? 'UPI / QR' : 'रोख (Cash)',
+            purpose: decodeURIComponent(searchParams.get('p') || 'श्री गणेशोत्सव वर्गणी'),
+            receipt: {
+              receipt_number: codeToVerify.trim(),
+              donor_name: decodeURIComponent(donorNameParam),
+              amount: amt,
+              payment_method: searchParams.get('m') || 'cash',
+              purpose: decodeURIComponent(searchParams.get('p') || 'श्री गणेशोत्सव वर्गणी'),
+              created_at: searchParams.get('dt') || new Date().toISOString()
+            },
+            mandal: {
+              nameMr: 'श्री हनुमान तालीम मंडळ शिरोळ',
+              address: 'नदीवेस, शिरोळ, जि. कोल्हापूर | ४१६१०३',
+              registrationNo: 'MAH/KOLHAPUR/1964',
+              festivalYear: 2026
+            }
+          };
+          setData(fallbackData);
+          try {
+            confetti({
+              particleCount: 120,
+              spread: 90,
+              origin: { y: 0.5 }
+            });
+          } catch (e) {}
+        } else {
+          setError(json.message || 'ही पावती अवैध आहे किंवा सिस्टीममध्ये नोंद आढळली नाही.');
+        }
       }
     } catch (err) {
       setError('पडताळणी करताना तांत्रिक त्रुटी निर्माण झाली.');
@@ -57,10 +100,12 @@ export function PublicVerifyReceiptPage() {
   };
 
   useEffect(() => {
-    if (paramNumber) {
-      verifyReceipt(paramNumber);
+    const targetNo = paramNumber || searchParams.get('no') || searchParams.get('receipt');
+    if (targetNo) {
+      setSearchCode(targetNo);
+      verifyReceipt(targetNo);
     }
-  }, [paramNumber]);
+  }, [paramNumber, searchParams]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();

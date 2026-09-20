@@ -326,13 +326,18 @@ export function DonorsPage() {
 
   // Open Edit Modal
   const openEditAmountModal = (donor) => {
-    setEditingDonor(donor);
-    setEditName(donor.name || '');
-    setEditMobile(donor.mobile || '');
-    setEditArea(donor.area || 'नदीवेस शिरोळ');
-    setEditAddress(donor.address || '');
-    setEditAmountValue(donor.target_amount !== undefined ? donor.target_amount : (donor.total_donated || 500));
-    setEditPaidAmountValue(donor.paid_amount !== undefined ? donor.paid_amount : (donor.total_donated || 0));
+    if (!donor) return;
+    const safeDonor = {
+      ...donor,
+      id: donor.id || Date.now()
+    };
+    setEditingDonor(safeDonor);
+    setEditName(safeDonor.name || '');
+    setEditMobile(safeDonor.mobile || '');
+    setEditArea(safeDonor.area || 'नदीवेस शिरोळ');
+    setEditAddress(safeDonor.address || '');
+    setEditAmountValue(safeDonor.target_amount !== undefined ? safeDonor.target_amount : (safeDonor.total_donated || 500));
+    setEditPaidAmountValue(safeDonor.paid_amount !== undefined ? safeDonor.paid_amount : (safeDonor.total_donated || 0));
     setShowEditAmountModal(true);
   };
 
@@ -362,7 +367,9 @@ export function DonorsPage() {
 
     // Optimistic instant UI update on donors state
     setDonors(prev => prev.map(d => {
-      if (d.id === originalDonor.id || d.name === originalDonor.name) {
+      const isMatch = (originalDonor.id && String(d.id) === String(originalDonor.id)) ||
+                      (originalDonor.name && d.name?.trim().toLowerCase() === originalDonor.name?.trim().toLowerCase());
+      if (isMatch) {
         return {
           ...d,
           name: cleanName,
@@ -371,6 +378,7 @@ export function DonorsPage() {
           address: cleanAddress,
           target_amount: newTarget,
           paid_amount: paidVal,
+          total_donated: paidVal,
           pending_amount: pendingVal,
           status: newStatus
         };
@@ -796,7 +804,14 @@ export function DonorsPage() {
                       {idx + 1}
                     </td>
                     <td className={`p-4 ${styles.nameClass}`}>
-                      {d.name}
+                      <button
+                        type="button"
+                        onClick={() => openEditAmountModal(d)}
+                        className="text-left font-extrabold hover:text-amber-400 hover:underline cursor-pointer transition-colors block"
+                        title="माहिती बदलण्यासाठी क्लिक करा"
+                      >
+                        {d.name}
+                      </button>
                       {d.address && <span className={`block text-[11px] font-normal ${styles.subTextClass}`}>{d.address}</span>}
                     </td>
                     <td className={`p-4 font-mono ${styles.subTextClass}`}>{d.mobile || '-'}</td>
@@ -831,8 +846,12 @@ export function DonorsPage() {
                     <td className="p-4 text-right">
                       <div className="inline-flex items-center space-x-1.5">
                         <button
-                          onClick={() => openEditAmountModal(d)}
-                          className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs shadow transition inline-flex items-center space-x-1 border border-amber-400"
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditAmountModal(d);
+                          }}
+                          className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs shadow transition inline-flex items-center space-x-1 border border-amber-400 cursor-pointer active:scale-95"
                           title="माहिती व वर्गणी बदला"
                         >
                           <Pencil className="w-3.5 h-3.5" />
