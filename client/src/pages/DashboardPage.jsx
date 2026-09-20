@@ -221,17 +221,17 @@ export function DashboardPage() {
             </div>
 
             <div
-              onClick={() => navigate('/festival-planner')}
+              onClick={() => navigate('/vargani')}
               className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition cursor-pointer flex items-center space-x-4 group"
             >
-              <div className="w-12 h-12 rounded-2xl bg-indigo-500/15 text-indigo-500 flex items-center justify-center font-bold group-hover:scale-110 transition-transform">
-                <CalendarDays className="w-6 h-6 text-indigo-500" />
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/15 text-amber-500 flex items-center justify-center font-bold group-hover:scale-110 transition-transform">
+                <Receipt className="w-6 h-6 text-amber-500" />
               </div>
               <div>
-                <h3 className="font-bold text-slate-900 dark:text-white text-sm group-hover:text-indigo-500 transition-colors">
-                  उत्सव प्लॅनर व कार्यक्रम
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm group-hover:text-amber-500 transition-colors">
+                  वर्गणी पावती नोंदणी
                 </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">गणेशोत्सवाचे सर्व कार्यक्रम व वेळापत्रक</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">झटपट वर्गणी नोंदवा व पावती शेअर करा</p>
               </div>
             </div>
 
@@ -251,17 +251,17 @@ export function DashboardPage() {
             </div>
 
             <div
-              onClick={() => navigate('/volunteers')}
+              onClick={() => navigate('/expenses')}
               className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition cursor-pointer flex items-center space-x-4 group"
             >
-              <div className="w-12 h-12 rounded-2xl bg-amber-500/15 text-amber-500 flex items-center justify-center font-bold group-hover:scale-110 transition-transform">
-                <Award className="w-6 h-6 text-amber-500" />
+              <div className="w-12 h-12 rounded-2xl bg-rose-500/15 text-rose-500 flex items-center justify-center font-bold group-hover:scale-110 transition-transform">
+                <CreditCard className="w-6 h-6 text-rose-500" />
               </div>
               <div>
-                <h3 className="font-bold text-slate-900 dark:text-white text-sm group-hover:text-amber-500 transition-colors">
-                  कार्यकर्ते लीडरबोर्ड
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm group-hover:text-rose-500 transition-colors">
+                  खर्च व्यवस्थापन
                 </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">उत्सवातील प्रमुख कार्यकर्ते व गुणवंत</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">मंडळाचे सर्व खर्च व बिले नोंदणी</p>
               </div>
             </div>
 

@@ -52,14 +52,10 @@ export function Sidebar({ onCloseMobile }) {
     ...(isAdmin || isTreasurer ? [{ to: '/approvals', label: t('nav.approvals', 'खर्च मंजुरी'), icon: CheckSquare }] : []),
     ...(isPrivileged ? [
       { to: '/transactions', label: t('nav.transactions', 'व्यवहार इतिहास'), icon: History },
-      { to: '/cash-management', label: t('nav.cashManagement', 'रोख व्यवस्थापन'), icon: Wallet },
       { to: '/loans', label: 'उधारी व्यवस्थापन (Loans)', icon: Landmark }
     ] : []),
     { to: '/digital-payments', label: t('nav.digitalPayments', 'UPI व पेमेंट QR'), icon: QrCode },
     { to: '/members', label: t('nav.members', 'मंडळ कार्यकर्ते'), icon: UserCheck },
-    { to: '/festival-planner', label: 'उत्सव प्लॅनर (Festival Planner)', icon: CalendarDays },
-    { to: '/volunteers', label: 'कार्यकर्ते लीडरबोर्ड (Volunteers)', icon: Award },
-    { to: '/events', label: t('nav.events', 'उत्सव कार्यक्रम'), icon: CalendarDays },
     ...(isPrivileged ? [{ to: '/reports', label: t('nav.reports', 'आर्थिक अहवाल'), icon: FileSpreadsheet }] : []),
     ...(isAdmin ? [
       { to: '/users', label: t('nav.users', 'वापरकर्ते व अधिकार'), icon: ShieldCheck },

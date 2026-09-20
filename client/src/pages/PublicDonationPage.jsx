@@ -4,7 +4,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { GanpatiLogo } from '../components/common/GanpatiLogo';
 import { ReceiptModal } from '../components/receipt/ReceiptModal';
 import { formatCurrency } from '../utils/formatCurrency';
-import { API_BASE_URL } from '../services/api';
+import api from '../services/api';
 import {
   HeartHandshake,
   QrCode,
@@ -40,11 +40,10 @@ export function PublicDonationPage() {
   useEffect(() => {
     async function fetchPublicData() {
       try {
-        const res = await fetch(`${API_BASE_URL}/public/donation-info`);
-        const json = await res.json();
-        if (json.success && json.data) {
-          setMandalInfo(json.data.mandal);
-          setEvents(json.data.upcomingEvents || []);
+        const res = await api.get('/public/donation-info');
+        if (res.success && res.data) {
+          setMandalInfo(res.data.mandal || res.data);
+          setEvents(res.data.upcomingEvents || []);
         }
       } catch (err) {
         console.error('Failed to load donation info:', err);
@@ -75,22 +74,17 @@ export function PublicDonationPage() {
 
     try {
       setIsSubmitting(true);
-      const res = await fetch(`${API_BASE_URL}/public/donate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: name.trim(),
-          mobile: mobile.trim(),
-          amount: Number(amount),
-          purpose: purpose.trim(),
-          utr_number: utrNumber.trim()
-        })
+      const res = await api.post('/public/donate', {
+        name: name.trim(),
+        mobile: mobile.trim(),
+        amount: Number(amount),
+        purpose: purpose.trim(),
+        utr_number: utrNumber.trim()
       });
 
-      const json = await res.json();
-      if (res.ok && json.success) {
+      if (res && res.success) {
         setIsSubmitted(true);
-        const receiptObj = json.data?.receipt || {
+        const receiptObj = res.data?.receipt || {
           receipt_number: `DONATE-${Date.now().toString().slice(-6)}`,
           donor_name: name.trim(),
           mobile: mobile.trim(),
@@ -104,7 +98,7 @@ export function PublicDonationPage() {
         const text = encodeURIComponent(`🚩 *श्री हनुमान तालीम मंडळ शिरोळ* 🚩\nऑनलाइन देणगी / वर्गणी पावती नोंदणी:\n\n👤 नाव: ${name}\n📱 मोबाईल: ${mobile}\n💰 रक्कम: ₹${amount}\n🔢 UTR / Txn ID: ${utrNumber || 'N/A'}\n🎯 संकल्प: ${purpose || 'गणेशोत्सव देणगी'}\n\nकृपया पावती कन्फर्म करून पाठवावी. 🙏`);
         window.open(`https://wa.me/919356997428?text=${text}`, '_blank');
       } else {
-        alert(json.message || 'नोंदणी करताना त्रुटी आली.');
+        alert(res?.message || 'नोंदणी करताना त्रुटी आली.');
       }
     } catch {
       alert('तांत्रिक त्रुटी निर्माण झाली.');
