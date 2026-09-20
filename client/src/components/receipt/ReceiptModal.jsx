@@ -15,14 +15,10 @@ export function ReceiptModal({ isOpen, onClose, receipt }) {
   const receiptRef = useRef(null);
   const [imageFile, setImageFile] = useState(null);
 
-  if (!receipt) return null;
-
-  const activeReceipt = receipt;
-
   // Ultra-fast background pre-generation: As soon as modal opens, prepare image file in background
   useEffect(() => {
     let isMounted = true;
-    if (isOpen && receiptRef.current) {
+    if (isOpen && receipt && receiptRef.current) {
       const timer = setTimeout(async () => {
         try {
           if (!receiptRef.current) return;
@@ -35,7 +31,7 @@ export function ReceiptModal({ isOpen, onClose, receipt }) {
           });
           const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.92));
           if (blob && isMounted) {
-            const fileName = `पावती_${activeReceipt.receipt_number || 'vargani'}.png`;
+            const fileName = `पावती_${receipt.receipt_number || 'vargani'}.png`;
             const file = new File([blob], fileName, { type: 'image/png' });
             setImageFile(file);
           }
@@ -50,7 +46,11 @@ export function ReceiptModal({ isOpen, onClose, receipt }) {
     } else {
       setImageFile(null);
     }
-  }, [isOpen, activeReceipt]);
+  }, [isOpen, receipt]);
+
+  if (!receipt) return null;
+
+  const activeReceipt = receipt;
 
   // Send the EXACT receipt image directly to WhatsApp
   const handleWhatsApp = async () => {
