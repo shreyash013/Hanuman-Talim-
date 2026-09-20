@@ -75,14 +75,7 @@ export function buildWhatsAppReceiptMessage(receipt, mandal) {
     ? window.location.origin
     : 'https://hanuman-talim.vercel.app';
   
-  const queryParams = new URLSearchParams({
-    d: receipt?.donor_name || 'देणगीदार',
-    a: String(Number(receipt?.amount || 0)),
-    p: receipt?.purpose || 'श्री गणेशोत्सव वर्गणी',
-    m: receipt?.payment_method || 'cash',
-    dt: receipt?.created_at || ''
-  }).toString();
-  const receiptUrl = `${origin}/verify-receipt/${encodeURIComponent(receiptNo)}?${queryParams}`;
+  const receiptUrl = `${origin}/verify-receipt/${encodeURIComponent(receiptNo)}`;
 
   return `🙏 *सस्नेह नमस्कार ${donorName} जी!* 🚩
 श्री हनुमान तालीम मंडळ शिरोळ (वर्ष ६२ वे) गणेशोत्सवासाठी दिलेल्या *₹${amount}* वर्गणीबद्दल आपले मनःपूर्वक आभार! 🌺
