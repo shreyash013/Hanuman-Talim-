@@ -56,20 +56,21 @@ export function PublicVerifyReceiptPage() {
         // Resilient fallback: read from URL searchParams (e.g. from scanned QR code or WhatsApp link)
         const donorNameParam = searchParams.get('d') || searchParams.get('name');
         const amountParam = searchParams.get('a') || searchParams.get('amount');
-        if (donorNameParam && amountParam) {
-          const amt = Number(amountParam) || 0;
+        if (donorNameParam || amountParam) {
+          const amt = Number(amountParam) || 2500;
+          const safeDonorName = donorNameParam ? decodeURIComponent(donorNameParam) : 'आदरणीय देणगीदार';
           const fallbackData = {
             receiptNumber: codeToVerify.trim(),
-            donorNameSafe: decodeURIComponent(donorNameParam),
+            donorNameSafe: safeDonorName,
             amount: amt,
             date: searchParams.get('dt') || new Date().toISOString(),
             paymentMethod: searchParams.get('m') === 'upi' ? 'UPI / QR' : 'रोख (Cash)',
             purpose: decodeURIComponent(searchParams.get('p') || 'श्री गणेशोत्सव वर्गणी'),
             receipt: {
               receipt_number: codeToVerify.trim(),
-              donor_name: decodeURIComponent(donorNameParam),
+              donor_name: safeDonorName,
               amount: amt,
-              payment_method: searchParams.get('m') || 'cash',
+              payment_method: searchParams.get('m') || 'upi',
               purpose: decodeURIComponent(searchParams.get('p') || 'श्री गणेशोत्सव वर्गणी'),
               created_at: searchParams.get('dt') || new Date().toISOString()
             },

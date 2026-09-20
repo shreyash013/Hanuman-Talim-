@@ -68,14 +68,24 @@ export function getDisplayMobileNumber(receipt) {
  */
 export function buildWhatsAppReceiptMessage(receipt, mandal) {
   const donorName = receipt?.donor_name || 'देणगीदार';
-  const amount = Number(receipt?.amount || 0).toLocaleString('en-IN');
+  const amountNumber = Number(receipt?.amount || 0);
+  const amount = amountNumber.toLocaleString('en-IN');
   const receiptNo = receipt?.receipt_number || receipt?.receiptNo || 'HANUMAN-2026-000001';
 
   const origin = typeof window !== 'undefined' && window.location.origin
     ? window.location.origin
     : 'https://hanuman-talim.vercel.app';
   
-  const receiptUrl = `${origin}/verify-receipt/${encodeURIComponent(receiptNo)}`;
+  // Clean, compact 1-line verification URL encoding the exact amount and donor name
+  const params = new URLSearchParams();
+  if (amountNumber > 0) params.set('a', String(amountNumber));
+  if (receipt?.donor_name && receipt.donor_name.trim() !== 'देणगीदार') {
+    params.set('d', receipt.donor_name.trim());
+  }
+  const qStr = params.toString();
+  const receiptUrl = qStr
+    ? `${origin}/verify-receipt/${encodeURIComponent(receiptNo)}?${qStr}`
+    : `${origin}/verify-receipt/${encodeURIComponent(receiptNo)}`;
 
   return `🙏 *सस्नेह नमस्कार ${donorName} जी!* 🚩
 श्री हनुमान तालीम मंडळ शिरोळ (वर्ष ६२ वे) गणेशोत्सवासाठी दिलेल्या *₹${amount}* वर्गणीबद्दल आपले मनःपूर्वक आभार! 🌺
