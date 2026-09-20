@@ -804,14 +804,16 @@ export function DonorsPage() {
                       {idx + 1}
                     </td>
                     <td className={`p-4 ${styles.nameClass}`}>
-                      <button
-                        type="button"
+                      <span
+                        role="button"
+                        tabIndex={0}
                         onClick={() => openEditAmountModal(d)}
-                        className="text-left font-extrabold hover:text-amber-400 hover:underline cursor-pointer transition-colors block"
+                        onKeyDown={(e) => { if (e.key === 'Enter') openEditAmountModal(d); }}
+                        className="text-left font-extrabold hover:underline cursor-pointer transition-colors block text-inherit bg-transparent border-0 p-0 outline-none select-text"
                         title="माहिती बदलण्यासाठी क्लिक करा"
                       >
                         {d.name}
-                      </button>
+                      </span>
                       {d.address && <span className={`block text-[11px] font-normal ${styles.subTextClass}`}>{d.address}</span>}
                     </td>
                     <td className={`p-4 font-mono ${styles.subTextClass}`}>{d.mobile || '-'}</td>
