@@ -54,8 +54,8 @@ export function DigitalReceipt({ receipt, mandal, receiptRef }) {
       className="printable-area bg-[#fffcf7] text-slate-900 p-5 rounded-3xl border-4 border-[#d97706]/70 shadow-2xl relative mx-auto overflow-hidden font-sans box-border"
     >
       {/* Decorative Watermark & Glows */}
-      <div className="absolute -top-12 -right-12 w-40 h-40 bg-amber-400/20 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-12 -left-12 w-40 h-40 bg-orange-500/20 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -top-12 -right-12 w-40 h-40 bg-amber-400/15 rounded-full pointer-events-none" />
+      <div className="absolute -bottom-12 -left-12 w-40 h-40 bg-orange-500/15 rounded-full pointer-events-none" />
 
       {/* Main Inner Border Frame */}
       <div className="border-2 border-amber-600/30 rounded-2xl p-4 space-y-4 bg-white relative z-10 shadow-sm">

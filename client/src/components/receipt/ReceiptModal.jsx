@@ -1,30 +1,116 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
 import { DigitalReceipt } from './DigitalReceipt';
 import { useLanguage } from '../../context/LanguageContext';
 import { useMandal } from '../../context/MandalContext';
 import { useNotification } from '../../context/NotificationContext';
-import { openWhatsAppReceipt } from '../../utils/whatsappHelper';
+import { openWhatsAppReceipt, buildWhatsAppReceiptMessage } from '../../utils/whatsappHelper';
 import { MessageCircle } from 'lucide-react';
+import html2canvas from 'html2canvas';
 
 export function ReceiptModal({ isOpen, onClose, receipt }) {
   const { t } = useLanguage();
   const { mandal } = useMandal();
   const { showToast } = useNotification();
   const receiptRef = useRef(null);
+  const [imageFile, setImageFile] = useState(null);
 
   if (!receipt) return null;
 
   const activeReceipt = receipt;
 
-  // Direct 1-Click WhatsApp Action: opens WhatsApp immediately with pre-filled number & receipt text
-  const handleWhatsApp = () => {
+  // Ultra-fast background pre-generation: As soon as modal opens, prepare image file in background
+  useEffect(() => {
+    let isMounted = true;
+    if (isOpen && receiptRef.current) {
+      const timer = setTimeout(async () => {
+        try {
+          if (!receiptRef.current) return;
+          const canvas = await html2canvas(receiptRef.current, {
+            scale: 1.3,
+            useCORS: true,
+            backgroundColor: '#fffcf7',
+            logging: false,
+            allowTaint: true
+          });
+          const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.92));
+          if (blob && isMounted) {
+            const fileName = `पावती_${activeReceipt.receipt_number || 'vargani'}.png`;
+            const file = new File([blob], fileName, { type: 'image/png' });
+            setImageFile(file);
+          }
+        } catch (e) {
+          console.warn('Pre-render image error:', e);
+        }
+      }, 120);
+      return () => {
+        isMounted = false;
+        clearTimeout(timer);
+      };
+    } else {
+      setImageFile(null);
+    }
+  }, [isOpen, activeReceipt]);
+
+  // Send the EXACT receipt image directly to WhatsApp
+  const handleWhatsApp = async () => {
     try {
+      const simpleMsg = buildWhatsAppReceiptMessage(activeReceipt, mandal);
+      let fileToShare = imageFile;
+
+      // If clicked before background pre-rendering finished, render immediately
+      if (!fileToShare && receiptRef.current) {
+        const canvas = await html2canvas(receiptRef.current, {
+          scale: 1.3,
+          useCORS: true,
+          backgroundColor: '#fffcf7',
+          logging: false
+        });
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.92));
+        if (blob) {
+          const fileName = `पावती_${activeReceipt.receipt_number || 'vargani'}.png`;
+          fileToShare = new File([blob], fileName, { type: 'image/png' });
+          setImageFile(fileToShare);
+        }
+      }
+
+      // 1. Mobile (Android / iOS): Send exact image file straight to WhatsApp
+      if (fileToShare && typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [fileToShare] })) {
+        await navigator.share({
+          files: [fileToShare],
+          title: `पावती क्र. ${activeReceipt.receipt_number || ''}`,
+          text: simpleMsg
+        });
+        showToast('पावती फोटो WhatsApp वर यशस्वीरित्या पाठवला!', 'success');
+        return;
+      }
+
+      // 2. Desktop Fallback: Copy image to clipboard, download, and open WhatsApp Web
+      if (fileToShare) {
+        try {
+          if (navigator.clipboard && window.ClipboardItem) {
+            await navigator.clipboard.write([new ClipboardItem({ 'image/png': fileToShare })]);
+          }
+        } catch {}
+
+        try {
+          const url = URL.createObjectURL(fileToShare);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `पावती_${activeReceipt.receipt_number || 'vargani'}.png`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        } catch {}
+      }
+
       openWhatsAppReceipt(activeReceipt, mandal, true);
-      showToast('WhatsApp उघडत आहे...', 'info');
+      showToast('पावती फोटो तयार झाला! चॅटमध्ये पेस्ट (Ctrl+V) करा.', 'info');
     } catch (err) {
-      console.error('WhatsApp open error:', err);
-      showToast('WhatsApp उघडताना अडचण आली.', 'error');
+      if (err.name === 'AbortError') return; // User simply dismissed share dialog
+      console.error('WhatsApp share error:', err);
+      openWhatsAppReceipt(activeReceipt, mandal, true);
     }
   };
 
@@ -43,10 +129,10 @@ export function ReceiptModal({ isOpen, onClose, receipt }) {
             type="button"
             onClick={handleWhatsApp}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs sm:text-sm shadow-md transition cursor-pointer"
-            title="WhatsApp वर पावती पाठवा"
+            title="WhatsApp वर पावती फोटो पाठवा"
           >
             <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 fill-current text-white shrink-0" />
-            <span>WhatsApp</span>
+            <span>WhatsApp (पावती फोटो)</span>
           </button>
 
           {/* Close Button */}
