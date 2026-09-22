@@ -72,16 +72,18 @@ export async function getIncomeList(req, res) {
 export async function getNextReceiptNumber(prefix = 'HANUMAN-2026-') {
   let maxNum = 0;
 
-  // 1. Check all income transactions (including inactive to avoid collisions)
+  // 1. Check active income transactions (exclude deleted and corrupt jumps >= 100000)
   try {
-    const { data: rows } = await db.from('income_transactions').select('receipt_number');
+    const { data: rows } = await db.from('income_transactions')
+      .select('receipt_number')
+      .eq('is_deleted', false);
     if (Array.isArray(rows)) {
       for (const r of rows) {
         if (r.receipt_number) {
           const m = r.receipt_number.match(/(\d+)$/);
           if (m) {
             const n = parseInt(m[1], 10);
-            if (!isNaN(n) && n > maxNum && n < 999999) maxNum = n;
+            if (!isNaN(n) && n > maxNum && n < 100000) maxNum = n;
           }
         }
       }
@@ -90,7 +92,7 @@ export async function getNextReceiptNumber(prefix = 'HANUMAN-2026-') {
     console.warn('getNextReceiptNumber income_transactions note:', err.message);
   }
 
-  // 2. Also check receipts table
+  // 2. Also check receipts table (exclude corrupt jumps >= 100000)
   try {
     const { data: recRows } = await db.from('receipts').select('receipt_number');
     if (Array.isArray(recRows)) {
@@ -99,7 +101,7 @@ export async function getNextReceiptNumber(prefix = 'HANUMAN-2026-') {
           const m = r.receipt_number.match(/(\d+)$/);
           if (m) {
             const n = parseInt(m[1], 10);
-            if (!isNaN(n) && n > maxNum && n < 999999) maxNum = n;
+            if (!isNaN(n) && n > maxNum && n < 100000) maxNum = n;
           }
         }
       }
@@ -230,6 +232,10 @@ export async function createIncome(req, res) {
         break;
       }
       candidateNum++;
+      if (candidateNum >= 100000) {
+        // Safety limit: never jump into corrupt range (900000+)
+        break;
+      }
       const fmt = String(candidateNum).padStart(6, '0');
       receiptNumber = `${settings.receipt_prefix || 'HANUMAN-2026-'}${fmt}`;
       transactionId = `TXN-2026-${fmt}`;
@@ -461,6 +467,215 @@ export async function renumberReceipts(req, res) {
   } catch (err) {
     console.error('renumberReceipts error:', err);
     return res.status(500).json({ success: false, message: 'पावती क्रमांक अद्ययावत करताना त्रुटी.' });
+  }
+}
+
+export async function fixReceiptAnomalies(req = null, res = null) {
+  try {
+    const report = {
+      fixedJagdish: false,
+      fixedDadaso: false,
+      deletedAkshayDup: false,
+      deletedSachinDup: false,
+      normalizedOld999: [],
+      ensuredTodayDonors: []
+    };
+
+    // 1. Delete duplicate Akshay Ingale Txn 56 & Receipt 38 (999998)
+    try {
+      const { data: dupAkshayRec } = await db.from('receipts').select('id').eq('receipt_number', 'HANUMAN-2026-999998');
+      if (dupAkshayRec && dupAkshayRec.length > 0) {
+        for (const r of dupAkshayRec) {
+          await db.from('receipts').delete().eq('id', r.id);
+        }
+      }
+      const { data: dupAkshayTx } = await db.from('income_transactions').select('id').eq('id', 56);
+      if (dupAkshayTx && dupAkshayTx.length > 0) {
+        await db.from('income_transactions').delete().eq('id', 56);
+        report.deletedAkshayDup = true;
+      }
+    } catch (e) {
+      console.warn('dupAkshay delete note:', e.message);
+    }
+
+    // 2. Delete duplicate Sachin Gavade SRM Txn 54 & Receipt 37 (999997)
+    try {
+      const { data: dupSachinRec } = await db.from('receipts').select('id').eq('receipt_number', 'HANUMAN-2026-999997');
+      if (dupSachinRec && dupSachinRec.length > 0) {
+        for (const r of dupSachinRec) {
+          await db.from('receipts').delete().eq('id', r.id);
+        }
+      }
+      const { data: dupSachinTx } = await db.from('income_transactions').select('id').eq('id', 54);
+      if (dupSachinTx && dupSachinTx.length > 0) {
+        await db.from('income_transactions').delete().eq('id', 54);
+        report.deletedSachinDup = true;
+      }
+    } catch (e) {
+      console.warn('dupSachin delete note:', e.message);
+    }
+
+    // 3. Fix Jagdish Gavade (Txn 75 / Receipt 55 / 1000000 -> 000043)
+    try {
+      const { data: jagdishTx } = await db.from('income_transactions')
+        .select('*')
+        .or('id.eq.75,receipt_number.eq.HANUMAN-2026-1000000,donor_name.ilike.%Jagdish%');
+
+      if (jagdishTx && jagdishTx.length > 0) {
+        for (const tx of jagdishTx) {
+          await db.from('income_transactions').update({
+            receipt_number: 'HANUMAN-2026-000043',
+            transaction_id: 'TXN-2026-000043',
+            status: 'completed',
+            is_deleted: false
+          }).eq('id', tx.id);
+        }
+
+        await db.from('receipts').update({
+          receipt_number: 'HANUMAN-2026-000043'
+        }).or('id.eq.55,receipt_number.eq.HANUMAN-2026-1000000,donor_name.ilike.%Jagdish%');
+
+        report.fixedJagdish = true;
+      }
+    } catch (e) {
+      console.warn('fixJagdish note:', e.message);
+    }
+
+    // 4. Fix Dadaso Ingale (Txn 67 / Receipt HANUMAN-2026-000037)
+    try {
+      const { data: dadasoTx } = await db.from('income_transactions')
+        .select('*')
+        .or('id.eq.67,receipt_number.eq.HANUMAN-2026-000037,donor_name.ilike.%Dadaso%');
+
+      if (dadasoTx && dadasoTx.length > 0) {
+        const tx = dadasoTx[0];
+        const { data: recExists } = await db.from('receipts').select('id').eq('receipt_number', 'HANUMAN-2026-000037');
+        let recId = recExists?.[0]?.id;
+        if (!recId) {
+          const verificationCode = `V-DADASO-${Date.now().toString(36).slice(-4).toUpperCase()}`;
+          const { data: insRec } = await db.from('receipts').insert({
+            receipt_number: 'HANUMAN-2026-000037',
+            transaction_id: tx.id,
+            donor_name: 'Dadaso Ingale',
+            mobile: tx.mobile || '',
+            address: tx.address || 'नदीवेस शिरोळ',
+            amount: 2100,
+            amount_in_words_mr: 'दोन हजार एकशे रुपये फक्त',
+            amount_in_words_en: 'Two Thousand One Hundred Rupees Only',
+            payment_method: tx.payment_method || 'cash',
+            category: 'vargani',
+            purpose: 'श्री गणेशोत्सव वर्गणी',
+            collector_name: 'अध्यक्ष (Admin)',
+            verification_code: verificationCode
+          }).select('id').single();
+          recId = insRec?.id;
+        }
+        if (recId) {
+          await db.from('income_transactions').update({ receipt_id: recId }).eq('id', tx.id);
+          report.fixedDadaso = true;
+        }
+      }
+    } catch (e) {
+      console.warn('fixDadaso note:', e.message);
+    }
+
+    // 5. Normalize remaining old 99999x transactions
+    // Aniruddha Jadhav (Txn 50 -> 000018)
+    try {
+      await db.from('income_transactions').update({
+        receipt_number: 'HANUMAN-2026-000018',
+        transaction_id: 'TXN-2026-000018'
+      }).eq('id', 50);
+      await db.from('receipts').update({
+        receipt_number: 'HANUMAN-2026-000018'
+      }).or('id.eq.35,receipt_number.eq.HANUMAN-2026-999995');
+      report.normalizedOld999.push('Aniruddha Jadhav -> 000018');
+    } catch (e) {}
+
+    // Rohit Gavade (Txn 52 -> 000019)
+    try {
+      await db.from('income_transactions').update({
+        receipt_number: 'HANUMAN-2026-000019',
+        transaction_id: 'TXN-2026-000019'
+      }).eq('id', 52);
+      await db.from('receipts').update({
+        receipt_number: 'HANUMAN-2026-000019'
+      }).or('id.eq.36,receipt_number.eq.HANUMAN-2026-999996');
+      report.normalizedOld999.push('Rohit Gavade -> 000019');
+    } catch (e) {}
+
+    // Rushikesh Deshmukh (Txn 58 -> 000022)
+    try {
+      await db.from('income_transactions').update({
+        receipt_number: 'HANUMAN-2026-000022',
+        transaction_id: 'TXN-2026-000022'
+      }).eq('id', 58);
+      await db.from('receipts').update({
+        receipt_number: 'HANUMAN-2026-000022'
+      }).or('id.eq.39,receipt_number.eq.HANUMAN-2026-999999');
+      report.normalizedOld999.push('Rushikesh Deshmukh -> 000022');
+    } catch (e) {}
+
+    // 6. Ensure today's donors and amounts in donors table
+    const todayDonorsToSync = [
+      { name: 'Dadaso Ingale', amount: 2100, mobile: '' },
+      { name: 'Ruturaj Gavade', amount: 1500, mobile: '' },
+      { name: 'Kakaso Gavade', amount: 1000, mobile: '' },
+      { name: 'Sachin More', amount: 1500, mobile: '' },
+      { name: 'Sachin Gavade', amount: 1000, mobile: '' },
+      { name: 'Vijay Gavade', amount: 1500, mobile: '' },
+      { name: 'Jagdish Gavade', amount: 2500, mobile: '8379810543' }
+    ];
+
+    for (const td of todayDonorsToSync) {
+      try {
+        const { data: dRows } = await db.from('donors').select('id, name, target_amount, paid_amount').ilike('name', td.name);
+        if (dRows && dRows.length > 0) {
+          const dId = dRows[0].id;
+          const currentTarget = Math.max(Number(dRows[0].target_amount) || 0, td.amount);
+          await db.from('donors').update({
+            target_amount: currentTarget,
+            paid_amount: td.amount,
+            total_donated: td.amount,
+            status: 'paid',
+            donations_count: 1
+          }).eq('id', dId);
+          await db.from('income_transactions').update({ donor_id: dId }).ilike('donor_name', td.name);
+          report.ensuredTodayDonors.push(`${td.name} (ID: ${dId}) updated`);
+        } else {
+          const { data: insD } = await db.from('donors').insert({
+            name: td.name,
+            mobile: td.mobile,
+            address: 'नदीवेस शिरोळ',
+            area: 'नदीवेस शिरोळ',
+            target_amount: td.amount,
+            paid_amount: td.amount,
+            total_donated: td.amount,
+            donations_count: 1,
+            status: 'paid',
+            notes: 'वर्गणी नोंदणी'
+          }).select('id').single();
+          if (insD) {
+            await db.from('income_transactions').update({ donor_id: insD.id }).ilike('donor_name', td.name);
+            report.ensuredTodayDonors.push(`${td.name} (New ID: ${insD.id}) inserted`);
+          }
+        }
+      } catch (errD) {
+        console.warn('sync today donor note:', errD.message);
+      }
+    }
+
+    console.log('✅ fixReceiptAnomalies report:', report);
+    if (res && typeof res.json === 'function') {
+      return res.json({ success: true, message: 'सर्व पावती विसंगती आणि दुबार नोंदी यशस्वीरित्या दुरुस्त केल्या!', report });
+    }
+    return report;
+  } catch (err) {
+    console.error('fixReceiptAnomalies error:', err);
+    if (res && typeof res.status === 'function') {
+      return res.status(500).json({ success: false, message: 'दुरुस्त करताना त्रुटी: ' + err.message });
+    }
+    throw err;
   }
 }
 

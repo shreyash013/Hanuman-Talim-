@@ -347,6 +347,16 @@ export async function ensureInitialSetup() {
   } catch (alignErr) {
     console.warn('Prithviraj alignment note:', alignErr.message);
   }
+
+  // ----------------------------------------
+  // Ensure Receipt Anomalies Fixed (e.g. Jagdish Gavade 000043, Deduplication)
+  // ----------------------------------------
+  try {
+    const { fixReceiptAnomalies } = await import('../controllers/incomeController.js');
+    await fixReceiptAnomalies();
+  } catch (fixErr) {
+    console.warn('fixReceiptAnomalies setup note:', fixErr.message);
+  }
 }
 
 export default db;
