@@ -167,6 +167,14 @@ export function DonorsPage() {
             status,
             donations_count: Math.max(Number(d.donations_count) || 0, matchingPayments.length)
           };
+        // Deduplicate to guarantee no duplicate donors are displayed
+        const seenKeys = new Set();
+        donorsList = donorsList.filter(d => {
+          if (!d || !d.name) return false;
+          const k = ((d.name || '').trim().toLowerCase()) + '_' + ((d.mobile || '').replace(/\D/g, '').slice(-10));
+          if (seenKeys.has(k)) return false;
+          seenKeys.add(k);
+          return true;
         });
 
         setDonors(donorsList);

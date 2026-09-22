@@ -550,8 +550,23 @@ export async function fixReceiptAnomalies(req = null, res = null) {
       if (dadasoTx && dadasoTx.length > 0) {
         const tx = dadasoTx[0];
         const { data: recExists } = await db.from('receipts').select('id').eq('receipt_number', 'HANUMAN-2026-000037');
-        let recId = recExists?.[0]?.id;
-        if (!recId) {
+        if (recExists && recExists.length > 0) {
+          recId = recExists[0].id;
+          await db.from('receipts').update({
+            receipt_number: 'HANUMAN-2026-000037',
+            transaction_id: tx.id,
+            donor_name: 'Dadaso Ingale',
+            mobile: tx.mobile || '',
+            address: tx.address || 'नदीवेस शिरोळ',
+            amount: 2100,
+            amount_in_words_mr: 'दोन हजार शंभर रुपये फक्त',
+            amount_in_words_en: 'Two Thousand One Hundred Rupees Only',
+            payment_method: tx.payment_method || 'cash',
+            category: 'vargani',
+            purpose: 'श्री गणेशोत्सव वर्गणी',
+            collector_name: 'अध्यक्ष (Admin)'
+          }).eq('id', recId);
+        } else {
           const verificationCode = `V-DADASO-${Date.now().toString(36).slice(-4).toUpperCase()}`;
           const { data: insRec } = await db.from('receipts').insert({
             receipt_number: 'HANUMAN-2026-000037',
@@ -560,7 +575,7 @@ export async function fixReceiptAnomalies(req = null, res = null) {
             mobile: tx.mobile || '',
             address: tx.address || 'नदीवेस शिरोळ',
             amount: 2100,
-            amount_in_words_mr: 'दोन हजार एकशे रुपये फक्त',
+            amount_in_words_mr: 'दोन हजार शंभर रुपये फक्त',
             amount_in_words_en: 'Two Thousand One Hundred Rupees Only',
             payment_method: tx.payment_method || 'cash',
             category: 'vargani',
@@ -571,7 +586,7 @@ export async function fixReceiptAnomalies(req = null, res = null) {
           recId = insRec?.id;
         }
         if (recId) {
-          await db.from('income_transactions').update({ receipt_id: recId }).eq('id', tx.id);
+          await db.from('income_transactions').update({ receipt_id: recId, receipt_number: 'HANUMAN-2026-000037' }).eq('id', tx.id);
           report.fixedDadaso = true;
         }
       }
