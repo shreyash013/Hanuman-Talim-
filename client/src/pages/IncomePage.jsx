@@ -25,7 +25,8 @@ import {
   User,
   Smartphone,
   MessageCircle,
-  QrCode
+  QrCode,
+  Pencil
 } from 'lucide-react';
 import phonepeQrImg from '../assets/phonepe_qr.jpg';
 
@@ -45,10 +46,12 @@ export function IncomePage() {
 
   // Modal State
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingIncome, setEditingIncome] = useState(null);
   const [selectedReceipt, setSelectedReceipt] = useState(null);
   const [autoShareReceipt, setAutoShareReceipt] = useState(false);
 
-  // Form State
+  // Form State (Add)
   const [donorName, setDonorName] = useState('');
   const [mobile, setMobile] = useState('');
   const [address, setAddress] = useState('');
@@ -59,6 +62,72 @@ export function IncomePage() {
   const [notes, setNotes] = useState('');
   const [attachment, setAttachment] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Form State (Edit)
+  const [editDonorName, setEditDonorName] = useState('');
+  const [editMobile, setEditMobile] = useState('');
+  const [editAddress, setEditAddress] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+  const [editCategory, setEditCategory] = useState('vargani');
+  const [editPaymentMethod, setEditPaymentMethod] = useState('cash');
+  const [editPurpose, setEditPurpose] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
+
+  const handleOpenEdit = (row) => {
+    setEditingIncome(row);
+    setEditDonorName(row.donor_name || '');
+    setEditMobile(row.mobile || '');
+    setEditAddress(row.address || '');
+    setEditAmount(String(row.amount || ''));
+    setEditCategory(row.category || 'vargani');
+    setEditPaymentMethod(row.payment_method || 'cash');
+    setEditPurpose(row.purpose || 'श्री गणेशोत्सव वर्गणी');
+    setEditNotes(row.notes || '');
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    if (!editingIncome) return;
+    if (!editDonorName.trim()) {
+      showToast('कृपया देणगीदाराचे नाव टाका.', 'warning');
+      return;
+    }
+    const parsedAmount = Number(editAmount);
+    if (!parsedAmount || parsedAmount <= 0) {
+      showToast('कृपया वैध रक्कम टाका (Amount > 0).', 'warning');
+      return;
+    }
+
+    try {
+      setIsSubmittingEdit(true);
+      const payload = {
+        donor_name: editDonorName.trim(),
+        mobile: editMobile.trim(),
+        address: editAddress.trim(),
+        amount: parsedAmount,
+        category: editCategory,
+        payment_method: editPaymentMethod,
+        purpose: editPurpose.trim(),
+        notes: editNotes.trim()
+      };
+
+      const res = await api.put(`/income/${editingIncome.id}`, payload);
+      if (res && res.success !== false) {
+        showToast('जमा व्यवहार यशस्वीरित्या अद्ययावत केला!', 'success');
+        setShowEditModal(false);
+        setEditingIncome(null);
+        fetchIncome();
+      } else {
+        showToast(res?.message || 'व्यवहार अद्ययावत करताना त्रुटी.', 'error');
+      }
+    } catch (err) {
+      showToast(err.message || 'व्यवहार अद्ययावत करताना त्रुटी.', 'error');
+    } finally {
+      setIsSubmittingEdit(false);
+    }
+  };
 
   const fetchIncome = async (silent = false) => {
     try {
@@ -405,13 +474,22 @@ export function IncomePage() {
                           </>
                         )}
                         {isAdmin && (
-                          <button
-                            onClick={() => handleDelete(row.id)}
-                            className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                            title="हटवा"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          <>
+                            <button
+                              onClick={() => handleOpenEdit(row)}
+                              className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 hover:bg-blue-100 transition-colors"
+                              title="माहिती / पावती एडिट करा (Edit)"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(row.id)}
+                              className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                              title="हटवा"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
                         )}
                       </div>
                     </td>
@@ -606,6 +684,157 @@ export function IncomePage() {
                 <span>{isSubmitting ? 'जतन होत आहे...' : 'जतन करा व पावती पहा'}</span>
               </button>
             </div>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit Income Modal */}
+      <Modal
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        title="✏️ जमा व्यवहार / पावती अद्ययावत करा (Edit Income)"
+        subtitle={`${editingIncome?.receipt_number || ''} मधील माहिती दुरुस्त करा`}
+        maxWidth="max-w-xl"
+      >
+        <form onSubmit={handleSaveEdit} className="space-y-4 text-xs">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">
+                👤 देणगीदाराचे नाव (Donor Name) *
+              </label>
+              <input
+                type="text"
+                required
+                value={editDonorName}
+                onChange={(e) => setEditDonorName(e.target.value)}
+                placeholder="नाव टाका"
+                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">
+                💰 रक्कम (Amount ₹) *
+              </label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-amber-500 font-extrabold text-sm">₹</span>
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  value={editAmount}
+                  onChange={(e) => setEditAmount(e.target.value)}
+                  placeholder="रक्कम"
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-8 pr-3 py-2 text-slate-900 dark:text-white font-black text-sm focus:outline-none focus:border-amber-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">
+                📱 मोबाईल क्रमांक (Mobile)
+              </label>
+              <input
+                type="text"
+                value={editMobile}
+                onChange={(e) => setEditMobile(e.target.value)}
+                placeholder="98220XXXXX"
+                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">
+                📍 पत्ता / भाग (Address / Area)
+              </label>
+              <input
+                type="text"
+                value={editAddress}
+                onChange={(e) => setEditAddress(e.target.value)}
+                placeholder="उदा. नदीवेस, शिरोळ"
+                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">
+                💳 जमा पद्धत (Payment Method)
+              </label>
+              <select
+                value={editPaymentMethod}
+                onChange={(e) => setEditPaymentMethod(e.target.value)}
+                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-amber-500"
+              >
+                <option value="cash">रोख (Cash)</option>
+                <option value="upi">UPI / फोनपे / गुगल पे</option>
+                <option value="bank_transfer">बँक ट्रान्सफर (NEFT/RTGS)</option>
+                <option value="cheque">चेक (Cheque)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">
+                🏷️ वर्गवारी (Category)
+              </label>
+              <select
+                value={editCategory}
+                onChange={(e) => setEditCategory(e.target.value)}
+                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-amber-500"
+              >
+                <option value="vargani">श्री गणेशोत्सव वर्गणी</option>
+                <option value="donation">ऐच्छिक देणगी</option>
+                <option value="advertisement">जाहिरात</option>
+                <option value="other">इतर</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">
+              📝 उद्देश / कारण (Purpose)
+            </label>
+            <input
+              type="text"
+              value={editPurpose}
+              onChange={(e) => setEditPurpose(e.target.value)}
+              placeholder="श्री गणेशोत्सव वर्गणी"
+              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">
+              📌 विशेष टीप (Notes)
+            </label>
+            <input
+              type="text"
+              value={editNotes}
+              onChange={(e) => setEditNotes(e.target.value)}
+              placeholder="नोंद / तपशील"
+              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
+            />
+          </div>
+
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setShowEditModal(false)}
+              className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+            >
+              रद्द करा
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmittingEdit}
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold text-xs shadow-md disabled:opacity-50 flex items-center gap-1.5 cursor-pointer active:scale-95"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              <span>{isSubmittingEdit ? 'अद्ययावत होत आहे...' : 'बदल जतन करा (Save)'}</span>
+            </button>
           </div>
         </form>
       </Modal>

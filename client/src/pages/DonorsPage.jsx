@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { useNotification } from '../context/NotificationContext';
 import { useMandal } from '../context/MandalContext';
-import api, { forceSyncNow, autoSyncFromServer } from '../services/api';
+import api, { forceSyncNow, autoSyncFromServer, isExactDonorMatch } from '../services/api';
 import { formatDate } from '../utils/dateUtils';
 import { Modal } from '../components/common/Modal';
 import {
@@ -135,22 +135,7 @@ export function DonorsPage() {
         const incomeList = rawIncome ? JSON.parse(rawIncome) : [];
 
         donorsList = donorsList.map(d => {
-          const matchingPayments = incomeList.filter(inc => {
-            if (inc.is_deleted) return false;
-            const incName = (inc.donor_name || '').trim().toLowerCase();
-            const dName = (d.name || '').trim().toLowerCase();
-            const nameMatch = incName && dName && (
-              incName === dName ||
-              incName.includes(dName) ||
-              dName.includes(incName) ||
-              incName.replace(/\s*\([^)]*\)/g, '').trim() === dName.replace(/\s*\([^)]*\)/g, '').trim()
-            );
-            const dDigits = (d.mobile || '').replace(/\D/g, '').slice(-10);
-            const incDigits = (inc.mobile || '').replace(/\D/g, '').slice(-10);
-            const mobileMatch = dDigits.length === 10 && incDigits.length === 10 && dDigits === incDigits;
-            const idMatch = inc.donor_id && String(inc.donor_id) === String(d.id);
-            return idMatch || nameMatch || mobileMatch;
-          });
+          const matchingPayments = incomeList.filter(inc => isExactDonorMatch(d, inc));
 
           const localPaid = matchingPayments.reduce((sum, inc) => sum + (Number(inc.amount) || 0), 0);
           const serverPaid = Number(d.paid_amount || d.total_donated || 0);
@@ -158,6 +143,7 @@ export function DonorsPage() {
           const target_amount = Number(d.target_amount || d.total_donated || 500);
           const pending_amount = Math.max(0, target_amount - paid_amount);
           const status = (paid_amount >= target_amount && target_amount > 0) ? 'paid' : (paid_amount > 0 ? 'partial' : 'unpaid');
+          const donations_count = matchingPayments.length > 0 ? matchingPayments.length : (paid_amount > 0 ? 1 : 0);
 
           return {
             ...d,
@@ -165,7 +151,7 @@ export function DonorsPage() {
             paid_amount,
             pending_amount,
             status,
-            donations_count: Math.max(Number(d.donations_count) || 0, matchingPayments.length)
+            donations_count
           };
         });
 
@@ -837,7 +823,7 @@ export function DonorsPage() {
                     {/* Paid Amount */}
                     <td className={`p-4 text-right ${styles.paidClass}`}>
                       ₹{(d.paid_amount || 0).toLocaleString('en-IN')}
-                      {d.donations_count > 0 && (
+                      {d.donations_count > 1 && (
                         <span className={`block text-[10px] font-normal ${styles.subTextClass}`}>
                           ({d.donations_count} पावत्या)
                         </span>
@@ -1249,7 +1235,7 @@ export function DonorsPage() {
             <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800/80 space-y-2 text-xs">
               <h4 className="font-bold text-white">इतिहास व पावती माहिती:</h4>
               <p className="text-slate-300">पत्ता: {selectedDonorProfile.address || 'नाही'}</p>
-              <p className="text-slate-300">जमा पावत्या: {selectedDonorProfile.donations_count || 0} पावत्या</p>
+              <p className="text-slate-300">जमा पावत्या: {selectedDonorProfile.donations_count || (selectedDonorProfile.paid_amount > 0 ? 1 : 0)} {Number(selectedDonorProfile.donations_count) > 1 ? 'पावत्या' : 'पावती'}</p>
               <p className="text-slate-300">
                 शेवटची वर्गणी तारीख: {selectedDonorProfile.last_donated_at ? formatDate(selectedDonorProfile.last_donated_at) : 'अलीकडे'}
               </p>

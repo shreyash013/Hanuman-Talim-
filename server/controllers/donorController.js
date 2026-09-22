@@ -364,6 +364,9 @@ export async function updateDonor(req, res) {
       updatePayload.paid_amount = Number(paid_amount);
       updatePayload.total_donated = Number(paid_amount);
     }
+    if (req.body.donations_count !== undefined) {
+      updatePayload.donations_count = Number(req.body.donations_count);
+    }
 
     const effectiveTarget = updatePayload.target_amount !== undefined ? updatePayload.target_amount : Number(donor.target_amount || 500);
     const effectivePaid = updatePayload.paid_amount !== undefined ? updatePayload.paid_amount : Number(donor.paid_amount || donor.total_donated || 0);
@@ -396,14 +399,33 @@ export async function updateDonor(req, res) {
     const oldPaid = Number(donor.paid_amount || donor.total_donated || 0);
     const newPaid = updatePayload.paid_amount !== undefined ? Number(updatePayload.paid_amount) : oldPaid;
     if (newPaid !== oldPaid && donor.id) {
-      // Find the most recent income transaction for this donor to update its amount
-      const { data: recentTxRows } = await db.from('income_transactions')
+      // Find the most recent income transaction for this donor by ID or name
+      let recentTx = null;
+      const { data: recentById } = await db.from('income_transactions')
         .select('id, amount, receipt_id, receipt_number')
         .eq('donor_id', donor.id)
         .eq('is_deleted', false)
         .order('created_at', { ascending: false })
         .limit(1);
-      const recentTx = recentTxRows?.[0];
+
+      if (recentById?.[0]) {
+        recentTx = recentById[0];
+      } else if (oldName || donor.name) {
+        // Fallback search by donor name if donor_id was unlinked
+        const targetSearchName = (oldName || donor.name).trim();
+        const { data: recentByName } = await db.from('income_transactions')
+          .select('id, amount, receipt_id, receipt_number')
+          .ilike('donor_name', targetSearchName)
+          .eq('is_deleted', false)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        if (recentByName?.[0]) {
+          recentTx = recentByName[0];
+          // Link donor_id for future updates
+          await db.from('income_transactions').update({ donor_id: donor.id }).eq('id', recentTx.id);
+        }
+      }
+
       if (recentTx) {
         // Calculate the new transaction amount: adjust by the difference
         const diff = newPaid - oldPaid;
@@ -423,8 +445,8 @@ export async function updateDonor(req, res) {
             amount_in_words_en: numberToWordsEnglish(newTxAmount)
           }).eq('receipt_number', recentTx.receipt_number);
         }
-      } else if (newPaid > 0) {
-        // No existing income transaction -> create one so it shows in Income Records!
+      } else if (newPaid > 0 && oldPaid === 0) {
+        // Only create a new transaction if oldPaid was 0 and this is genuinely the first donation
         await createIncomeForDonor(donor, newPaid, category || 'vargani');
       }
     }

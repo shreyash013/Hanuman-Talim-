@@ -60,6 +60,40 @@ function normalizeText(str) {
     .trim();
 }
 
+// Strict and safe matcher for donors and income transactions
+export function isExactDonorMatch(donor, inc) {
+  if (!donor || !inc || inc.is_deleted) return false;
+
+  // 1. Explicit ID match
+  if (inc.donor_id && donor.id && String(inc.donor_id) === String(donor.id)) {
+    return true;
+  }
+
+  const dNorm = normalizeText(donor.name || '');
+  const incNorm = normalizeText(inc.donor_name || '');
+  if (!dNorm || !incNorm) return false;
+
+  // 2. Exact match on normalized names
+  if (dNorm === incNorm) return true;
+
+  // 3. Marathi transliteration variants (e.g. prithviraj <-> pruthviraj)
+  const dTrans = dNorm.replace(/u/g, 'i').replace(/w/g, 'v');
+  const incTrans = incNorm.replace(/u/g, 'i').replace(/w/g, 'v');
+  if (dTrans === incTrans) return true;
+
+  // 4. Mobile match ONLY if names share at least one keyword (prevents matching Rajendra More to Prithviraj Gavade)
+  const dDigits = (donor.mobile || '').replace(/\D/g, '').slice(-10);
+  const incDigits = (inc.mobile || '').replace(/\D/g, '').slice(-10);
+  if (dDigits.length === 10 && incDigits.length === 10 && dDigits === incDigits) {
+    const dWords = (donor.name || '').toLowerCase().replace(/[^a-z\u0900-\u097F\s]/g, '').split(/\s+/).filter(w => w.length >= 3);
+    const incWords = (inc.donor_name || '').toLowerCase().replace(/[^a-z\u0900-\u097F\s]/g, '').split(/\s+/).filter(w => w.length >= 3);
+    const hasOverlap = dWords.some(w => incWords.includes(w));
+    if (hasOverlap) return true;
+  }
+
+  return false;
+}
+
 // Bi-directional Auto-Reconciliation between shirol_donors and shirol_income
 export function reconcileDonorsAndIncome() {
   if (typeof window === 'undefined') return;
@@ -160,23 +194,14 @@ export function reconcileDonorsAndIncome() {
       if (!donor) return;
       const paidAmt = Number(donor.paid_amount !== undefined ? donor.paid_amount : (donor.total_donated || 0));
       const donorNorm = normalizeText(donor.name);
-      const donorPhone = (donor.mobile || '').replace(/\D/g, '').slice(-10);
 
       // Skip if explicitly in tombstone
       if (deletedIds.includes(String(donor.id)) || (donorNorm && deletedNames.includes(donorNorm))) {
         return;
       }
 
-      // Find matching income entries
-      const matching = incomeList.filter(inc => {
-        if (!inc || inc.is_deleted) return false;
-        if (inc.donor_id && String(inc.donor_id) === String(donor.id)) return true;
-        const incNorm = normalizeText(inc.donor_name);
-        if (donorNorm && incNorm && (donorNorm === incNorm || donorNorm.includes(incNorm) || incNorm.includes(donorNorm))) return true;
-        const incPhone = (inc.mobile || '').replace(/\D/g, '').slice(-10);
-        if (donorPhone.length === 10 && incPhone.length === 10 && donorPhone === incPhone) return true;
-        return false;
-      });
+      // Find matching income entries with strict matcher
+      const matching = incomeList.filter(inc => isExactDonorMatch(donor, inc));
 
       if (paidAmt > 0) {
         if (matching.length === 0) {
@@ -236,17 +261,8 @@ export function reconcileDonorsAndIncome() {
       const incNorm = normalizeText(inc.donor_name);
       if (!incNorm) return;
       if (deletedIds.includes(String(inc.id)) || deletedNames.includes(incNorm)) return;
-      const incPhone = (inc.mobile || '').replace(/\D/g, '').slice(-10);
 
-      const existsInDonors = donorsList.some(d => {
-        if (!d) return false;
-        if (inc.donor_id && String(d.id) === String(inc.donor_id)) return true;
-        const dNorm = normalizeText(d.name);
-        if (dNorm && incNorm && (dNorm === incNorm || dNorm.includes(incNorm) || incNorm.includes(dNorm))) return true;
-        const dPhone = (d.mobile || '').replace(/\D/g, '').slice(-10);
-        if (incPhone.length === 10 && dPhone.length === 10 && incPhone === dPhone) return true;
-        return false;
-      });
+      const existsInDonors = donorsList.some(d => isExactDonorMatch(d, inc));
 
       if (!existsInDonors) {
         const amt = Number(inc.amount) || 0;
@@ -1356,6 +1372,83 @@ export async function request(endpoint, options = {}) {
       };
     }
 
+    if (options.method === 'PUT') {
+      const idMatch = endpoint.match(/\/income\/([^\/?]+)/);
+      const id = idMatch ? idMatch[1] : null;
+      const bodyData = typeof options.body === 'string' ? JSON.parse(options.body || '{}') : (options.body || {});
+      let incomeList = getLocalStore('income', []);
+      const index = incomeList.findIndex(item => String(item.id) === String(id) || item.receipt_number === id || item.transaction_id === id);
+
+      if (index >= 0) {
+        const oldItem = incomeList[index];
+        const newAmt = bodyData.amount !== undefined ? Number(bodyData.amount) : Number(oldItem.amount);
+        const amtDiff = newAmt - Number(oldItem.amount || 0);
+
+        incomeList[index] = {
+          ...oldItem,
+          ...bodyData,
+          amount: newAmt,
+          amount_in_words_mr: numberToWordsMarathi(newAmt),
+          amount_in_words_en: numberToWordsEnglish(newAmt),
+          updated_at: new Date().toISOString()
+        };
+        setLocalStore('income', incomeList);
+
+        // Update corresponding receipt
+        let receipts = getLocalStore('receipts', []);
+        receipts = receipts.map(r => {
+          if (String(r.id) === String(oldItem.id) || r.receipt_number === oldItem.receipt_number) {
+            return {
+              ...r,
+              ...bodyData,
+              amount: newAmt,
+              amount_in_words_mr: numberToWordsMarathi(newAmt),
+              amount_in_words_en: numberToWordsEnglish(newAmt),
+              updated_at: new Date().toISOString()
+            };
+          }
+          return r;
+        });
+        setLocalStore('receipts', receipts);
+
+        // Update donor record
+        let donorsList = getLocalStore('donors', []);
+        donorsList = donorsList.map(d => {
+          const isMatch = (oldItem.donor_id && String(d.id) === String(oldItem.donor_id)) ||
+            (d.name && oldItem.donor_name && d.name.trim().toLowerCase() === oldItem.donor_name.trim().toLowerCase());
+          if (isMatch) {
+            const curPaid = Number(d.paid_amount || d.total_donated || 0) + amtDiff;
+            const target = Number(d.target_amount || 0);
+            return {
+              ...d,
+              name: bodyData.donor_name || d.name,
+              mobile: bodyData.mobile !== undefined ? bodyData.mobile : d.mobile,
+              address: bodyData.address !== undefined ? bodyData.address : d.address,
+              paid_amount: Math.max(0, curPaid),
+              total_donated: Math.max(0, curPaid),
+              pending_amount: Math.max(0, target - curPaid),
+              status: (curPaid >= target && target > 0) ? 'paid' : (curPaid > 0 ? 'partial' : 'unpaid')
+            };
+          }
+          return d;
+        });
+        setLocalStore('donors', donorsList);
+
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('shirol_data_updated'));
+          window.dispatchEvent(new Event('storage'));
+          broadcastDataChange();
+        }
+
+        return {
+          success: true,
+          message: 'जमा व्यवहार अद्ययावत केला!',
+          data: incomeList[index]
+        };
+      }
+      return { success: false, message: 'व्यवहार सापडला नाही.' };
+    }
+
     if (options.method === 'DELETE') {
       const id = endpoint.split('/income/')[1];
       const incomeList = getLocalStore('income', []);
@@ -1852,47 +1945,6 @@ export async function request(endpoint, options = {}) {
         return inc;
       });
 
-      // Filter out records marked deleted (if paid amount was set to 0)
-      localIncome = localIncome.filter(inc => inc && !inc.is_deleted);
-
-      // If no matching income record existed and paid > 0, generate one!
-      if (!matchedIncome && !isNaN(newPaid) && newPaid > 0) {
-        let maxReceiptNum = 0;
-        localIncome.forEach(inc => {
-          if (inc.receipt_number) {
-            const m = inc.receipt_number.match(/(\d+)$/);
-            if (m) {
-              const n = parseInt(m[1], 10);
-              if (!isNaN(n) && n > maxReceiptNum && n < 100000) maxReceiptNum = n;
-            }
-          }
-        });
-        const count = Math.max(localIncome.length, maxReceiptNum) + 1;
-        const formattedNum = String(count).padStart(6, '0');
-        const settings = getLocalStore('mandal_settings_custom', SHIROL_MANDAL_SETTINGS);
-        const prefix = settings.receipt_prefix || 'HANUMAN-2026-';
-
-        localIncome.unshift({
-          id: Date.now(),
-          transaction_id: `TXN-2026-${formattedNum}`,
-          receipt_number: `${prefix}${formattedNum}`,
-          donor_id: donorId && donorId !== 'undefined' ? donorId : Date.now(),
-          donor_name: cleanName || origName || 'देणगीदार',
-          mobile: cleanMobile || '',
-          address: cleanAddress || cleanArea || 'शिरोळ',
-          amount: newPaid,
-          payment_method: 'cash',
-          category: 'vargani',
-          purpose: 'श्री गणेशोत्सव वर्गणी',
-          collector_name: 'अध्यक्ष (Admin)',
-          amount_in_words_mr: numberToWordsMarathi(newPaid),
-          amount_in_words_en: numberToWordsEnglish(newPaid),
-          status: 'completed',
-          is_deleted: false,
-          created_at: new Date().toISOString()
-        });
-      }
-
       setLocalStore('income', localIncome);
 
       if (typeof window !== 'undefined') {
@@ -1915,29 +1967,14 @@ export async function request(endpoint, options = {}) {
     incomeList = getLocalStore('income', []);
 
     const processedDonors = donorsList.map(d => {
-      const dNorm = normalizeText(d.name);
-      const dPhone = (d.mobile || '').replace(/\D/g, '').slice(-10);
-
-      const matchingPayments = incomeList.filter(inc => {
-        if (!inc || inc.is_deleted) return false;
-        if (inc.donor_id && String(inc.donor_id) === String(d.id)) return true;
-        const incNorm = normalizeText(inc.donor_name);
-        const nameMatch = incNorm && dNorm && (
-          incNorm === dNorm ||
-          incNorm.includes(dNorm) ||
-          dNorm.includes(incNorm)
-        );
-        const incPhone = (inc.mobile || '').replace(/\D/g, '').slice(-10);
-        const mobileMatch = dPhone.length === 10 && incPhone.length === 10 && dPhone === incPhone;
-        return nameMatch || mobileMatch;
-      });
+      const matchingPayments = incomeList.filter(inc => isExactDonorMatch(d, inc));
 
       const incomePaid = matchingPayments.reduce((sum, inc) => sum + (Number(inc.amount) || 0), 0);
       const storedPaid = Number(d.paid_amount !== undefined ? d.paid_amount : (d.total_donated || 0));
       const paid_amount = Math.max(storedPaid, incomePaid);
       const target_amount = Number(d.target_amount !== undefined ? d.target_amount : (d.total_donated || 500));
       const pending_amount = Math.max(0, target_amount - paid_amount);
-      const donations_count = Math.max(Number(d.donations_count) || 0, matchingPayments.length);
+      const donations_count = matchingPayments.length > 0 ? matchingPayments.length : (paid_amount > 0 ? 1 : 0);
 
       let status = 'unpaid';
       if (paid_amount >= target_amount && target_amount > 0) {
