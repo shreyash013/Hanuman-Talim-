@@ -21,8 +21,22 @@ import {
 
 export function MembersPage() {
   const { t, lang } = useLanguage();
-  const { isAdmin, isSecretary } = useAuth();
+  const { user } = useAuth();
   const { showToast } = useNotification();
+
+  // Strictly allow ONLY the 2 Administrators: President Sumedh Gavade & Treasurer Shreyash Gavade
+  const is2Administrators = Boolean(
+    user &&
+    !user.name?.toLowerCase().includes('sarthak') &&
+    user.id !== 2 &&
+    (
+      user.role === 'admin' ||
+      user.role === 'treasurer' ||
+      (user.email && (user.email.includes('president') || user.email.includes('sumedh') || user.email.includes('shreyashgavade') || user.email.includes('treasurer'))) ||
+      (user.mobile && (user.mobile.includes('9822099999') || user.mobile.includes('9356997428') || user.mobile.includes('9822012345'))) ||
+      (user.name && (user.name.includes('सुमेध') || user.name.includes('श्रेयश') || user.name.includes('Sumedh') || user.name.includes('Shreyash')))
+    )
+  );
 
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -177,7 +191,7 @@ export function MembersPage() {
             <span>CSV एक्सेल</span>
           </button>
 
-          {(isAdmin || isSecretary) && (
+          {is2Administrators && (
             <button
               onClick={handleOpenAdd}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 text-white font-bold text-xs sm:text-sm shadow-festive hover:from-orange-500 hover:to-amber-500 transition-all"
@@ -245,23 +259,23 @@ export function MembersPage() {
                 </div>
               </div>
 
-              {/* Actions for Admin / Secretary */}
-              {(isAdmin || isSecretary) && (
+              {/* Actions strictly for the 2 Administrators only */}
+              {is2Administrators && (
                 <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-1">
                   <button
                     onClick={() => handleOpenEdit(m)}
                     className="p-1.5 rounded-lg text-slate-500 hover:text-amber-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    title="सदस्य माहिती बदला (फक्त २ प्रशासक)"
                   >
                     <Edit2 className="w-3.5 h-3.5" />
                   </button>
-                  {isAdmin && (
-                    <button
-                      onClick={() => handleDelete(m.id)}
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+                  <button
+                    onClick={() => handleDelete(m.id)}
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                    title="सदस्य हटवा (फक्त २ प्रशासक)"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               )}
             </div>

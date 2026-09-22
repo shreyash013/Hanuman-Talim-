@@ -41,7 +41,11 @@ export async function getIncomeList(req, res) {
     const limitNum = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
     const offset = (pageNum - 1) * limitNum;
 
-    let pageQuery = db.from('income_transactions').select('*', { count: 'exact' }).eq('is_deleted', false).order('created_at', { ascending: false });
+    let pageQuery = db.from('income_transactions')
+      .select('*', { count: 'exact' })
+      .eq('is_deleted', false)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false });
     pageQuery = applyIncomeFilters(pageQuery, filters);
     const { data: transactions, count, error } = await pageQuery.range(offset, offset + limitNum - 1);
     throwIfError(error);
@@ -70,7 +74,8 @@ export async function getIncomeList(req, res) {
 }
 
 export async function getNextReceiptNumber(prefix = 'HANUMAN-2026-') {
-  let maxNum = 0;
+  // Baseline floor is 50 because user has physically/manually generated receipts up to 50
+  let maxNum = 50;
 
   // 1. Check active income transactions (exclude deleted and corrupt jumps >= 100000)
   try {
@@ -110,7 +115,7 @@ export async function getNextReceiptNumber(prefix = 'HANUMAN-2026-') {
     console.warn('getNextReceiptNumber receipts note:', err.message);
   }
 
-  const nextNum = maxNum + 1;
+  const nextNum = Math.max(maxNum, 50) + 1;
   const formattedNum = String(nextNum).padStart(6, '0');
   return {
     nextNum,

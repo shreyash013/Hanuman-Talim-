@@ -71,7 +71,21 @@ export function IncomePage() {
         payment_method: paymentMethod
       });
       if (res.success) {
-        setIncomeList(res.data || []);
+        // Enforce strict newest-first sequence (highest receipt number, latest timestamp)
+        const sortedData = (res.data || []).slice().sort((a, b) => {
+          const getNum = (item) => {
+            if (!item) return 0;
+            const m = (item.receipt_number || item.transaction_id || '').match(/(\d+)$/);
+            return m ? parseInt(m[1], 10) : 0;
+          };
+          const numA = getNum(a);
+          const numB = getNum(b);
+          if (numA !== numB) return numB - numA;
+          const timeA = new Date(a.created_at || 0).getTime() || (Number(a.id) || 0);
+          const timeB = new Date(b.created_at || 0).getTime() || (Number(b.id) || 0);
+          return timeB - timeA;
+        });
+        setIncomeList(sortedData);
         setPagination(res.pagination || { total: 0, totalPages: 1, totalAmount: 0 });
       }
     } catch (err) {
@@ -140,7 +154,7 @@ export function IncomePage() {
             mobile: submittedMobile || res.data.receipt.mobile || ''
           };
           setSelectedReceipt(finalReceipt);
-          setAutoShareReceipt(false);
+          setAutoShareReceipt(Boolean(sendWhatsApp || submittedMobile));
         }
       }
     } catch (err) {
@@ -575,9 +589,19 @@ export function IncomePage() {
             </button>
             <div className="flex items-center gap-2">
               <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={(e) => handleAddIncome(e, true)}
+                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold shadow-md disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                title="जतन करा आणि थेट WhatsApp वर पावती पाठवा"
+              >
+                <MessageCircle className="w-3.5 h-3.5 fill-current text-white" />
+                <span>जतन करा व WhatsApp पाठवा</span>
+              </button>
+              <button
                 type="submit"
                 disabled={isSubmitting}
-                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold shadow-md disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold shadow-md disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
               >
                 <span>{isSubmitting ? 'जतन होत आहे...' : 'जतन करा व पावती पहा'}</span>
               </button>

@@ -8,12 +8,13 @@ import { openWhatsAppReceipt, buildWhatsAppReceiptMessage } from '../../utils/wh
 import { MessageCircle } from 'lucide-react';
 import html2canvas from 'html2canvas';
 
-export function ReceiptModal({ isOpen, onClose, receipt }) {
+export function ReceiptModal({ isOpen, onClose, receipt, autoShare = false }) {
   const { t } = useLanguage();
   const { mandal } = useMandal();
   const { showToast } = useNotification();
   const receiptRef = useRef(null);
   const [imageFile, setImageFile] = useState(null);
+  const autoSharedRef = useRef(false);
 
   // Ultra-fast background pre-generation: As soon as modal opens, prepare image file in background
   useEffect(() => {
@@ -48,9 +49,32 @@ export function ReceiptModal({ isOpen, onClose, receipt }) {
     }
   }, [isOpen, receipt]);
 
+  // Reset auto-share lock when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      autoSharedRef.current = false;
+    }
+  }, [isOpen]);
+
+  // Auto-share trigger when modal opens with autoShare=true
+  useEffect(() => {
+    if (isOpen && autoShare && receipt && !autoSharedRef.current) {
+      autoSharedRef.current = true;
+      const timer = setTimeout(() => {
+        handleWhatsApp();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, autoShare, receipt]);
+
   if (!receipt) return null;
 
-  const activeReceipt = receipt;
+  // Resolve mobile number if missing from receipt record
+  const resolvedMobile = receipt.mobile || receipt.phone || receipt.donor_phone || receipt.contact || '';
+  const activeReceipt = {
+    ...receipt,
+    mobile: resolvedMobile
+  };
 
   // Send the EXACT receipt image directly to WhatsApp
   const handleWhatsApp = async () => {
@@ -76,13 +100,20 @@ export function ReceiptModal({ isOpen, onClose, receipt }) {
 
       // 1. Mobile (Android / iOS): Send exact image file straight to WhatsApp
       if (fileToShare && typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [fileToShare] })) {
-        await navigator.share({
-          files: [fileToShare],
-          title: `पावती क्र. ${activeReceipt.receipt_number || ''}`,
-          text: simpleMsg
-        });
-        showToast('पावती फोटो WhatsApp वर यशस्वीरित्या पाठवला!', 'success');
-        return;
+        try {
+          await navigator.share({
+            files: [fileToShare],
+            title: `पावती क्र. ${activeReceipt.receipt_number || ''}`,
+            text: simpleMsg
+          });
+          showToast('पावती फोटो WhatsApp वर यशस्वीरित्या पाठवला!', 'success');
+          return;
+        } catch (shareErr) {
+          if (shareErr.name === 'AbortError') return;
+          console.warn('Native share error, falling back to direct WhatsApp link:', shareErr);
+          openWhatsAppReceipt(activeReceipt, mandal, true);
+          return;
+        }
       }
 
       // 2. Desktop Fallback: Copy image to clipboard, download, and open WhatsApp Web

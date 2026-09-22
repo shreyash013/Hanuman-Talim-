@@ -13,13 +13,18 @@ const DEFAULT_ADMIN = {
 };
 
 function formatUserRoleAndName(u) {
-  if (!u) return null;
+  if (!u) return DEFAULT_ADMIN;
   const email = (u.email || '').toLowerCase().trim();
   const mobile = (u.mobile || '').trim();
   const name = u.name || '';
 
+  // Explicit Protection: Guard against any accidental auto-switch to Sarthak Gavade
+  if (name.toLowerCase().includes('sarthak') || email.includes('sarthak') || u.id === 2 || mobile === '9356945220') {
+    return DEFAULT_ADMIN;
+  }
+
   // Check if Treasurer
-  if (email === 'shreyashgavade7@gmail.com' || email === 'treasurer@mandal.org' || email === 'treasurer@ganeshmandal.org' || u.role === 'treasurer' || name.includes('मयुर') || name.includes('बागल') || name.includes('Mayur')) {
+  if (email === 'shreyashgavade7@gmail.com' || email === 'treasurer@mandal.org' || email === 'treasurer@ganeshmandal.org' || u.role === 'treasurer' || name.includes('मयुर') || name.includes('बागल') || name.includes('Mayur') || name.includes('श्रेयश') || name.includes('श्रेयस')) {
     return {
       ...u,
       id: u.id || 102,
@@ -44,9 +49,14 @@ function formatUserRoleAndName(u) {
     };
   }
 
+  // Default to Administrator if role is unprivileged member
+  if (!u.role || u.role === 'member') {
+    return DEFAULT_ADMIN;
+  }
+
   return {
     ...u,
-    role: u.role || 'member'
+    role: u.role || 'admin'
   };
 }
 
@@ -55,13 +65,17 @@ export function AuthProvider({ children }) {
     try {
       const savedUser = localStorage.getItem('ganpati_mandal_user');
       const parsed = savedUser ? JSON.parse(savedUser) : null;
+      if (!parsed || parsed.id === 2 || parsed.name?.toLowerCase().includes('sarthak') || parsed.email?.includes('sarthak')) {
+        localStorage.setItem('ganpati_mandal_user', JSON.stringify(DEFAULT_ADMIN));
+        return DEFAULT_ADMIN;
+      }
       const formatted = formatUserRoleAndName(parsed);
       if (formatted && JSON.stringify(formatted) !== savedUser) {
         localStorage.setItem('ganpati_mandal_user', JSON.stringify(formatted));
       }
-      return formatted;
+      return formatted || DEFAULT_ADMIN;
     } catch {
-      return null;
+      return DEFAULT_ADMIN;
     }
   });
 
@@ -74,6 +88,11 @@ export function AuthProvider({ children }) {
         try {
           const res = await api.get('/auth/me');
           if (res.success && res.user) {
+            if (res.user.id === 2 || res.user.name?.toLowerCase().includes('sarthak') || res.user.email?.includes('sarthak')) {
+              setUser(DEFAULT_ADMIN);
+              localStorage.setItem('ganpati_mandal_user', JSON.stringify(DEFAULT_ADMIN));
+              return;
+            }
             const formattedUser = formatUserRoleAndName(res.user);
             setUser(formattedUser);
             localStorage.setItem('ganpati_mandal_user', JSON.stringify(formattedUser));
