@@ -550,6 +550,7 @@ export async function fixReceiptAnomalies(req = null, res = null) {
       if (dadasoTx && dadasoTx.length > 0) {
         const tx = dadasoTx[0];
         const { data: recExists } = await db.from('receipts').select('id').eq('receipt_number', 'HANUMAN-2026-000037');
+        let recId = null;
         if (recExists && recExists.length > 0) {
           recId = recExists[0].id;
           await db.from('receipts').update({
