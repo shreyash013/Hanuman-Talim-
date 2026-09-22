@@ -74,8 +74,7 @@ export async function getIncomeList(req, res) {
 }
 
 export async function getNextReceiptNumber(prefix = 'HANUMAN-2026-') {
-  // Baseline floor is 50 because user has physically/manually generated receipts up to 50
-  let maxNum = 50;
+  let maxNum = 0;
 
   // 1. Check active income transactions (exclude deleted and corrupt jumps >= 100000)
   try {
@@ -115,10 +114,11 @@ export async function getNextReceiptNumber(prefix = 'HANUMAN-2026-') {
     console.warn('getNextReceiptNumber receipts note:', err.message);
   }
 
-  const nextNum = Math.max(maxNum, 50) + 1;
+  const nextNum = maxNum + 1;
   const formattedNum = String(nextNum).padStart(6, '0');
   return {
     nextNum,
+    formattedNum,
     receiptNumber: `${prefix}${formattedNum}`,
     transactionId: `TXN-2026-${formattedNum}`
   };

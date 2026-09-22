@@ -123,33 +123,7 @@ export async function getReceiptByNumber(req, res) {
       }
     }
 
-    // 4. Dynamic fallback for any valid receipt number up to 50
-    if (!receipt) {
-      const m = rawNumber.match(/(\d+)$/);
-      if (m) {
-        const num = parseInt(m[1], 10);
-        if (num >= 1 && num <= 50) {
-          const formattedNum = String(num).padStart(6, '0');
-          receipt = {
-            id: num,
-            receipt_number: `HANUMAN-2026-${formattedNum}`,
-            transaction_id: `TXN-2026-${formattedNum}`,
-            donor_name: 'देणगीदार (श्री हनुमान तालीम मंडळ)',
-            mobile: '',
-            address: 'नदीवेस शिरोळ',
-            amount: 1000,
-            amount_in_words_mr: numberToWordsMarathi(1000),
-            amount_in_words_en: numberToWordsEnglish(1000),
-            payment_method: 'cash',
-            category: 'vargani',
-            purpose: 'श्री गणेशोत्सव वर्गणी',
-            collector_name: 'सुमेध गवडे (अध्यक्ष)',
-            verification_code: `V-${num}-1000`,
-            created_at: new Date().toISOString()
-          };
-        }
-      }
-    }
+
 
     if (!receipt) {
       return res.status(404).json({ success: false, message: 'पावती सापडली नाही / Receipt not found.' });
@@ -224,36 +198,7 @@ export async function verifyPublicReceipt(req, res) {
       }
     }
 
-    // 4. Dynamic fallback for any valid receipt up to 50 (ensures middle numbers are verified)
-    if (!receipt) {
-      const m = rawIdentifier.match(/(\d+)$/);
-      if (m) {
-        const num = parseInt(m[1], 10);
-        if (num >= 1 && num <= 50) {
-          const reqD = (req.query?.d || req.query?.name || '').trim();
-          const reqA = Number(req.query?.a || req.query?.amount || 0);
-          const finalAmount = reqA > 0 ? reqA : 1000;
-          const formattedNum = String(num).padStart(6, '0');
-          receipt = {
-            id: num,
-            receipt_number: `HANUMAN-2026-${formattedNum}`,
-            transaction_id: `TXN-2026-${formattedNum}`,
-            donor_name: reqD || 'देणगीदार (श्री हनुमान तालीम मंडळ)',
-            mobile: '',
-            address: 'नदीवेस शिरोळ',
-            amount: finalAmount,
-            amount_in_words_mr: numberToWordsMarathi(finalAmount),
-            amount_in_words_en: numberToWordsEnglish(finalAmount),
-            payment_method: 'cash',
-            category: 'vargani',
-            purpose: 'श्री गणेशोत्सव वर्गणी',
-            collector_name: 'सुमेध गवडे (अध्यक्ष)',
-            verification_code: `V-${num}-${finalAmount}`,
-            created_at: new Date().toISOString()
-          };
-        }
-      }
-    }
+
 
     if (!receipt) {
       return res.status(404).json({
