@@ -108,25 +108,43 @@ export function reconcileDonorsAndIncome() {
     if (!Array.isArray(incomeList)) incomeList = [];
 
     // Load deleted tombstones to prevent resurrecting deleted donors/income
-    const rawDeleted = localStorage.getItem('shirol_deleted_donors');
-    const deletedEntries = rawDeleted ? JSON.parse(rawDeleted) : [];
-    const deletedNames = [];
-    const deletedIds = [];
-    if (Array.isArray(deletedEntries)) {
-      deletedEntries.forEach(entry => {
-        if (typeof entry === 'string') {
-          deletedNames.push(normalizeText(entry));
-        } else if (entry && typeof entry === 'object') {
-          if (Array.isArray(entry.names)) entry.names.forEach(n => deletedNames.push(normalizeText(n)));
-          if (Array.isArray(entry.ids)) entry.ids.forEach(id => deletedIds.push(String(id)));
-          if (entry.name) deletedNames.push(normalizeText(entry.name));
-          if (entry.id) deletedIds.push(String(entry.id));
-        }
-      });
-    }
+    const rawDeletedDon = localStorage.getItem('shirol_deleted_donors');
+    const delDonList = rawDeletedDon ? JSON.parse(rawDeletedDon) : [];
+    const delDonorSet = createDeletedDonorSet(delDonList);
+
+    const rawDeletedInc = localStorage.getItem('shirol_deleted_income');
+    const delIncList = rawDeletedInc ? JSON.parse(rawDeletedInc) : [];
+    const delIncSet = createDeletedIncomeSet(delIncList);
 
     let incomeModified = false;
     let donorsModified = false;
+
+    // Purge any deleted donors
+    const beforeDonorsLen = donorsList.length;
+    donorsList = donorsList.filter(d => {
+      if (!d || !d.name) return false;
+      if (delDonorSet.ids.has(String(d.id))) return false;
+      if (delDonorSet.names.has(normalizeText(d.name))) return false;
+      const mob = (d.mobile || '').replace(/\D/g, '').slice(-10);
+      if (mob.length === 10 && delDonorSet.mobiles.has(mob)) return false;
+      return true;
+    });
+    if (donorsList.length !== beforeDonorsLen) donorsModified = true;
+
+    // Purge any deleted income
+    const beforeIncomeLen = incomeList.length;
+    incomeList = incomeList.filter(inc => {
+      if (!inc) return false;
+      if (delIncSet.ids.has(String(inc.id))) return false;
+      if (inc.transaction_id && delIncSet.txns.has(String(inc.transaction_id))) return false;
+      if (inc.receipt_number && delIncSet.receipts.has(String(inc.receipt_number))) return false;
+      if (inc.donor_id && delDonorSet.ids.has(String(inc.donor_id))) return false;
+      if (inc.donor_name && delDonorSet.names.has(normalizeText(inc.donor_name))) return false;
+      const mob = (inc.mobile || '').replace(/\D/g, '').slice(-10);
+      if (mob.length === 10 && delDonorSet.mobiles.has(mob)) return false;
+      return true;
+    });
+    if (incomeList.length !== beforeIncomeLen) incomeModified = true;
 
     // Deduplicate donors: merge duplicate donor entries with identical normalized name or mobile
     const uniqueDonorsMap = new Map();
@@ -344,6 +362,65 @@ export function createDeletedExpenseSet(delList) {
       if (d.id != null) set.add(String(d.id));
       if (d.expense_id) set.add(String(d.expense_id));
       if (d.sid) set.add(String(d.sid));
+    }
+  }
+  return set;
+}
+
+export function createDeletedIncomeSet(delList) {
+  const set = {
+    ids: new Set(),
+    receipts: new Set(),
+    txns: new Set(),
+    names: new Set()
+  };
+  if (!Array.isArray(delList)) return set;
+  for (const d of delList) {
+    if (!d) continue;
+    if (typeof d === 'string' || typeof d === 'number') {
+      const str = String(d).trim();
+      if (str.startsWith('HANUMAN-') || str.startsWith('DONATE-')) set.receipts.add(str);
+      else if (str.startsWith('TXN-')) set.txns.add(str);
+      else set.ids.add(str);
+    } else if (typeof d === 'object') {
+      if (d.id != null) set.ids.add(String(d.id));
+      if (d.receipt_number) set.receipts.add(String(d.receipt_number).trim());
+      if (d.transaction_id) set.txns.add(String(d.transaction_id).trim());
+      if (d.donor_name) set.names.add(normalizeText(d.donor_name));
+    }
+  }
+  return set;
+}
+
+export function createDeletedDonorSet(delList) {
+  const set = {
+    ids: new Set(),
+    names: new Set(),
+    mobiles: new Set()
+  };
+  if (!Array.isArray(delList)) return set;
+  for (const d of delList) {
+    if (!d) continue;
+    if (typeof d === 'string') {
+      const norm = normalizeText(d);
+      if (norm && !norm.includes('pruthvi') && !norm.includes('पृथ्वी')) set.names.add(norm);
+    } else if (typeof d === 'object') {
+      if (d.id != null) set.ids.add(String(d.id));
+      if (d.name) {
+        const norm = normalizeText(d.name);
+        if (norm && !norm.includes('pruthvi') && !norm.includes('पृथ्वी')) set.names.add(norm);
+      }
+      if (Array.isArray(d.names)) {
+        d.names.forEach(n => {
+          const norm = normalizeText(n);
+          if (norm && !norm.includes('pruthvi') && !norm.includes('पृथ्वी')) set.names.add(norm);
+        });
+      }
+      if (Array.isArray(d.ids)) d.ids.forEach(id => set.ids.add(String(id)));
+      if (d.mobile) {
+        const m = String(d.mobile).replace(/\D/g, '').slice(-10);
+        if (m.length === 10) set.mobiles.add(m);
+      }
     }
   }
   return set;
@@ -614,8 +691,38 @@ export function handleLocalDonorDeletion(endpoint, options = {}) {
 
     // 4. Record in shirol_deleted_donors so auto-sync never brings them back
     const existingDeleted = getLocalStore('deleted_donors', []);
-    existingDeleted.push({ ids: deletedIds, names: targetNames, timestamp: Date.now() });
+    existingDeleted.push({ ids: deletedIds, names: targetNames, mobiles: targetPhones, timestamp: Date.now() });
     localStorage.setItem('shirol_deleted_donors', JSON.stringify(existingDeleted));
+
+    // 4b. Record associated income in shirol_deleted_income
+    const rawDelInc = localStorage.getItem('shirol_deleted_income');
+    const delIncList = rawDelInc ? JSON.parse(rawDelInc) : [];
+    incomeToDelete.forEach(inc => {
+      delIncList.push({
+        id: inc.id,
+        transaction_id: inc.transaction_id,
+        receipt_number: inc.receipt_number,
+        donor_name: inc.donor_name,
+        amount: inc.amount,
+        timestamp: Date.now()
+      });
+    });
+    localStorage.setItem('shirol_deleted_income', JSON.stringify(delIncList));
+    localStorage.setItem('shirol_has_unsynced_changes', 'true');
+
+    // Notify cloud server immediately
+    fetch('https://hanuman-talim-api.onrender.com/api/sync/delete-donor', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ids: deletedIds,
+        names: targetNames,
+        mobiles: targetPhones
+      })
+    }).catch(() => {});
+
+    // Ensure receipts remain sequentially 1..N after donor & payments deletion
+    autoHealAndRenumberReceipts();
 
     // 5. Dispatch live update events
     if (typeof window !== 'undefined') {
@@ -623,6 +730,7 @@ export function handleLocalDonorDeletion(endpoint, options = {}) {
       window.dispatchEvent(new Event('storage'));
       broadcastDataChange();
     }
+    triggerAutoSync();
   } catch (err) {
     console.warn('handleLocalDonorDeletion error:', err);
   }
@@ -692,6 +800,25 @@ export async function autoSyncAllToServer() {
       }
     }
 
+    // Flatten deleted_income for server compatibility
+    const rawDeletedIncome = localStorage.getItem('shirol_deleted_income');
+    const parsedDeletedInc = rawDeletedIncome ? JSON.parse(rawDeletedIncome) : [];
+    const deleted_income = [];
+    if (Array.isArray(parsedDeletedInc)) {
+      for (const item of parsedDeletedInc) {
+        if (!item) continue;
+        if (typeof item === 'string' || typeof item === 'number') {
+          deleted_income.push({ id: item });
+        } else if (typeof item === 'object') {
+          deleted_income.push({
+            id: item.id || null,
+            receipt_number: item.receipt_number || null,
+            transaction_id: item.transaction_id || null
+          });
+        }
+      }
+    }
+
     const res = await fetch('https://hanuman-talim-api.onrender.com/api/sync/auto-sync-all', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -704,7 +831,8 @@ export async function autoSyncAllToServer() {
         members,
         settings,
         deleted_donors,
-        deleted_expenses
+        deleted_expenses,
+        deleted_income
       })
     });
     if (res.ok) {
@@ -790,10 +918,117 @@ export async function autoSyncFromServer() {
           return true;
         });
 
-        const mergedExpenses = [...pendingLocalExps, ...sanitizedExpenses];
+        // 5. Ingest cloud deleted income and donors if available
+        if (Array.isArray(json.data.deleted_income) && json.data.deleted_income.length > 0) {
+          const rawDelInc = localStorage.getItem('shirol_deleted_income');
+          const currentDelInc = rawDelInc ? JSON.parse(rawDelInc) : [];
+          const currentSet = createDeletedIncomeSet(currentDelInc);
+          for (const d of json.data.deleted_income) {
+            if (d && (d.id || d.receipt_number || d.transaction_id)) {
+              if (!currentSet.ids.has(String(d.id)) && !(d.receipt_number && currentSet.receipts.has(String(d.receipt_number)))) {
+                currentDelInc.push(d);
+              }
+            }
+          }
+          localStorage.setItem('shirol_deleted_income', JSON.stringify(currentDelInc));
+        }
 
-        localStorage.setItem('shirol_income', JSON.stringify(serverIncome));
-        localStorage.setItem('shirol_donors', JSON.stringify(serverDonors));
+        if (Array.isArray(json.data.deleted_donors) && json.data.deleted_donors.length > 0) {
+          const rawDelDon = localStorage.getItem('shirol_deleted_donors');
+          const currentDelDon = rawDelDon ? JSON.parse(rawDelDon) : [];
+          const currentSet = createDeletedDonorSet(currentDelDon);
+          for (const d of json.data.deleted_donors) {
+            if (d && (d.id || d.name)) {
+              if (!currentSet.ids.has(String(d.id)) && !(d.name && currentSet.names.has(normalizeText(d.name)))) {
+                currentDelDon.push(d);
+              }
+            }
+          }
+          localStorage.setItem('shirol_deleted_donors', JSON.stringify(currentDelDon));
+        }
+
+        // 6. Filter serverDonors against tombstones & merge pending local donors
+        const rawDelDon = localStorage.getItem('shirol_deleted_donors');
+        const delDonList = rawDelDon ? JSON.parse(rawDelDon) : [];
+        const delDonorSet = createDeletedDonorSet(delDonList);
+
+        const rawDelInc = localStorage.getItem('shirol_deleted_income');
+        const delIncList = rawDelInc ? JSON.parse(rawDelInc) : [];
+        const delIncSet = createDeletedIncomeSet(delIncList);
+
+        serverDonors = serverDonors.filter(d => {
+          if (!d || !d.name) return false;
+          if (delDonorSet.ids.has(String(d.id))) return false;
+          if (delDonorSet.names.has(normalizeText(d.name))) return false;
+          const mob = (d.mobile || '').replace(/\D/g, '').slice(-10);
+          if (mob.length === 10 && delDonorSet.mobiles.has(mob)) return false;
+          return true;
+        });
+
+        const rawLocalDonors = localStorage.getItem('shirol_donors');
+        let localDonors = [];
+        try { localDonors = rawLocalDonors ? JSON.parse(rawLocalDonors) : []; } catch {}
+        const serverDonorKeys = new Set();
+        serverDonors.forEach(d => {
+          if (d.id) serverDonorKeys.add(String(d.id));
+          if (d.name) serverDonorKeys.add(normalizeText(d.name));
+        });
+        const pendingLocalDonors = (Array.isArray(localDonors) ? localDonors : []).filter(d => {
+          if (!d || !d.name) return false;
+          if (delDonorSet.ids.has(String(d.id)) || delDonorSet.names.has(normalizeText(d.name))) return false;
+          const mob = (d.mobile || '').replace(/\D/g, '').slice(-10);
+          if (mob.length === 10 && delDonorSet.mobiles.has(mob)) return false;
+          if (serverDonorKeys.has(String(d.id)) || serverDonorKeys.has(normalizeText(d.name))) return false;
+          return true;
+        });
+        const mergedDonors = [...pendingLocalDonors, ...serverDonors];
+
+        // 7. Filter serverIncome against tombstones & merge pending local income
+        serverIncome = serverIncome.filter(inc => {
+          if (!inc || inc.is_deleted) return false;
+          if (delIncSet.ids.has(String(inc.id))) return false;
+          if (inc.transaction_id && delIncSet.txns.has(String(inc.transaction_id))) return false;
+          if (inc.receipt_number && delIncSet.receipts.has(String(inc.receipt_number))) return false;
+          if (inc.donor_id && delDonorSet.ids.has(String(inc.donor_id))) return false;
+          if (inc.donor_name && delDonorSet.names.has(normalizeText(inc.donor_name))) return false;
+          const mob = (inc.mobile || '').replace(/\D/g, '').slice(-10);
+          if (mob.length === 10 && delDonorSet.mobiles.has(mob)) return false;
+          return true;
+        });
+
+        const rawLocalIncome = localStorage.getItem('shirol_income');
+        let localIncome = [];
+        try { localIncome = rawLocalIncome ? JSON.parse(rawLocalIncome) : []; } catch {}
+        const serverIncomeKeys = new Set();
+        serverIncome.forEach(inc => {
+          if (inc.id) serverIncomeKeys.add(String(inc.id));
+          if (inc.transaction_id) serverIncomeKeys.add(String(inc.transaction_id));
+          if (inc.receipt_number) serverIncomeKeys.add(String(inc.receipt_number));
+        });
+        const pendingLocalIncome = (Array.isArray(localIncome) ? localIncome : []).filter(inc => {
+          if (!inc || inc.is_deleted) return false;
+          if (delIncSet.ids.has(String(inc.id))) return false;
+          if (inc.transaction_id && delIncSet.txns.has(String(inc.transaction_id))) return false;
+          if (inc.receipt_number && delIncSet.receipts.has(String(inc.receipt_number))) return false;
+          if (inc.donor_id && delDonorSet.ids.has(String(inc.donor_id))) return false;
+          if (inc.donor_name && delDonorSet.names.has(normalizeText(inc.donor_name))) return false;
+          if (serverIncomeKeys.has(String(inc.id)) || (inc.transaction_id && serverIncomeKeys.has(String(inc.transaction_id))) || (inc.receipt_number && serverIncomeKeys.has(String(inc.receipt_number)))) return false;
+          return true;
+        });
+        const mergedIncome = [...pendingLocalIncome, ...serverIncome];
+
+        // 8. Filter serverReceipts against tombstones
+        serverReceipts = serverReceipts.filter(r => {
+          if (!r || r.is_deleted) return false;
+          if (delIncSet.ids.has(String(r.id))) return false;
+          if (r.transaction_id && delIncSet.txns.has(String(r.transaction_id))) return false;
+          if (r.receipt_number && delIncSet.receipts.has(String(r.receipt_number))) return false;
+          if (r.donor_name && delDonorSet.names.has(normalizeText(r.donor_name))) return false;
+          return true;
+        });
+
+        localStorage.setItem('shirol_income', JSON.stringify(mergedIncome));
+        localStorage.setItem('shirol_donors', JSON.stringify(mergedDonors));
         localStorage.setItem('shirol_receipts', JSON.stringify(serverReceipts));
         localStorage.setItem('shirol_expenses', JSON.stringify(mergedExpenses));
         if (serverLoans.length > 0) {
@@ -808,17 +1043,19 @@ export async function autoSyncFromServer() {
         localStorage.setItem('shirol_clean_version', DATA_CLEAN_VERSION);
         localStorage.setItem('shirol_last_synced_at', new Date().toISOString());
         localStorage.setItem('shirol_has_unsynced_changes', 'false');
-        localStorage.removeItem('shirol_deleted_donors');
+
+        // Always renumber active records sequentially 1..N so deleted items don't leave gaps
+        autoHealAndRenumberReceipts();
 
         window.dispatchEvent(new Event('shirol_data_updated'));
         window.dispatchEvent(new Event('storage'));
         broadcastDataChange();
         return {
           success: true,
-          count: serverIncome.length,
+          count: mergedIncome.length,
           counts: {
-            donors: serverDonors.length,
-            income: serverIncome.length,
+            donors: mergedDonors.length,
+            income: mergedIncome.length,
             expenses: sanitizedExpenses.length,
             loans: serverLoans.length
           }
@@ -1773,9 +2010,39 @@ export async function request(endpoint, options = {}) {
     if (options.method === 'DELETE') {
       const id = endpoint.split('/income/')[1];
       const incomeList = getLocalStore('income', []);
-      const deletedItem = incomeList.find(item => String(item.id) === String(id));
-      const filtered = incomeList.filter(item => String(item.id) !== String(id));
+      const deletedItem = incomeList.find(item => String(item.id) === String(id) || item.receipt_number === id || item.transaction_id === id);
+      const filtered = incomeList.filter(item => String(item.id) !== String(id) && item.receipt_number !== id && item.transaction_id !== id);
       setLocalStore('income', filtered);
+
+      // 1. Record tombstone in shirol_deleted_income so sync NEVER resurrects it
+      const rawDelInc = localStorage.getItem('shirol_deleted_income');
+      const delIncList = rawDelInc ? JSON.parse(rawDelInc) : [];
+      if (deletedItem) {
+        delIncList.push({
+          id: deletedItem.id,
+          transaction_id: deletedItem.transaction_id,
+          receipt_number: deletedItem.receipt_number,
+          donor_name: deletedItem.donor_name,
+          amount: deletedItem.amount,
+          timestamp: Date.now()
+        });
+      } else {
+        delIncList.push({ id, timestamp: Date.now() });
+      }
+      localStorage.setItem('shirol_deleted_income', JSON.stringify(delIncList));
+      localStorage.setItem('shirol_has_unsynced_changes', 'true');
+
+      // 2. Notify cloud server immediately
+      fetch('https://hanuman-talim-api.onrender.com/api/sync/delete-income', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: deletedItem?.id || id,
+          receipt_number: deletedItem?.receipt_number || null,
+          transaction_id: deletedItem?.transaction_id || null
+        })
+      }).catch(() => {});
+
       if (deletedItem) {
         const donorsList = getLocalStore('donors', []);
         const updatedDonors = donorsList.map(d => {
@@ -1809,11 +2076,15 @@ export async function request(endpoint, options = {}) {
         setLocalStore('receipts', updatedReceipts);
       }
 
+      // 3. Keep remaining receipts consecutively numbered 1..N
+      autoHealAndRenumberReceipts();
+
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('shirol_data_updated'));
         window.dispatchEvent(new Event('storage'));
         broadcastDataChange();
       }
+      triggerAutoSync();
 
       return { success: true, message: 'व्यवहार हटवला.' };
     }

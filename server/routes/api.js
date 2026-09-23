@@ -40,6 +40,8 @@ router.post('/sync/auto-sync-all', syncController.autoSyncAll);
 router.get('/sync/full-data', syncController.getCloudFullData);
 router.post('/sync/wipe-donors-and-income', syncController.wipeDonorsAndIncome);
 router.post('/sync/delete-expense', syncController.syncDeleteExpense);
+router.post('/sync/delete-income', syncController.syncDeleteIncome);
+router.post('/sync/delete-donor', syncController.syncDeleteDonor);
 
 router.use(authenticate);
 

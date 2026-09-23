@@ -13,7 +13,8 @@ export async function autoSyncAll(req, res) {
       cash_history = [],
       settings = null,
       deleted_donors = [],
-      deleted_expenses = []
+      deleted_expenses = [],
+      deleted_income = []
     } = req.body;
 
     const counts = {
@@ -133,6 +134,35 @@ export async function autoSyncAll(req, res) {
         }
       } catch (delExpErr) {
         console.warn('Sync deleted expenses note:', delExpErr.message);
+      }
+    }
+
+    // 1.7 Handle Deleted Income Synchronization
+    if (Array.isArray(deleted_income) && deleted_income.length > 0) {
+      try {
+        for (const item of deleted_income) {
+          if (!item) continue;
+          const id = item.id || (typeof item === 'string' || typeof item === 'number' ? item : null);
+          const rNo = item.receipt_number || (typeof item === 'string' && item.startsWith('HANUMAN-') ? item : null);
+          const tId = item.transaction_id || (typeof item === 'string' && item.startsWith('TXN-') ? item : null);
+
+          if (rNo) {
+            await db.from('income_transactions').update({ is_deleted: true }).eq('receipt_number', rNo);
+            await db.from('receipts').delete().eq('receipt_number', rNo);
+          }
+          if (tId) {
+            await db.from('income_transactions').update({ is_deleted: true }).eq('transaction_id', tId);
+          }
+          if (id) {
+            const numId = Number(id);
+            if (!isNaN(numId) && numId > 0 && numId < 1000000000) {
+              await db.from('income_transactions').update({ is_deleted: true }).eq('id', numId);
+              await db.from('receipts').delete().eq('id', numId);
+            }
+          }
+        }
+      } catch (delIncErr) {
+        console.warn('Sync deleted income note:', delIncErr.message);
       }
     }
 
@@ -583,6 +613,64 @@ export async function syncDeleteExpense(req, res) {
     return res.json({ success: true, message: 'खर्च क्लाऊडवरून कायमचा हटवला.' });
   } catch (err) {
     console.error('syncDeleteExpense error:', err);
+    return res.status(500).json({ success: false, message: err.message || err });
+  }
+}
+
+export async function syncDeleteIncome(req, res) {
+  try {
+    const { id, receipt_number, transaction_id } = req.body || {};
+    if (receipt_number) {
+      const rStr = String(receipt_number).trim();
+      await db.from('income_transactions').update({ is_deleted: true }).eq('receipt_number', rStr);
+      await db.from('receipts').delete().eq('receipt_number', rStr);
+    }
+    if (transaction_id) {
+      const tStr = String(transaction_id).trim();
+      await db.from('income_transactions').update({ is_deleted: true }).eq('transaction_id', tStr);
+    }
+    if (id) {
+      const sid = String(id).trim();
+      const numId = Number(sid);
+      if (!isNaN(numId) && numId > 0 && numId < 1000000000) {
+        await db.from('income_transactions').update({ is_deleted: true }).eq('id', numId);
+        await db.from('receipts').delete().eq('id', numId);
+      }
+    }
+    return res.json({ success: true, message: 'उत्पन्न नोंद क्लाऊडवरून कायमची हटवली.' });
+  } catch (err) {
+    console.error('syncDeleteIncome error:', err);
+    return res.status(500).json({ success: false, message: err.message || err });
+  }
+}
+
+export async function syncDeleteDonor(req, res) {
+  try {
+    const { ids = [], names = [], mobiles = [] } = req.body || {};
+    for (const name of names) {
+      if (!name) continue;
+      const clean = String(name).trim();
+      if (clean.toLowerCase().includes('pruthvi') || clean.includes('पृथ्वी')) continue;
+      await db.from('income_transactions').update({ is_deleted: true }).eq('donor_name', clean);
+      await db.from('donors').delete().eq('name', clean);
+      await db.from('receipts').delete().eq('donor_name', clean);
+    }
+    for (const id of ids) {
+      const numId = Number(id);
+      if (!isNaN(numId) && numId > 0 && numId < 1000000000) {
+        await db.from('income_transactions').update({ is_deleted: true }).eq('donor_id', numId);
+        await db.from('donors').delete().eq('id', numId);
+      }
+    }
+    for (const mob of mobiles) {
+      if (mob && String(mob).length >= 10) {
+        await db.from('income_transactions').update({ is_deleted: true }).eq('mobile', String(mob).trim());
+        await db.from('donors').delete().eq('mobile', String(mob).trim());
+      }
+    }
+    return res.json({ success: true, message: 'देणगीदार व संबंधित सर्व नोंदी क्लाऊडवरून हटवल्या.' });
+  } catch (err) {
+    console.error('syncDeleteDonor error:', err);
     return res.status(500).json({ success: false, message: err.message || err });
   }
 }
