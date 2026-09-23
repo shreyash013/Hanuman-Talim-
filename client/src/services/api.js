@@ -270,7 +270,7 @@ export function autoHealAndRenumberReceipts() {
   }
 }
 
-export const DATA_CLEAN_VERSION = '2026-09-23-v-clean-slate-donors';
+export const DATA_CLEAN_VERSION = '2026-09-23-v-wipe-clean-final-reset-0';
 
 let isRecovering = false;
 // Data recovery to ensure clean slate for donors and valid baseline mandal settings
@@ -285,13 +285,15 @@ export function ensureDataRecovery() {
 
     const currentVer = localStorage.getItem('shirol_clean_version');
 
-    // Clean slate: erase all donors, income and receipts when version changes
+    // Clean slate: erase all donors, income, loans and receipts when version changes
     if (currentVer !== DATA_CLEAN_VERSION) {
       localStorage.setItem('shirol_income', JSON.stringify([]));
       localStorage.setItem('shirol_donors', JSON.stringify([]));
+      localStorage.setItem('shirol_loans', JSON.stringify([]));
       localStorage.removeItem('shirol_receipts');
       localStorage.removeItem('shirol_deleted_donors');
       localStorage.removeItem('shirol_receipt_legacy_map');
+      localStorage.setItem('shirol_has_unsynced_changes', 'false');
       localStorage.setItem('shirol_clean_version', DATA_CLEAN_VERSION);
     }
 

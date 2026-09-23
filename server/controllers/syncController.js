@@ -474,10 +474,11 @@ export async function autoSyncAll(req, res) {
 
 export async function wipeDonorsAndIncome(req, res) {
   try {
-    // 1. Delete all receipts, income transactions, and donors
+    // 1. Delete all receipts, income transactions, donors, and loans
     await db.from('receipts').delete().neq('id', 0);
     await db.from('income_transactions').delete().neq('id', 0);
     await db.from('donors').delete().neq('id', 0);
+    await db.from('loans').delete().neq('id', 0);
 
     // 2. Sanitize Mayur Bagal and any spelling in expense_transactions to Shreyash Gavade (श्रेयश गावडे)
     await db.from('expense_transactions').update({ requested_by_name: 'श्रेयश गावडे (खजिनदार)' }).ilike('requested_by_name', '%मयुर%');

@@ -6,6 +6,7 @@ import logoImg from '../assets/logo.png';
 import phonepeQrImg from '../assets/phonepe_qr.jpg';
 import api from '../services/api';
 import { formatCurrency } from '../utils/formatCurrency';
+import { formatDate } from '../utils/dateUtils';
 import { ReceiptModal } from '../components/receipt/ReceiptModal';
 import { openWhatsAppReceipt } from '../utils/whatsappHelper';
 import {
@@ -26,7 +27,9 @@ import {
   WifiOff,
   RefreshCw,
   Award,
-  MessageCircle
+  MessageCircle,
+  Calendar,
+  Eye
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -46,10 +49,14 @@ export function VarganiPage() {
   const [mobile, setMobile] = useState('');
   const [address, setAddress] = useState('');
   const [area, setArea] = useState('नदीवेस शिरोळ');
+  const [donationDate, setDonationDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [amount, setAmount] = useState(2000);
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [purpose, setPurpose] = useState('श्री गणेशोत्सव वर्गणी');
   const [notes, setNotes] = useState('');
+
+  // Recent transactions list
+  const [recentTransactions, setRecentTransactions] = useState([]);
 
   // Advanced Vargani states
   const [donorHistory, setDonorHistory] = useState(null);
@@ -62,6 +69,26 @@ export function VarganiPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [generatedReceipt, setGeneratedReceipt] = useState(null);
   const [autoShareAfterSubmit, setAutoShareAfterSubmit] = useState(false);
+
+  const loadRecentTransactions = () => {
+    try {
+      const raw = localStorage.getItem('shirol_income');
+      const list = raw ? JSON.parse(raw) : [];
+      setRecentTransactions(Array.isArray(list) ? list.filter(i => !i.is_deleted).slice(0, 15) : []);
+    } catch {
+      setRecentTransactions([]);
+    }
+  };
+
+  useEffect(() => {
+    loadRecentTransactions();
+    window.addEventListener('shirol_data_updated', loadRecentTransactions);
+    window.addEventListener('storage', loadRecentTransactions);
+    return () => {
+      window.removeEventListener('shirol_data_updated', loadRecentTransactions);
+      window.removeEventListener('storage', loadRecentTransactions);
+    };
+  }, []);
 
   // Quick Amounts
   const quickAmounts = [2000, 3000, 5000, 7000];
@@ -166,7 +193,8 @@ export function VarganiPage() {
       payment_method: paymentMethod,
       category: 'vargani',
       purpose,
-      notes
+      notes,
+      created_at: donationDate ? `${donationDate}T12:00:00.000Z` : new Date().toISOString()
     };
 
     if (isOffline) {
@@ -210,9 +238,11 @@ export function VarganiPage() {
     setMobile('');
     setAddress('');
     setArea('नदीवेस शिरोळ');
+    setDonationDate(new Date().toISOString().split('T')[0]);
     setAmount(2000);
     setNotes('');
     setDonorHistory(null);
+    loadRecentTransactions();
   };
 
   return (
@@ -350,15 +380,31 @@ export function VarganiPage() {
                 </select>
               </div>
               <div>
-                <label className="text-xs text-slate-400 block mb-1">पत्ता (Address)</label>
+                <label className="text-xs text-slate-400 block mb-1 flex items-center justify-between">
+                  <span>वर्गणी तारीख (Date) *</span>
+                  <span className="text-[10px] text-amber-500 font-semibold flex items-center gap-1">
+                    <Calendar className="w-3 h-3" /> तारीख बदला
+                  </span>
+                </label>
                 <input
-                  type="text"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder="उदा. नदीवेस गल्ली"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                  type="date"
+                  required
+                  value={donationDate}
+                  onChange={(e) => setDonationDate(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-amber-500 [color-scheme:dark]"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">पत्ता (Address)</label>
+              <input
+                type="text"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="उदा. नदीवेस गल्ली"
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+              />
             </div>
 
             {/* Amount & Quick Selection */}
@@ -491,6 +537,86 @@ export function VarganiPage() {
             </ul>
           </div>
         </div>
+      </div>
+
+      {/* Recent Vargani Transactions Section with Date Column */}
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 space-y-4 shadow-xl">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Receipt className="w-5 h-5 text-amber-500" />
+            <h3 className="font-bold text-white text-base">
+              अलीकडील वर्गणी नोंदी (Recent Vargani Records)
+            </h3>
+          </div>
+          <span className="text-xs text-slate-400 font-bold">
+            एकूण {recentTransactions.length} नोंदी
+          </span>
+        </div>
+
+        {recentTransactions.length === 0 ? (
+          <div className="py-8 text-center text-slate-500 text-xs">
+            अद्याप कोणतीही नवीन वर्गणी नोंदवली गेलेली नाही. वरील फॉर्ममधून नवीन वर्गणी जमा करा.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs text-slate-300">
+              <thead className="bg-slate-950/80 text-slate-400 uppercase text-[10px] font-black border-b border-slate-800">
+                <tr>
+                  <th className="py-3 px-3">पावती क्रमांक</th>
+                  <th className="py-3 px-3">देणगीदाराचे नाव</th>
+                  <th className="py-3 px-3">वर्गणी तारीख (Date)</th>
+                  <th className="py-3 px-3">रक्कम (₹)</th>
+                  <th className="py-3 px-3">पेमेंट पद्धत</th>
+                  <th className="py-3 px-3 text-right">कृती</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60 font-medium">
+                {recentTransactions.map((item) => (
+                  <tr key={item.id || item.receipt_number} className="hover:bg-slate-800/40 transition">
+                    <td className="py-3 px-3 font-bold text-amber-400">
+                      {item.receipt_number || '-'}
+                    </td>
+                    <td className="py-3 px-3 text-white font-bold">
+                      {item.donor_name}
+                      {item.mobile && <span className="block text-[10px] text-slate-500 font-normal">{item.mobile}</span>}
+                    </td>
+                    <td className="py-3 px-3 text-slate-300 font-semibold">
+                      {formatDate(item.created_at)}
+                    </td>
+                    <td className="py-3 px-3 font-black text-emerald-400 text-sm">
+                      ₹{Number(item.amount || 0).toLocaleString('en-IN')}
+                    </td>
+                    <td className="py-3 px-3">
+                      <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                        {item.payment_method === 'cash' ? '💵 रोख' : item.payment_method === 'upi' ? '📱 UPI' : item.payment_method}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => setGeneratedReceipt(item)}
+                          className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/20"
+                          title="पावती पाहा"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        {item.mobile && (
+                          <button
+                            onClick={() => openWhatsAppReceipt(item, mandal)}
+                            className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20"
+                            title="WhatsApp वर पावती पाठवा"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Generated Receipt Modal */}
