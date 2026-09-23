@@ -61,13 +61,14 @@ export function IncomePage() {
   const [purpose, setPurpose] = useState('');
   const [notes, setNotes] = useState('');
   const [attachment, setAttachment] = useState(null);
-  const [incomeDate, setIncomeDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [incomeDate, setIncomeDate] = useState(() => (typeof localStorage !== 'undefined' ? localStorage.getItem('shirol_sticky_donation_date') : null) || new Date().toISOString().split('T')[0]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form State (Edit)
   const [editDonorName, setEditDonorName] = useState('');
   const [editMobile, setEditMobile] = useState('');
   const [editAddress, setEditAddress] = useState('');
+  const [editDate, setEditDate] = useState('');
   const [editAmount, setEditAmount] = useState('');
   const [editCategory, setEditCategory] = useState('vargani');
   const [editPaymentMethod, setEditPaymentMethod] = useState('cash');
@@ -80,6 +81,10 @@ export function IncomePage() {
     setEditDonorName(row.donor_name || '');
     setEditMobile(row.mobile || '');
     setEditAddress(row.address || '');
+    const resolvedDate = row.created_at
+      ? String(row.created_at).split('T')[0]
+      : (row.date ? String(row.date).split('T')[0] : ((typeof localStorage !== 'undefined' ? localStorage.getItem('shirol_sticky_donation_date') : null) || new Date().toISOString().split('T')[0]));
+    setEditDate(resolvedDate);
     setEditAmount(String(row.amount || ''));
     setEditCategory(row.category || 'vargani');
     setEditPaymentMethod(row.payment_method || 'cash');
@@ -103,6 +108,11 @@ export function IncomePage() {
 
     try {
       setIsSubmittingEdit(true);
+      if (editDate) {
+        try {
+          localStorage.setItem('shirol_sticky_donation_date', editDate);
+        } catch (e) {}
+      }
       const payload = {
         donor_name: editDonorName.trim(),
         mobile: editMobile.trim(),
@@ -111,7 +121,9 @@ export function IncomePage() {
         category: editCategory,
         payment_method: editPaymentMethod,
         purpose: editPurpose.trim(),
-        notes: editNotes.trim()
+        notes: editNotes.trim(),
+        date: editDate,
+        created_at: editDate ? `${editDate}T12:00:00.000Z` : undefined
       };
 
       const res = await api.put(`/income/${editingIncome.id}`, payload);
@@ -218,7 +230,12 @@ export function IncomePage() {
         setPurpose('');
         setNotes('');
         setAttachment(null);
-        setIncomeDate(new Date().toISOString().split('T')[0]);
+        // Keep sticky incomeDate; do NOT overwrite with today
+        if (incomeDate) {
+          try {
+            localStorage.setItem('shirol_sticky_donation_date', incomeDate);
+          } catch (e) {}
+        }
         fetchIncome();
         if (res.data?.receipt) {
           const finalReceipt = {
@@ -569,7 +586,14 @@ export function IncomePage() {
                 type="date"
                 required
                 value={incomeDate}
-                onChange={(e) => setIncomeDate(e.target.value)}
+                onChange={(e) => {
+                  setIncomeDate(e.target.value);
+                  if (e.target.value) {
+                    try {
+                      localStorage.setItem('shirol_sticky_donation_date', e.target.value);
+                    } catch (err) {}
+                  }
+                }}
                 className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold outline-none focus:ring-2 focus:ring-amber-500"
               />
             </div>
@@ -727,6 +751,28 @@ export function IncomePage() {
             </div>
 
             <div>
+              <label className="text-amber-600 dark:text-amber-400 font-bold block mb-1">
+                📅 पावती / नोंद दिनांक (Date) *
+              </label>
+              <input
+                type="date"
+                required
+                value={editDate}
+                onChange={(e) => {
+                  setEditDate(e.target.value);
+                  if (e.target.value) {
+                    try {
+                      localStorage.setItem('shirol_sticky_donation_date', e.target.value);
+                    } catch (err) {}
+                  }
+                }}
+                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-amber-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
               <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">
                 💰 रक्कम (Amount ₹) *
               </label>
@@ -743,9 +789,7 @@ export function IncomePage() {
                 />
               </div>
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">
                 📱 मोबाईल क्रमांक (Mobile)
@@ -758,19 +802,19 @@ export function IncomePage() {
                 className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-amber-500"
               />
             </div>
+          </div>
 
-            <div>
-              <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">
-                📍 पत्ता / भाग (Address / Area)
-              </label>
-              <input
-                type="text"
-                value={editAddress}
-                onChange={(e) => setEditAddress(e.target.value)}
-                placeholder="उदा. नदीवेस, शिरोळ"
-                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
-              />
-            </div>
+          <div>
+            <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">
+              📍 पत्ता / भाग (Address / Area)
+            </label>
+            <input
+              type="text"
+              value={editAddress}
+              onChange={(e) => setEditAddress(e.target.value)}
+              placeholder="उदा. नदीवेस, शिरोळ"
+              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
+            />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

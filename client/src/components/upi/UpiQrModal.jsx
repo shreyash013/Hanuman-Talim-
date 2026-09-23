@@ -30,7 +30,7 @@ export function UpiQrModal({ isOpen, onClose, defaultAmount = 0, note = 'श्�
     setTimeout(() => setIsCopied(false), 2500);
   };
 
-  const presetAmounts = [2000, 3000, 5000];
+  const presetAmounts = [1500, 2000, 2500, 3000, 5000];
 
   return (
     <Modal
@@ -88,7 +88,7 @@ export function UpiQrModal({ isOpen, onClose, defaultAmount = 0, note = 'श्�
               <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-1.5 text-left">
                 रक्कम बदला (Select or enter amount):
               </label>
-              <div className="grid grid-cols-3 gap-1.5 mb-2">
+              <div className="grid grid-cols-5 gap-1.5 mb-2">
                 {presetAmounts.map((amt) => (
                   <button
                     key={amt}

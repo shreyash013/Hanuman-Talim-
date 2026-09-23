@@ -365,6 +365,12 @@ export async function updateDonor(req, res) {
     if (req.body.donations_count !== undefined) {
       updatePayload.donations_count = Number(req.body.donations_count);
     }
+    const customDate = req.body.created_at || req.body.date || req.body.donation_date;
+    if (customDate) {
+      const effectiveDate = String(customDate).includes('T') ? customDate : `${customDate}T12:00:00.000Z`;
+      updatePayload.created_at = effectiveDate;
+      updatePayload.last_donated_at = effectiveDate;
+    }
 
     const effectiveTarget = updatePayload.target_amount !== undefined ? updatePayload.target_amount : Number(donor.target_amount || 500);
     const effectivePaid = updatePayload.paid_amount !== undefined ? updatePayload.paid_amount : Number(donor.paid_amount || donor.total_donated || 0);
@@ -373,7 +379,7 @@ export async function updateDonor(req, res) {
     const { data: updated, error: updateError } = await db.from('donors').update(updatePayload).eq('id', donor.id).select('*').single();
     throwIfError(updateError);
 
-    // 6. Cascade update to linked transactions and receipts if name, mobile, address, or category changed
+    // 6. Cascade update to linked transactions and receipts if name, mobile, address, category, or date changed
     const oldName = donor.name;
     const newName = updatePayload.name || oldName;
     const newMobile = updatePayload.mobile !== undefined ? updatePayload.mobile : donor.mobile;
@@ -384,12 +390,15 @@ export async function updateDonor(req, res) {
     if (newMobile) txUpdates.mobile = newMobile;
     if (newAddress) txUpdates.address = newAddress;
     if (category) txUpdates.category = category;
+    if (updatePayload.created_at) txUpdates.created_at = updatePayload.created_at;
 
     if (Object.keys(txUpdates).length > 0) {
       await db.from('income_transactions').update(txUpdates).eq('donor_id', donor.id).eq('is_deleted', false);
       if (oldName) {
         await db.from('income_transactions').update(txUpdates).ilike('donor_name', oldName).eq('is_deleted', false);
-        await db.from('receipts').update({ donor_name: newName, mobile: newMobile, address: newAddress }).ilike('donor_name', oldName);
+        const rcptUpdate = { donor_name: newName, mobile: newMobile, address: newAddress };
+        if (updatePayload.created_at) rcptUpdate.created_at = updatePayload.created_at;
+        await db.from('receipts').update(rcptUpdate).ilike('donor_name', oldName);
       }
     }
 

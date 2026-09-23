@@ -126,15 +126,15 @@ export function DonorsPage() {
   const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
   const [area, setArea] = useState('');
-  const [singleAmount, setSingleAmount] = useState('2000');
-  const [paidAmount, setPaidAmount] = useState('2000');
-  const [donationDate, setDonationDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [singleAmount, setSingleAmount] = useState('1500');
+  const [paidAmount, setPaidAmount] = useState('1500');
+  const [donationDate, setDonationDate] = useState(() => (typeof localStorage !== 'undefined' ? localStorage.getItem('shirol_sticky_donation_date') : null) || new Date().toISOString().split('T')[0]);
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Bulk Add Donors Modal
   const [showBulkModal, setShowBulkModal] = useState(false);
-  const [bulkFixedAmount, setBulkFixedAmount] = useState('2000');
+  const [bulkFixedAmount, setBulkFixedAmount] = useState('1500');
   const [bulkDefaultArea, setBulkDefaultArea] = useState('नदीवेस शिरोळ');
   const [bulkInputText, setBulkInputText] = useState('');
   const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
@@ -146,6 +146,7 @@ export function DonorsPage() {
   const [editMobile, setEditMobile] = useState('');
   const [editArea, setEditArea] = useState('');
   const [editAddress, setEditAddress] = useState('');
+  const [editDate, setEditDate] = useState('');
   const [editAmountValue, setEditAmountValue] = useState('');
   const [editPaidAmountValue, setEditPaidAmountValue] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
@@ -281,9 +282,14 @@ export function DonorsPage() {
         setAddress('');
         setArea('');
         setNotes('');
-        setSingleAmount('2000');
-        setPaidAmount('2000');
-        setDonationDate(new Date().toISOString().split('T')[0]);
+        setSingleAmount('1500');
+        setPaidAmount('1500');
+        // Keep sticky date: do NOT reset donationDate to today when one donor is added
+        if (donationDate) {
+          try {
+            localStorage.setItem('shirol_sticky_donation_date', donationDate);
+          } catch (e) {}
+        }
         fetchDonors();
       }
     } catch (err) {
@@ -328,7 +334,7 @@ export function DonorsPage() {
           name,
           mobile: phone,
           area: bulkDefaultArea || 'नदीवेस शिरोळ',
-          target_amount: Number(bulkFixedAmount) || 500
+          target_amount: Number(bulkFixedAmount) || 1500
         });
       }
     });
@@ -372,7 +378,28 @@ export function DonorsPage() {
     setEditMobile(safeDonor.mobile || '');
     setEditArea(safeDonor.area || 'नदीवेस शिरोळ');
     setEditAddress(safeDonor.address || '');
-    setEditAmountValue(safeDonor.target_amount !== undefined ? safeDonor.target_amount : (safeDonor.total_donated || 500));
+
+    // Determine existing date from donor or matching income transaction
+    let existingDate = '';
+    if (safeDonor.last_donated_at) {
+      existingDate = String(safeDonor.last_donated_at).split('T')[0];
+    } else if (safeDonor.created_at) {
+      existingDate = String(safeDonor.created_at).split('T')[0];
+    } else {
+      try {
+        const rawIncome = typeof window !== 'undefined' ? localStorage.getItem('shirol_income') : null;
+        const incomeList = rawIncome ? JSON.parse(rawIncome) : [];
+        const match = incomeList.find(inc => !inc.is_deleted && isExactDonorMatch(safeDonor, inc));
+        if (match && (match.created_at || match.date)) {
+          existingDate = String(match.created_at || match.date).split('T')[0];
+        }
+      } catch (e) {}
+    }
+    if (!existingDate) {
+      existingDate = (typeof localStorage !== 'undefined' ? localStorage.getItem('shirol_sticky_donation_date') : null) || new Date().toISOString().split('T')[0];
+    }
+    setEditDate(existingDate);
+    setEditAmountValue(safeDonor.target_amount !== undefined ? safeDonor.target_amount : (safeDonor.total_donated || 1500));
     setEditPaidAmountValue(safeDonor.paid_amount !== undefined ? safeDonor.paid_amount : (safeDonor.total_donated || 0));
     setShowEditAmountModal(true);
   };
@@ -417,7 +444,9 @@ export function DonorsPage() {
             paid_amount: paidVal,
             total_donated: paidVal,
             pending_amount: pendingVal,
-            status: newStatus
+            status: newStatus,
+            created_at: editDate ? `${editDate}T12:00:00.000Z` : d.created_at,
+            last_donated_at: editDate ? `${editDate}T12:00:00.000Z` : d.last_donated_at
           };
         }
         return d;
@@ -439,6 +468,11 @@ export function DonorsPage() {
 
     try {
       setIsSavingEdit(true);
+      if (editDate) {
+        try {
+          localStorage.setItem('shirol_sticky_donation_date', editDate);
+        } catch (e) {}
+      }
       const res = await api.put(`/donors/${originalDonor.id}`, {
         id: originalDonor.id,
         originalName: originalDonor.name,
@@ -448,6 +482,9 @@ export function DonorsPage() {
         address: cleanAddress,
         target_amount: newTarget,
         paid_amount: paidVal,
+        date: editDate,
+        created_at: editDate ? `${editDate}T12:00:00.000Z` : undefined,
+        last_donated_at: editDate ? `${editDate}T12:00:00.000Z` : undefined
       });
 
       if (res && res.success !== false) {
@@ -1014,6 +1051,27 @@ export function DonorsPage() {
             </div>
           </div>
 
+          <div>
+            <label className="text-amber-400 font-bold block mb-1">
+              📅 नोंद / पावती दिनांक (Donation / Receipt Date) *
+            </label>
+            <input
+              type="date"
+              required
+              value={editDate}
+              onChange={(e) => {
+                setEditDate(e.target.value);
+                if (e.target.value) {
+                  try {
+                    localStorage.setItem('shirol_sticky_donation_date', e.target.value);
+                  } catch (err) {}
+                }
+              }}
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-amber-500"
+            />
+            <span className="text-[10px] text-slate-500">हा दिनांक सर्व संबंधित पावत्या व उत्पन्नामध्ये अपडेट होईल</span>
+          </div>
+
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="text-slate-300 font-bold block mb-1">
@@ -1026,7 +1084,7 @@ export function DonorsPage() {
                   required
                   value={editAmountValue}
                   onChange={(e) => setEditAmountValue(e.target.value)}
-                  placeholder="500"
+                  placeholder="1500"
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-8 pr-3 py-2.5 text-white font-black text-base focus:outline-none focus:border-amber-500"
                 />
               </div>
@@ -1056,12 +1114,11 @@ export function DonorsPage() {
             </span>
           </div>
 
-
           {/* Quick Preset Amount Buttons */}
           <div>
             <label className="text-slate-400 text-[11px] block mb-1">त्वरीत निवडा (Presets):</label>
-            <div className="grid grid-cols-5 gap-1.5">
-              {[2000, 3000, 5000, 7000].map((preset) => (
+            <div className="grid grid-cols-6 gap-1.5">
+              {[1500, 2000, 2500, 3000, 5000].map((preset) => (
                 <button
                   key={preset}
                   type="button"
@@ -1078,12 +1135,12 @@ export function DonorsPage() {
               <button
                 type="button"
                 onClick={() => {
-                  if ([2000, 3000, 5000, 7000].includes(Number(editAmountValue))) {
+                  if ([1500, 2000, 2500, 3000, 5000].includes(Number(editAmountValue))) {
                     setEditAmountValue('');
                   }
                 }}
                 className={`py-1.5 px-1 rounded-lg text-xs font-extrabold transition-all border ${
-                  ![2000, 3000, 5000, 7000].includes(Number(editAmountValue)) && editAmountValue !== ''
+                  ![1500, 2000, 2500, 3000, 5000].includes(Number(editAmountValue)) && editAmountValue !== ''
                     ? 'bg-amber-500 text-slate-950 border-amber-400 shadow'
                     : 'bg-slate-950 text-slate-300 border-slate-800 hover:bg-slate-800'
                 }`}
@@ -1139,7 +1196,7 @@ export function DonorsPage() {
                 />
               </div>
               <div className="flex flex-wrap gap-1 mt-2">
-                {[2000, 3000, 5000, 7000].map((preset) => (
+                {[1500, 2000, 2500, 3000, 5000].map((preset) => (
                   <button
                     key={preset}
                     type="button"
@@ -1156,12 +1213,12 @@ export function DonorsPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    if ([2000, 3000, 5000, 7000].includes(Number(bulkFixedAmount))) {
+                    if ([1500, 2000, 2500, 3000, 5000].includes(Number(bulkFixedAmount))) {
                       setBulkFixedAmount('');
                     }
                   }}
                   className={`py-1 px-2 rounded text-[11px] font-bold border transition ${
-                    ![2000, 3000, 5000, 7000].includes(Number(bulkFixedAmount)) && bulkFixedAmount !== ''
+                    ![1500, 2000, 2500, 3000, 5000].includes(Number(bulkFixedAmount)) && bulkFixedAmount !== ''
                       ? 'bg-amber-500 text-slate-950 border-amber-400'
                       : 'bg-slate-900 text-slate-400 border-slate-700 hover:bg-slate-800'
                   }`}
@@ -1399,10 +1456,17 @@ export function DonorsPage() {
               type="date"
               required
               value={donationDate}
-              onChange={(e) => setDonationDate(e.target.value)}
+              onChange={(e) => {
+                setDonationDate(e.target.value);
+                if (e.target.value) {
+                  try {
+                    localStorage.setItem('shirol_sticky_donation_date', e.target.value);
+                  } catch (err) {}
+                }
+              }}
               className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-amber-500 font-bold"
             />
-            <span className="text-[10px] text-slate-500">आजचा दिनांक आपोआप निवडला आहे (दिवसानुसार बदलू शकता)</span>
+            <span className="text-[10px] text-slate-500">हा दिनांक आपोआप पुढील नोंदींसाठी लक्षात ठेवला जाईल</span>
           </div>
 
           <div>
@@ -1414,11 +1478,11 @@ export function DonorsPage() {
               required
               value={singleAmount}
               onChange={(e) => setSingleAmount(e.target.value)}
-              placeholder="2000"
+              placeholder="1500"
               className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-amber-500 font-extrabold"
             />
             <div className="flex flex-wrap gap-1.5 mt-2">
-              {[2000, 3000, 5000, 7000].map((preset) => (
+              {[1500, 2000, 2500, 3000, 5000].map((preset) => (
                 <button
                   key={preset}
                   type="button"
@@ -1435,12 +1499,12 @@ export function DonorsPage() {
               <button
                 type="button"
                 onClick={() => {
-                  if ([2000, 3000, 5000, 7000].includes(Number(singleAmount))) {
+                  if ([1500, 2000, 2500, 3000, 5000].includes(Number(singleAmount))) {
                     setSingleAmount('');
                   }
                 }}
                 className={`py-1 px-2.5 rounded-lg text-xs font-bold border transition ${
-                  ![2000, 3000, 5000, 7000].includes(Number(singleAmount)) && singleAmount !== ''
+                  ![1500, 2000, 2500, 3000, 5000].includes(Number(singleAmount)) && singleAmount !== ''
                     ? 'bg-amber-500 text-slate-950 border-amber-400 shadow'
                     : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
                 }`}
@@ -1458,11 +1522,11 @@ export function DonorsPage() {
               type="number"
               value={paidAmount}
               onChange={(e) => setPaidAmount(e.target.value)}
-              placeholder="2000"
+              placeholder="1500"
               className="w-full bg-slate-950 border border-emerald-700/60 rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-emerald-400 font-extrabold"
             />
             <div className="flex flex-wrap gap-1.5 mt-2">
-              {[0, 2000, 3000, 5000].map((preset) => (
+              {[0, 1500, 2000, 2500, 3000, 5000].map((preset) => (
                 <button
                   key={preset}
                   type="button"

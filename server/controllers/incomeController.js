@@ -245,7 +245,8 @@ export async function createIncome(req, res) {
     }
 
     const attachmentUrl = req.file ? await uploadFileToSupabase(req.file, 'income') : '';
-    const collectorName = req.user?.name || 'स्वयंसेवक';
+    const customDate = req.body.created_at || req.body.date || req.body.donation_date;
+    const effectiveDate = customDate ? (String(customDate).includes('T') ? customDate : `${customDate}T12:00:00.000Z`) : new Date().toISOString();
 
     const { data: tx, error: txError } = await db.from('income_transactions').insert({
       transaction_id: transactionId,
@@ -262,6 +263,7 @@ export async function createIncome(req, res) {
       collector_name: collectorName,
       receipt_number: receiptNumber,
       attachment_url: attachmentUrl,
+      created_at: effectiveDate,
       status: 'completed'
     }).select('*').single();
     throwIfError(txError);
@@ -281,7 +283,8 @@ export async function createIncome(req, res) {
       category,
       purpose: purpose.trim(),
       collector_name: collectorName,
-      verification_code: verificationCode
+      verification_code: verificationCode,
+      created_at: effectiveDate
     }).select('*').single();
     throwIfError(receiptError);
 
@@ -375,6 +378,10 @@ export async function updateIncome(req, res) {
     if (purpose !== undefined) updatePayload.purpose = purpose.trim();
     if (notes !== undefined) updatePayload.notes = notes.trim();
     if (payment_method !== undefined) updatePayload.payment_method = payment_method.trim();
+    const customDate = req.body.created_at || req.body.date || req.body.donation_date;
+    if (customDate) {
+      updatePayload.created_at = String(customDate).includes('T') ? customDate : `${customDate}T12:00:00.000Z`;
+    }
 
     const { data: updated, error: updateError } = await db.from('income_transactions').update(updatePayload).eq('id', id).select('*').single();
     throwIfError(updateError);
@@ -402,6 +409,7 @@ export async function updateIncome(req, res) {
       if (updatePayload.donor_name) receiptUpdate.donor_name = updatePayload.donor_name;
       if (updatePayload.mobile !== undefined) receiptUpdate.mobile = updatePayload.mobile;
       if (updatePayload.address !== undefined) receiptUpdate.address = updatePayload.address;
+      if (updatePayload.created_at) receiptUpdate.created_at = updatePayload.created_at;
       if (updatePayload.amount !== undefined) {
         receiptUpdate.amount = updatePayload.amount;
         receiptUpdate.amount_in_words_mr = numberToWordsMarathi(updatePayload.amount);

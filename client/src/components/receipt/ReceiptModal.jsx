@@ -23,6 +23,7 @@ export function ReceiptModal({ isOpen, onClose, receipt, autoShare = false, onUp
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState('');
   const [editAmount, setEditAmount] = useState('');
+  const [editDate, setEditDate] = useState('');
   const [editMobile, setEditMobile] = useState('');
   const [editAddress, setEditAddress] = useState('');
   const [editPurpose, setEditPurpose] = useState('');
@@ -98,6 +99,7 @@ export function ReceiptModal({ isOpen, onClose, receipt, autoShare = false, onUp
   const startEdit = () => {
     setEditName(activeReceipt.donor_name || '');
     setEditAmount(String(activeReceipt.amount || ''));
+    setEditDate(activeReceipt.created_at ? String(activeReceipt.created_at).split('T')[0] : (activeReceipt.date ? String(activeReceipt.date).split('T')[0] : ''));
     setEditMobile(activeReceipt.mobile || '');
     setEditAddress(activeReceipt.address || '');
     setEditPurpose(activeReceipt.purpose || 'श्री गणेशोत्सव वर्गणी');
@@ -125,7 +127,9 @@ export function ReceiptModal({ isOpen, onClose, receipt, autoShare = false, onUp
         mobile: editMobile.trim(),
         address: editAddress.trim(),
         purpose: editPurpose.trim(),
-        payment_method: editPaymentMethod
+        payment_method: editPaymentMethod,
+        date: editDate,
+        created_at: editDate ? `${editDate}T12:00:00.000Z` : activeReceipt.created_at
       };
 
       const targetId = activeReceipt.id || activeReceipt.receipt_number;
@@ -140,7 +144,8 @@ export function ReceiptModal({ isOpen, onClose, receipt, autoShare = false, onUp
         mobile: editMobile.trim(),
         address: editAddress.trim(),
         purpose: editPurpose.trim(),
-        payment_method: editPaymentMethod
+        payment_method: editPaymentMethod,
+        created_at: editDate ? `${editDate}T12:00:00.000Z` : activeReceipt.created_at
       };
 
       setLocalReceipt(updated);
@@ -312,6 +317,17 @@ export function ReceiptModal({ isOpen, onClose, receipt, autoShare = false, onUp
                   value={editAmount}
                   onChange={(e) => setEditAmount(e.target.value)}
                   className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-black"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-amber-600 dark:text-amber-400 block mb-0.5">📅 पावती दिनांक (Date) *</label>
+                <input
+                  type="date"
+                  required
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold"
                 />
               </div>
 

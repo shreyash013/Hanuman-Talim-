@@ -1527,9 +1527,9 @@ export async function request(endpoint, options = {}) {
       });
       const count = Math.max(incomeList.length, maxReceiptNum) + 1;
       const formattedNum = String(count).padStart(6, '0');
-      const receiptNo = `${settings.receipt_prefix || 'HANUMAN-2026-'}${formattedNum}`;
       const amount = Number(bodyData.amount) || 0;
-      const createdAt = new Date().toISOString();
+      const rawDate = bodyData.created_at || bodyData.date || bodyData.donation_date;
+      const createdAt = rawDate ? (String(rawDate).includes('T') ? rawDate : `${rawDate}T12:00:00.000Z`) : new Date().toISOString();
 
       const newIncome = {
         id: Date.now(),
@@ -1637,12 +1637,16 @@ export async function request(endpoint, options = {}) {
         const newAmt = bodyData.amount !== undefined ? Number(bodyData.amount) : Number(oldItem.amount);
         const amtDiff = newAmt - Number(oldItem.amount || 0);
 
+        const customDate = bodyData.created_at || bodyData.date || bodyData.donation_date;
+        const updatedDate = customDate ? (String(customDate).includes('T') ? customDate : `${customDate}T12:00:00.000Z`) : oldItem.created_at;
+
         incomeList[index] = {
           ...oldItem,
           ...bodyData,
           amount: newAmt,
           amount_in_words_mr: numberToWordsMarathi(newAmt),
           amount_in_words_en: numberToWordsEnglish(newAmt),
+          created_at: updatedDate,
           updated_at: new Date().toISOString()
         };
         setLocalStore('income', incomeList);
@@ -1657,6 +1661,7 @@ export async function request(endpoint, options = {}) {
               amount: newAmt,
               amount_in_words_mr: numberToWordsMarathi(newAmt),
               amount_in_words_en: numberToWordsEnglish(newAmt),
+              created_at: updatedDate,
               updated_at: new Date().toISOString()
             };
           }
@@ -2172,6 +2177,9 @@ export async function request(endpoint, options = {}) {
       const newTarget = bodyData.target_amount !== undefined ? Number(bodyData.target_amount) : 500;
       const newPaid = bodyData.paid_amount !== undefined ? Number(bodyData.paid_amount) : 0;
 
+      const customDate = bodyData.created_at || bodyData.date || bodyData.donation_date;
+      const finalDate = customDate ? (String(customDate).includes('T') ? customDate : `${customDate}T12:00:00.000Z`) : null;
+
       let foundDonor = false;
       donorsList = donorsList.map(d => {
         const matchId = (donorId && String(d.id) === String(donorId)) || (bodyData.id && String(d.id) === String(bodyData.id));
@@ -2199,7 +2207,9 @@ export async function request(endpoint, options = {}) {
             name: cleanName || d.name,
             mobile: cleanMobile !== undefined ? cleanMobile : d.mobile,
             area: cleanArea || d.area,
-            address: cleanAddress !== undefined ? cleanAddress : d.address
+            address: cleanAddress !== undefined ? cleanAddress : d.address,
+            created_at: finalDate || d.created_at,
+            last_donated_at: finalDate || d.last_donated_at
           };
         }
         return d;
@@ -2221,7 +2231,8 @@ export async function request(endpoint, options = {}) {
           total_donated: paid,
           pending_amount: Math.max(0, target - paid),
           status: (paid >= target && target > 0) ? 'paid' : (paid > 0 ? 'partial' : 'unpaid'),
-          created_at: new Date().toISOString()
+          created_at: finalDate || new Date().toISOString(),
+          last_donated_at: finalDate || new Date().toISOString()
         });
       }
 
@@ -2254,6 +2265,7 @@ export async function request(endpoint, options = {}) {
             amount: !isNaN(newPaid) ? newPaid : inc.amount,
             amount_in_words_mr: !isNaN(newPaid) && newPaid > 0 ? numberToWordsMarathi(newPaid) : inc.amount_in_words_mr,
             amount_in_words_en: !isNaN(newPaid) && newPaid > 0 ? numberToWordsEnglish(newPaid) : inc.amount_in_words_en,
+            created_at: finalDate || inc.created_at,
             is_deleted: newPaid === 0
           };
         }
@@ -2293,7 +2305,7 @@ export async function request(endpoint, options = {}) {
           amount_in_words_en: numberToWordsEnglish(newPaid),
           status: 'completed',
           is_deleted: false,
-          created_at: new Date().toISOString()
+          created_at: finalDate || new Date().toISOString()
         };
         localIncome = [newInc, ...localIncome];
       }
@@ -2319,6 +2331,7 @@ export async function request(endpoint, options = {}) {
             amount: !isNaN(newPaid) ? newPaid : r.amount,
             amount_in_words_mr: !isNaN(newPaid) && newPaid > 0 ? numberToWordsMarathi(newPaid) : r.amount_in_words_mr,
             amount_in_words_en: !isNaN(newPaid) && newPaid > 0 ? numberToWordsEnglish(newPaid) : r.amount_in_words_en,
+            created_at: finalDate || r.created_at,
             is_deleted: newPaid === 0
           };
         }

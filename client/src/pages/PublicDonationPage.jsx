@@ -25,7 +25,7 @@ import phonepeQrImg from '../assets/phonepe_qr.jpg';
 export function PublicDonationPage() {
   const [mandalInfo, setMandalInfo] = useState(null);
   const [events, setEvents] = useState([]);
-  const [amount, setAmount] = useState(2000);
+  const [amount, setAmount] = useState(1500);
   const [name, setName] = useState('');
   const [mobile, setMobile] = useState('');
   const [purpose, setPurpose] = useState('गणेशोत्सव वर्गणी / देणगी');
@@ -107,7 +107,7 @@ export function PublicDonationPage() {
     }
   };
 
-  const presetAmounts = [2000, 3000, 5000, 7000];
+  const presetAmounts = [1500, 2000, 2500, 3000, 5000];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-950 via-orange-950 to-slate-950 text-slate-100 p-4 sm:p-6 lg:p-8 font-sans">
@@ -149,7 +149,7 @@ export function PublicDonationPage() {
             {/* Quick Amount Chips */}
             <div className="space-y-1.5 text-left">
               <label className="text-xs font-bold text-slate-400">रक्कम निवडा:</label>
-              <div className="grid grid-cols-5 gap-1.5">
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
                 {presetAmounts.map((amt) => (
                   <button
                     key={amt}

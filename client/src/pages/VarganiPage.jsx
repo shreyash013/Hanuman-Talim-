@@ -49,8 +49,8 @@ export function VarganiPage() {
   const [mobile, setMobile] = useState('');
   const [address, setAddress] = useState('');
   const [area, setArea] = useState('नदीवेस शिरोळ');
-  const [donationDate, setDonationDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [amount, setAmount] = useState(2000);
+  const [donationDate, setDonationDate] = useState(() => (typeof localStorage !== 'undefined' ? localStorage.getItem('shirol_sticky_donation_date') : null) || new Date().toISOString().split('T')[0]);
+  const [amount, setAmount] = useState(1500);
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [purpose, setPurpose] = useState('श्री गणेशोत्सव वर्गणी');
   const [notes, setNotes] = useState('');
@@ -91,7 +91,7 @@ export function VarganiPage() {
   }, []);
 
   // Quick Amounts
-  const quickAmounts = [2000, 3000, 5000, 7000];
+  const quickAmounts = [1500, 2000, 2500, 3000, 5000];
 
   // Areas list
   const pethAreas = ['नदीवेस शिरोळ', 'गावभाग', 'तालीम गल्ली', 'स्टँड रोड', 'बाजार पेठ', 'इतर'];
@@ -238,8 +238,13 @@ export function VarganiPage() {
     setMobile('');
     setAddress('');
     setArea('नदीवेस शिरोळ');
-    setDonationDate(new Date().toISOString().split('T')[0]);
-    setAmount(2000);
+    // Keep sticky donationDate; do NOT overwrite with today
+    if (donationDate) {
+      try {
+        localStorage.setItem('shirol_sticky_donation_date', donationDate);
+      } catch (err) {}
+    }
+    setAmount(1500);
     setNotes('');
     setDonorHistory(null);
     loadRecentTransactions();
@@ -390,7 +395,14 @@ export function VarganiPage() {
                   type="date"
                   required
                   value={donationDate}
-                  onChange={(e) => setDonationDate(e.target.value)}
+                  onChange={(e) => {
+                    setDonationDate(e.target.value);
+                    if (e.target.value) {
+                      try {
+                        localStorage.setItem('shirol_sticky_donation_date', e.target.value);
+                      } catch (err) {}
+                    }
+                  }}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-amber-500 [color-scheme:dark]"
                 />
               </div>

@@ -1,15 +1,23 @@
 export function formatDate(dateString, lang = 'mr') {
   if (!dateString) return '';
   try {
+    const monthsMr = ['जानेवारी', 'फेब्रुवारी', 'मार्च', 'एप्रिल', 'मे', 'जून', 'जुलै', 'ऑगस्ट', 'सप्टेंबर', 'ऑक्टोबर', 'नोव्हेंबर', 'डिसेंबर'];
+    const monthsHi = ['जनवरी', 'फरवरी', 'मार्च', 'अप्रैल', 'मई', 'जून', 'जुलाई', 'अगस्त', 'सितंबर', 'अक्टूबर', 'नवंबर', 'दिसंबर'];
+    const monthsEn = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    const cleanStr = String(dateString).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(cleanStr)) {
+      const [y, m, d] = cleanStr.split('-').map(Number);
+      if (lang === 'mr') return `${d} ${monthsMr[m - 1]} ${y}`;
+      if (lang === 'hi') return `${d} ${monthsHi[m - 1]} ${y}`;
+      return `${d} ${monthsEn[m - 1]}, ${y}`;
+    }
+
     const d = new Date(dateString);
     if (isNaN(d.getTime())) return dateString;
 
     const day = d.getDate();
     const year = d.getFullYear();
-
-    const monthsMr = ['जानेवारी', 'फेब्रुवारी', 'मार्च', 'एप्रिल', 'मे', 'जून', 'जुलै', 'ऑगस्ट', 'सप्टेंबर', 'ऑक्टोबर', 'नोव्हेंबर', 'डिसेंबर'];
-    const monthsHi = ['जनवरी', 'फरवरी', 'मार्च', 'अप्रैल', 'मई', 'जून', 'जुलाई', 'अगस्त', 'सितंबर', 'अक्टूबर', 'नवंबर', 'दिसंबर'];
-    const monthsEn = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     if (lang === 'mr') {
       return `${day} ${monthsMr[d.getMonth()]} ${year}`;
