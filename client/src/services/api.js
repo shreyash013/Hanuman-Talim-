@@ -157,17 +157,11 @@ export function reconcileDonorsAndIncome() {
     });
     donorsList = Array.from(uniqueDonorsMap.values());
 
-    // Deduplicate known test duplicates (Txn 56 / 999998, Txn 54 / 999997) & fix Jagdish Gavade 1000000 -> 000043
+    // Deduplicate known test duplicates (Txn 56 / 999998, Txn 54 / 999997)
     const seenIncomeReceipts = new Set();
     const cleanedIncome = [];
     incomeList.forEach(inc => {
       if (!inc) return;
-      // Fix Jagdish Gavade receipt number from 1000000 to continuous 000043
-      if (inc.receipt_number === 'HANUMAN-2026-1000000' || (inc.receipt_number && inc.receipt_number.includes('1000000')) || (inc.donor_name && inc.donor_name.toLowerCase().includes('jagdish') && Number(inc.amount) === 2500)) {
-        inc.receipt_number = 'HANUMAN-2026-000043';
-        inc.transaction_id = 'TXN-2026-000043';
-        incomeModified = true;
-      }
       // Remove duplicate 999998 (Akshay Ingale duplicate)
       if (inc.receipt_number === 'HANUMAN-2026-999998' || String(inc.id) === '56') {
         incomeModified = true;
@@ -220,13 +214,16 @@ export function reconcileDonorsAndIncome() {
     if (donorsModified) {
       localStorage.setItem('shirol_donors', JSON.stringify(donorsList));
     }
+
+    // Always run sequential renumbering to close any jumped gaps (e.g. 18 -> 37)
+    autoHealAndRenumberReceipts();
   } catch (err) {
     console.warn('reconcileDonorsAndIncome error:', err);
   }
 }
 
 let isHealing = false;
-// Self-healing auto-renumbering to clean up corrupted or jumped receipt numbers
+// Self-healing auto-renumbering to ensure receipts are strictly continuous 1 to 51 (and onwards for future)
 export function autoHealAndRenumberReceipts() {
   if (typeof window === 'undefined' || isHealing) return;
   isHealing = true;
@@ -236,19 +233,16 @@ export function autoHealAndRenumberReceipts() {
     let incomeList = JSON.parse(rawIncome);
     if (!Array.isArray(incomeList) || incomeList.length === 0) return;
 
-    let modified = false;
+    const settings = getLocalStore('mandal_settings_custom', SHIROL_MANDAL_SETTINGS);
+    const prefix = settings.receipt_prefix || 'HANUMAN-2026-';
 
-    // Direct fix for Jagdish Gavade 1000000 -> 000043
-    incomeList.forEach(inc => {
-      if (inc && (inc.receipt_number === 'HANUMAN-2026-1000000' || (inc.receipt_number && inc.receipt_number.includes('1000000')) || (inc.donor_name && inc.donor_name.toLowerCase().includes('jagdish') && Number(inc.amount) === 2500))) {
-        inc.receipt_number = 'HANUMAN-2026-000043';
-        inc.transaction_id = 'TXN-2026-000043';
-        modified = true;
-      }
-    });
+    // 1. Separate active (non-deleted) records from deleted ones
+    const activeRecords = incomeList.filter(item => item && !item.is_deleted);
+    if (activeRecords.length === 0) return;
 
-    // Always ensure incomeList is sorted newest first
-    incomeList.sort((a, b) => {
+    // 2. Sort active records chronologically in natural receipt creation order
+    // Records 1 to 18 come first, then 37 to 69 follow in their exact relative order
+    activeRecords.sort((a, b) => {
       const getNum = (item) => {
         if (!item) return 0;
         const m = (item.receipt_number || item.transaction_id || '').match(/(\d+)$/);
@@ -256,13 +250,80 @@ export function autoHealAndRenumberReceipts() {
       };
       const numA = getNum(a);
       const numB = getNum(b);
-      if (numA !== numB) return numB - numA;
-      const timeA = new Date(a.created_at || 0).getTime() || (Number(a.id) || 0);
-      const timeB = new Date(b.created_at || 0).getTime() || (Number(b.id) || 0);
-      return timeB - timeA;
+      if (numA > 0 && numB > 0 && numA !== numB) {
+        return numA - numB;
+      }
+      const timeA = new Date(a.created_at || a.date || 0).getTime() || (Number(a.id) || 0);
+      const timeB = new Date(b.created_at || b.date || 0).getTime() || (Number(b.id) || 0);
+      return timeA - timeB;
     });
 
-    localStorage.setItem('shirol_income', JSON.stringify(incomeList));
+    // 3. Check if renumbering is needed (e.g. gap between 18 and 37)
+    let needsRenumber = false;
+    for (let i = 0; i < activeRecords.length; i++) {
+      const expectedReceipt = `${prefix}${String(i + 1).padStart(6, '0')}`;
+      if (activeRecords[i].receipt_number !== expectedReceipt) {
+        needsRenumber = true;
+        break;
+      }
+    }
+
+    if (!needsRenumber) return;
+
+    const rawLegacyMap = localStorage.getItem('shirol_receipt_legacy_map');
+    const legacyMap = rawLegacyMap ? JSON.parse(rawLegacyMap) : {};
+
+    // 4. Renumber all active records continuously: 1, 2, ..., 51
+    activeRecords.forEach((item, index) => {
+      const seq = index + 1;
+      const formattedNum = String(seq).padStart(6, '0');
+      const newReceiptNo = `${prefix}${formattedNum}`;
+      const newTxnId = `TXN-2026-${formattedNum}`;
+
+      if (item.receipt_number && item.receipt_number !== newReceiptNo) {
+        legacyMap[item.receipt_number] = newReceiptNo;
+        const oldM = item.receipt_number.match(/(\d+)$/);
+        if (oldM) {
+          legacyMap[oldM[1]] = newReceiptNo;
+          legacyMap[String(parseInt(oldM[1], 10))] = newReceiptNo;
+        }
+      }
+      item.receipt_number = newReceiptNo;
+      item.transaction_id = newTxnId;
+    });
+
+    // 5. Update corresponding receipts in shirol_receipts store
+    const rawReceipts = localStorage.getItem('shirol_receipts');
+    let receiptsList = rawReceipts ? JSON.parse(rawReceipts) : [];
+    if (Array.isArray(receiptsList)) {
+      receiptsList.forEach(r => {
+        if (!r) return;
+        if (legacyMap[r.receipt_number]) {
+          r.receipt_number = legacyMap[r.receipt_number];
+          r.transaction_id = legacyMap[r.receipt_number].replace('HANUMAN-', 'TXN-');
+        }
+      });
+      localStorage.setItem('shirol_receipts', JSON.stringify(receiptsList));
+    }
+
+    localStorage.setItem('shirol_receipt_legacy_map', JSON.stringify(legacyMap));
+
+    // 6. Save incomeList sorted newest first (descending receipt number)
+    const deletedRecords = incomeList.filter(item => item && item.is_deleted);
+    activeRecords.sort((a, b) => {
+      const getNum = (item) => {
+        if (!item) return 0;
+        const m = (item.receipt_number || '').match(/(\d+)$/);
+        return m ? parseInt(m[1], 10) : 0;
+      };
+      return getNum(b) - getNum(a);
+    });
+
+    const finalIncome = [...activeRecords, ...deletedRecords];
+    localStorage.setItem('shirol_income', JSON.stringify(finalIncome));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('shirol_data_updated', { detail: { type: 'income_renumbered' } }));
+    }
   } catch (err) {
     console.warn('autoHealAndRenumberReceipts note:', err);
   } finally {
@@ -1517,16 +1578,18 @@ export async function request(endpoint, options = {}) {
 
       let maxReceiptNum = 0;
       incomeList.forEach(inc => {
-        if (inc.receipt_number) {
+        if (inc && inc.receipt_number && !inc.is_deleted) {
           const m = inc.receipt_number.match(/(\d+)$/);
           if (m) {
             const n = parseInt(m[1], 10);
-            if (!isNaN(n) && n > maxReceiptNum && n < 100000) maxReceiptNum = n;
+            if (!isNaN(n) && n > maxReceiptNum && n < 50000) maxReceiptNum = n;
           }
         }
       });
-      const count = Math.max(incomeList.length, maxReceiptNum) + 1;
+      const activeCount = incomeList.filter(i => i && !i.is_deleted).length;
+      const count = Math.max(activeCount, maxReceiptNum) + 1;
       const formattedNum = String(count).padStart(6, '0');
+      const receiptNo = `${settings.receipt_prefix || 'HANUMAN-2026-'}${formattedNum}`;
       const amount = Number(bodyData.amount) || 0;
       const rawDate = bodyData.created_at || bodyData.date || bodyData.donation_date;
       const createdAt = rawDate ? (String(rawDate).includes('T') ? rawDate : `${rawDate}T12:00:00.000Z`) : new Date().toISOString();
@@ -2032,15 +2095,16 @@ export async function request(endpoint, options = {}) {
           if (d.paid_amount > 0) {
             let maxReceiptNum = 0;
             incomeList.forEach(inc => {
-              if (inc.receipt_number) {
+              if (inc && inc.receipt_number && !inc.is_deleted) {
                 const m = inc.receipt_number.match(/(\d+)$/);
                 if (m) {
                   const n = parseInt(m[1], 10);
-                  if (!isNaN(n) && n > maxReceiptNum && n < 100000) maxReceiptNum = n;
+                  if (!isNaN(n) && n > maxReceiptNum && n < 50000) maxReceiptNum = n;
                 }
               }
             });
-            const count = Math.max(incomeList.length, maxReceiptNum) + 1;
+            const activeCount = incomeList.filter(i => i && !i.is_deleted).length;
+            const count = Math.max(activeCount, maxReceiptNum) + 1;
             const formattedNum = String(count).padStart(6, '0');
             const settings = getLocalStore('mandal_settings_custom', SHIROL_MANDAL_SETTINGS);
             const receiptNo = `${settings.receipt_prefix || 'HANUMAN-2026-'}${formattedNum}`;
@@ -2117,15 +2181,16 @@ export async function request(endpoint, options = {}) {
       if (paid > 0) {
         let maxReceiptNum = 0;
         incomeList.forEach(inc => {
-          if (inc.receipt_number) {
+          if (inc && inc.receipt_number && !inc.is_deleted) {
             const m = inc.receipt_number.match(/(\d+)$/);
             if (m) {
               const n = parseInt(m[1], 10);
-              if (!isNaN(n) && n > maxReceiptNum && n < 100000) maxReceiptNum = n;
+              if (!isNaN(n) && n > maxReceiptNum && n < 50000) maxReceiptNum = n;
             }
           }
         });
-        const count = Math.max(incomeList.length, maxReceiptNum) + 1;
+        const activeCount = incomeList.filter(i => i && !i.is_deleted).length;
+        const count = Math.max(activeCount, maxReceiptNum) + 1;
         const formattedNum = String(count).padStart(6, '0');
         const settings = getLocalStore('mandal_settings_custom', SHIROL_MANDAL_SETTINGS);
         const receiptNo = `${settings.receipt_prefix || 'HANUMAN-2026-'}${formattedNum}`;
@@ -2276,15 +2341,16 @@ export async function request(endpoint, options = {}) {
       if (!matchedIncome && newPaid > 0) {
         let maxReceiptNum = 0;
         localIncome.forEach(inc => {
-          if (inc.receipt_number) {
+          if (inc && inc.receipt_number && !inc.is_deleted) {
             const m = inc.receipt_number.match(/(\d+)$/);
             if (m) {
               const n = parseInt(m[1], 10);
-              if (!isNaN(n) && n > maxReceiptNum && n < 100000) maxReceiptNum = n;
+              if (!isNaN(n) && n > maxReceiptNum && n < 50000) maxReceiptNum = n;
             }
           }
         });
-        const count = Math.max(localIncome.length, maxReceiptNum) + 1;
+        const activeCount = localIncome.filter(i => i && !i.is_deleted).length;
+        const count = Math.max(activeCount, maxReceiptNum) + 1;
         const formattedNum = String(count).padStart(6, '0');
         const settings = getLocalStore('mandal_settings_custom', SHIROL_MANDAL_SETTINGS);
         const receiptNo = `${settings.receipt_prefix || 'HANUMAN-2026-'}${formattedNum}`;

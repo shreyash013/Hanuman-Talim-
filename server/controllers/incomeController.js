@@ -526,7 +526,7 @@ export async function fixReceiptAnomalies(req = null, res = null) {
       console.warn('dupSachin delete note:', e.message);
     }
 
-    // 3. Fix Jagdish Gavade (Txn 75 / Receipt 55 / 1000000 -> 000043)
+    // 3. Sequential reconciliation compatibility for Jagdish Gavade & Dadaso Ingale
     try {
       const { data: jagdishTx } = await db.from('income_transactions')
         .select('*')
@@ -535,75 +535,14 @@ export async function fixReceiptAnomalies(req = null, res = null) {
       if (jagdishTx && jagdishTx.length > 0) {
         for (const tx of jagdishTx) {
           await db.from('income_transactions').update({
-            receipt_number: 'HANUMAN-2026-000043',
-            transaction_id: 'TXN-2026-000043',
             status: 'completed',
             is_deleted: false
           }).eq('id', tx.id);
         }
-
-        await db.from('receipts').update({
-          receipt_number: 'HANUMAN-2026-000043'
-        }).or('id.eq.55,receipt_number.eq.HANUMAN-2026-1000000,donor_name.ilike.%Jagdish%');
-
         report.fixedJagdish = true;
       }
     } catch (e) {
       console.warn('fixJagdish note:', e.message);
-    }
-
-    // 4. Fix Dadaso Ingale (Txn 67 / Receipt HANUMAN-2026-000037)
-    try {
-      const { data: dadasoTx } = await db.from('income_transactions')
-        .select('*')
-        .or('id.eq.67,receipt_number.eq.HANUMAN-2026-000037,donor_name.ilike.%Dadaso%');
-
-      if (dadasoTx && dadasoTx.length > 0) {
-        const tx = dadasoTx[0];
-        const { data: recExists } = await db.from('receipts').select('id').eq('receipt_number', 'HANUMAN-2026-000037');
-        let recId = null;
-        if (recExists && recExists.length > 0) {
-          recId = recExists[0].id;
-          await db.from('receipts').update({
-            receipt_number: 'HANUMAN-2026-000037',
-            transaction_id: tx.id,
-            donor_name: 'Dadaso Ingale',
-            mobile: tx.mobile || '',
-            address: tx.address || 'नदीवेस शिरोळ',
-            amount: 2100,
-            amount_in_words_mr: 'दोन हजार शंभर रुपये फक्त',
-            amount_in_words_en: 'Two Thousand One Hundred Rupees Only',
-            payment_method: tx.payment_method || 'cash',
-            category: 'vargani',
-            purpose: 'श्री गणेशोत्सव वर्गणी',
-            collector_name: 'अध्यक्ष (Admin)'
-          }).eq('id', recId);
-        } else {
-          const verificationCode = `V-DADASO-${Date.now().toString(36).slice(-4).toUpperCase()}`;
-          const { data: insRec } = await db.from('receipts').insert({
-            receipt_number: 'HANUMAN-2026-000037',
-            transaction_id: tx.id,
-            donor_name: 'Dadaso Ingale',
-            mobile: tx.mobile || '',
-            address: tx.address || 'नदीवेस शिरोळ',
-            amount: 2100,
-            amount_in_words_mr: 'दोन हजार शंभर रुपये फक्त',
-            amount_in_words_en: 'Two Thousand One Hundred Rupees Only',
-            payment_method: tx.payment_method || 'cash',
-            category: 'vargani',
-            purpose: 'श्री गणेशोत्सव वर्गणी',
-            collector_name: 'अध्यक्ष (Admin)',
-            verification_code: verificationCode
-          }).select('id').single();
-          recId = insRec?.id;
-        }
-        if (recId) {
-          await db.from('income_transactions').update({ receipt_id: recId, receipt_number: 'HANUMAN-2026-000037' }).eq('id', tx.id);
-          report.fixedDadaso = true;
-        }
-      }
-    } catch (e) {
-      console.warn('fixDadaso note:', e.message);
     }
 
     // 5. Normalize remaining old 99999x transactions
