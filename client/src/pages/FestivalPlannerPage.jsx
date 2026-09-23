@@ -6,7 +6,7 @@ export function FestivalPlannerPage() {
 
   const aartiList = [
     { time: '०८:०० AM', title: 'सकाळची महाआरती 🌅', priest: 'वे. शा. सं. जोशी गुरुजी', status: 'पूर्ण (Completed)', coordinator: 'सुमेध गवडे (अध्यक्ष)' },
-    { time: '१२:३० PM', title: 'दुपारची नैवेद्य आरती 🌞', priest: 'श्री सुमेध गवडे', status: 'आगामी (Upcoming)', coordinator: 'श्रेयश गवडे (खजिनदार)' },
+    { time: '१२:३० PM', title: 'दुपारची नैवेद्य आरती 🌞', priest: 'श्री सुमेध गवडे', status: 'आगामी (Upcoming)', coordinator: 'श्रेयश गावडे (खजिनदार)' },
     { time: '०७:३० PM', title: 'संध्याकाळची महाआरती 🔱', timeNote: 'मुख्य आरती', priest: 'प्रमुख पाहुणे व ग्रामस्थ', status: 'आगामी (Upcoming)', coordinator: 'शिवराज गवडे (सचिव)' },
     { time: '१०:०० PM', title: 'रात्रीची शेजारती 🌙', priest: 'कार्यकर्ते व भाविक', status: 'आगामी (Upcoming)', coordinator: 'अथर्व गवडे' }
   ];
@@ -21,7 +21,7 @@ export function FestivalPlannerPage() {
   const duties = [
     { role: 'मंडप व रोषणाई सुरक्षा', lead: 'अथर्व गवडे', volunteers: 6, timing: '२४ तास रोटेशन' },
     { role: 'आरती व दर्शन रांग व्यवस्था', lead: 'राहुल गवडे', volunteers: 8, timing: 'संध्याकाळी ६ ते १०' },
-    { role: 'महाप्रसाद वाढप व भोजन व्यवस्था', lead: 'श्रेयश गवडे', volunteers: 15, timing: 'दुपारी ११ ते ४' },
+    { role: 'महाप्रसाद वाढप व भोजन व्यवस्था', lead: 'श्रेयश गावडे', volunteers: 15, timing: 'दुपारी ११ ते ४' },
     { role: 'ढोल-ताशा व आगमन/विसर्जन पथक', lead: 'अमित गवडे', volunteers: 25, timing: 'मार्ग नियंत्रण' }
   ];
 

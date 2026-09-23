@@ -242,7 +242,7 @@ export function ReportsPage() {
             <span>अध्यक्ष</span>
           </div>
           <div>
-            <span className="block border-t border-slate-600 w-32 mx-auto pt-1 font-bold text-white">श्रेयश गवडे</span>
+            <span className="block border-t border-slate-600 w-32 mx-auto pt-1 font-bold text-white">श्रेयश गावडे</span>
             <span>खजिनदार</span>
           </div>
           <div>

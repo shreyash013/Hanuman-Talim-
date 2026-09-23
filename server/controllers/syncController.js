@@ -479,11 +479,13 @@ export async function wipeDonorsAndIncome(req, res) {
     await db.from('income_transactions').delete().neq('id', 0);
     await db.from('donors').delete().neq('id', 0);
 
-    // 2. Sanitize Mayur Bagal in expense_transactions to Shreyash Gavade
-    await db.from('expense_transactions').update({ requested_by_name: 'श्रेयश गवडे (खजिनदार)' }).ilike('requested_by_name', '%मयुर%');
-    await db.from('expense_transactions').update({ approved_by_name: 'श्रेयश गवडे (खजिनदार)' }).ilike('approved_by_name', '%मयुर%');
-    await db.from('expense_transactions').update({ requested_by_name: 'श्रेयश गवडे (खजिनदार)' }).ilike('requested_by_name', '%Mayur%');
-    await db.from('expense_transactions').update({ approved_by_name: 'श्रेयश गवडे (खजिनदार)' }).ilike('approved_by_name', '%Mayur%');
+    // 2. Sanitize Mayur Bagal and any spelling in expense_transactions to Shreyash Gavade (श्रेयश गावडे)
+    await db.from('expense_transactions').update({ requested_by_name: 'श्रेयश गावडे (खजिनदार)' }).ilike('requested_by_name', '%मयुर%');
+    await db.from('expense_transactions').update({ approved_by_name: 'श्रेयश गावडे (खजिनदार)' }).ilike('approved_by_name', '%मयुर%');
+    await db.from('expense_transactions').update({ requested_by_name: 'श्रेयश गावडे (खजिनदार)' }).ilike('requested_by_name', '%Mayur%');
+    await db.from('expense_transactions').update({ approved_by_name: 'श्रेयश गावडे (खजिनदार)' }).ilike('approved_by_name', '%Mayur%');
+    await db.from('expense_transactions').update({ requested_by_name: 'श्रेयश गावडे (खजिनदार)' }).ilike('requested_by_name', '%श्रेयश गवडे%');
+    await db.from('expense_transactions').update({ approved_by_name: 'श्रेयश गावडे (खजिनदार)' }).ilike('approved_by_name', '%श्रेयश गवडे%');
 
     if (res) {
       return res.json({
@@ -523,8 +525,8 @@ export async function getCloudFullData(req, res) {
 
     const sanitizedExpenses = (expensesRes.data || []).map(exp => ({
       ...exp,
-      requested_by_name: (exp.requested_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गवडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गवडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गवडे (खजिनदार)'),
-      approved_by_name: (exp.approved_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गवडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गवडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गवडे (खजिनदार)')
+      requested_by_name: (exp.requested_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गावडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गावडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गावडे (खजिनदार)').replace(/श्रेयश गवडे/g, 'श्रेयश गावडे'),
+      approved_by_name: (exp.approved_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गावडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गावडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गावडे (खजिनदार)').replace(/श्रेयश गवडे/g, 'श्रेयश गावडे')
     }));
 
     return res.json({

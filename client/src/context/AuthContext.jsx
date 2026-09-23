@@ -28,7 +28,7 @@ function formatUserRoleAndName(u) {
     return {
       ...u,
       id: u.id || 102,
-      name: 'श्रेयश गवडे (खजिनदार)',
+      name: 'श्रेयश गावडे (खजिनदार)',
       email: email || 'shreyashgavade7@gmail.com',
       mobile: mobile || '9356997428',
       role: 'treasurer',

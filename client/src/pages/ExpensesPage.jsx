@@ -644,7 +644,7 @@ export function ExpensesPage() {
                       {e.description}
                       <div className="flex items-center space-x-2 text-[10px] font-normal text-slate-400 mt-0.5">
                         {e.bill_number && <span>बिल क्र: {e.bill_number}</span>}
-                        {e.requested_by_name && <span>• नोंदणी: {e.requested_by_name.replace(/मयुर बागल/g, 'श्रेयश गवडे').replace(/Mayur Bagal/gi, 'श्रेयश गवडे')}</span>}
+                        {e.requested_by_name && <span>• नोंदणी: {e.requested_by_name.replace(/मयुर बागल/g, 'श्रेयश गावडे').replace(/Mayur Bagal/gi, 'श्रेयश गावडे').replace(/श्रेयश गवडे/g, 'श्रेयश गावडे')}</span>}
                       </div>
                     </td>
                     <td className="p-4 text-slate-300">{e.paid_to}</td>

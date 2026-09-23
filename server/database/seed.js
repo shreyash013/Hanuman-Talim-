@@ -36,7 +36,7 @@ export async function seedDatabase(force = false) {
   await db.run(`
     INSERT INTO users (name, email, mobile, password_hash, role, status) VALUES
     ('सचिन मनगूळे (अध्यक्ष)', 'admin@ganeshmandal.org', '9822011111', ?, 'admin', 'active'),
-    ('श्रेयश गवडे (खजिनदार)', 'shreyashgavade7@gmail.com', '9356997428', ?, 'treasurer', 'active'),
+    ('श्रेयश गावडे (खजिनदार)', 'shreyashgavade7@gmail.com', '9356997428', ?, 'treasurer', 'active'),
     ('शितल नेजे (सचिव)', 'secretary@ganeshmandal.org', '9822033333', ?, 'secretary', 'active'),
     ('अमोल सिदनाळे (स्वयंसेवक)', 'volunteer@ganeshmandal.org', '9822044444', ?, 'volunteer', 'active')
   `, [passwordHash, treasurerHash, secretaryHash, volunteerHash]);
@@ -389,7 +389,7 @@ export async function seedDatabase(force = false) {
     ['संजय तात्या पाटील', 'अध्यक्ष', 'President', '9822011111', 'कसबा पेठ, पुणे', 1995, '9822099991', 'O+', 1, 1],
     ['प्रमोद बापूराव गायकवाड', 'उपाध्यक्ष', 'Vice President', '9822011112', 'शनिवार पेठ, पुणे', 2002, '9822099992', 'B+', 1, 2],
     ['विकास रमेश शिंदे', 'सचिव', 'Secretary', '9822033333', 'नारायण पेठ, पुणे', 2010, '9822099993', 'A+', 1, 3],
-    ['श्रेयश गवडे', 'खजिनदार', 'Treasurer', '9356997428', 'नदीवेस, शिरोळ', 2019, '9356997428', 'B+', 1, 4],
+    ['श्रेयश गावडे', 'खजिनदार', 'Treasurer', '9356997428', 'नदीवेस, शिरोळ', 2019, '9356997428', 'B+', 1, 4],
     ['अमोल बबनराव जाधव', 'कार्यकर्ता प्रमुख', 'Volunteer Head', '9822044444', 'कसबा पेठ, पुणे', 2018, '9822099995', 'O+', 1, 5],
     ['सौ. सुजाता मंगेश जोशी', 'महिला मंडळ प्रमुख', 'Women Wing Head', '9822055555', 'बुधवार पेठ, पुणे', 2015, '9822099996', 'B+', 1, 6],
     ['सागर विलास सावंत', 'सांस्कृतिक कार्यक्रम प्रमुख', 'Cultural Head', '9822066666', 'कसबा पेठ, पुणे', 2019, '9822099997', 'A+', 1, 7],

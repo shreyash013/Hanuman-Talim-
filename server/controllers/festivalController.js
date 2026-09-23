@@ -25,7 +25,7 @@ export async function getFestivalInfo(req, res) {
       expected_headcount: 3500,
       menu_mr: 'पुरी, भाजी, मसाले भात, जिलबी, आमटी, बूंदी प्रसादम',
       coordinators: [
-        { name: 'श्रेयश गवडे', phone: '9356997428' },
+        { name: 'श्रेयश गावडे', phone: '9356997428' },
         { name: 'अथर्व गवडे', phone: '9822012348' }
       ]
     };

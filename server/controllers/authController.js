@@ -76,12 +76,12 @@ export async function login(req, res) {
     // 2. Treasurer Account
     if (!user && (cleanId === 'treasurer@mandal.org' || cleanId === 'treasurer@ganeshmandal.org' || cleanId === '9822022222' || cleanId === '9356997428' || cleanId === 'treasurer' || cleanId === 'shreyashgavade7@gmail.com') && (password === 'treasurer123' || password === '123456')) {
       let realTreasurerId = 1;
-      let realTreasurerName = 'श्रेयश गवडे (खजिनदार)';
+      let realTreasurerName = 'श्रेयश गावडे (खजिनदार)';
       try {
         const { data: dbTreasurer } = await db.from('users').select('id, name').or('role.eq.treasurer,role.eq.admin').order('id', { ascending: true }).limit(1).maybeSingle();
         if (dbTreasurer) {
           realTreasurerId = dbTreasurer.id;
-          if (dbTreasurer.name) realTreasurerName = dbTreasurer.name;
+          if (dbTreasurer.name) realTreasurerName = dbTreasurer.name.replace(/श्रेयश गवडे/g, 'श्रेयश गावडे');
         }
       } catch {}
 

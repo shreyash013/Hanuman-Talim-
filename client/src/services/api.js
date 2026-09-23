@@ -39,14 +39,14 @@ export const SHIROL_MANDAL_SETTINGS = {
 
 export const DEFAULT_SHIROL_USERS = [
   { id: 101, name: 'सुमेध गवडे', email: 'sumedhgavade@gmail.com', mobile: '9822012345', role: 'admin', status: 'active', created_at: '2026-09-01T10:00:00Z' },
-  { id: 102, name: 'श्रेयश गवडे', email: 'shreyashgavade7@gmail.com', mobile: '9356997428', role: 'treasurer', status: 'active', created_at: '2026-09-01T10:00:00Z' },
+  { id: 102, name: 'श्रेयश गावडे', email: 'shreyashgavade7@gmail.com', mobile: '9356997428', role: 'treasurer', status: 'active', created_at: '2026-09-01T10:00:00Z' },
   { id: 103, name: 'शिवराज गवडे', email: 'shivrajgavade@gmail.com', mobile: '9822012347', role: 'secretary', status: 'active', created_at: '2026-09-01T10:00:00Z' },
   { id: 104, name: 'अथर्व गवडे (अभि)', email: 'atharvgavade@gmail.com', mobile: '9822012348', role: 'volunteer', status: 'active', created_at: '2026-09-01T10:00:00Z' }
 ];
 
 export const DEFAULT_SHIROL_MEMBERS = [
   { id: 1, name: 'सुमेध गावडे', role_title_mr: 'अध्यक्ष', role_title_en: 'President', mobile: '9822012345', address: 'नदीवेस, शिरोळ', joining_year: 2018, blood_group: 'O+' },
-  { id: 2, name: 'श्रेयस गावडे', role_title_mr: 'खजिनदार', role_title_en: 'Treasurer', mobile: '9356997428', address: 'नदीवेस, शिरोळ', joining_year: 2019, blood_group: 'B+' },
+  { id: 2, name: 'श्रेयश गावडे', role_title_mr: 'खजिनदार', role_title_en: 'Treasurer', mobile: '9356997428', address: 'नदीवेस, शिरोळ', joining_year: 2019, blood_group: 'B+' },
   { id: 3, name: 'शिवराज गावडे', role_title_mr: 'सचिव', role_title_en: 'Secretary', mobile: '9822012347', address: 'नदीवेस, शिरोळ', joining_year: 2020, blood_group: 'A+' },
   { id: 4, name: 'अथर्व गावडे (अभि)', role_title_mr: 'कार्यकर्ता प्रमुख', role_title_en: 'Volunteer Head', mobile: '9822012348', address: 'नदीवेस, शिरोळ', joining_year: 2021, blood_group: 'AB+' }
 ];
@@ -295,16 +295,16 @@ export function ensureDataRecovery() {
       localStorage.setItem('shirol_clean_version', DATA_CLEAN_VERSION);
     }
 
-    // Sanitize any 'मयुर बागल' in local expenses to 'श्रेयश गवडे (खजिनदार)'
+    // Sanitize any 'मयुर बागल' or 'श्रेयश गवडे' in local expenses to 'श्रेयश गावडे (खजिनदार)'
     const rawExpenses = localStorage.getItem('shirol_expenses');
-    if (rawExpenses && (rawExpenses.includes('मयुर') || rawExpenses.includes('बागल') || rawExpenses.includes('Mayur'))) {
+    if (rawExpenses && (rawExpenses.includes('मयुर') || rawExpenses.includes('बागल') || rawExpenses.includes('Mayur') || rawExpenses.includes('श्रेयश गवडे'))) {
       try {
         const parsedExpenses = JSON.parse(rawExpenses);
         if (Array.isArray(parsedExpenses)) {
           const sanitizedExpenses = parsedExpenses.map(exp => ({
             ...exp,
-            requested_by_name: (exp.requested_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गवडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गवडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गवडे (खजिनदार)'),
-            approved_by_name: (exp.approved_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गवडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गवडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गवडे (खजिनदार)')
+            requested_by_name: (exp.requested_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गावडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गावडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गावडे (खजिनदार)').replace(/श्रेयश गवडे/g, 'श्रेयश गावडे'),
+            approved_by_name: (exp.approved_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गावडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गावडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गावडे (खजिनदार)').replace(/श्रेयश गवडे/g, 'श्रेयश गावडे')
           }));
           localStorage.setItem('shirol_expenses', JSON.stringify(sanitizedExpenses));
         }
@@ -544,8 +544,8 @@ export async function autoSyncFromServer() {
         // Sanitize expenses
         const sanitizedExpenses = serverExpenses.map(exp => ({
           ...exp,
-          requested_by_name: (exp.requested_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गवडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गवडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गवडे (खजिनदार)'),
-          approved_by_name: (exp.approved_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गवडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गवडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गवडे (खजिनदार)')
+          requested_by_name: (exp.requested_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गावडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गावडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गावडे (खजिनदार)').replace(/श्रेयश गवडे/g, 'श्रेयश गावडे'),
+          approved_by_name: (exp.approved_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गावडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गावडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गावडे (खजिनदार)').replace(/श्रेयश गवडे/g, 'श्रेयश गावडे')
         }));
 
         localStorage.setItem('shirol_income', JSON.stringify(serverIncome));
@@ -597,8 +597,8 @@ function getLocalStore(key, defaultValue = []) {
     if (key === 'expenses' && Array.isArray(data)) {
       data = data.map(exp => ({
         ...exp,
-        requested_by_name: (exp.requested_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गवडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गवडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गवडे (खजिनदार)'),
-        approved_by_name: (exp.approved_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गवडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गवडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गवडे (खजिनदार)')
+        requested_by_name: (exp.requested_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गावडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गावडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गावडे (खजिनदार)').replace(/श्रेयश गवडे/g, 'श्रेयश गावडे'),
+        approved_by_name: (exp.approved_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गावडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गावडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गावडे (खजिनदार)').replace(/श्रेयश गवडे/g, 'श्रेयश गावडे')
       }));
     }
 
@@ -663,11 +663,11 @@ export async function request(endpoint, options = {}) {
     // 2. Treasurer Authority Account
     if (cleanId === 'treasurer@mandal.org' || cleanId === 'treasurer@ganeshmandal.org' || cleanId === '9822022222' || cleanId === '9356997428' || cleanId === 'treasurer' || cleanId === 'shreyashgavade7@gmail.com') {
       if (password === 'treasurer123' || password === '123456') {
-        const user = { id: 102, name: 'श्रेयश गवडे (खजिनदार)', email: 'shreyashgavade7@gmail.com', mobile: '9356997428', role: 'treasurer', status: 'active' };
+        const user = { id: 102, name: 'श्रेयश गावडे (खजिनदार)', email: 'shreyashgavade7@gmail.com', mobile: '9356997428', role: 'treasurer', status: 'active' };
         const token = 'demo-treasurer-token-' + Date.now();
         localStorage.setItem('ganpati_mandal_token', token);
         localStorage.setItem('ganpati_mandal_user', JSON.stringify(user));
-        return { success: true, message: 'खजिनदार (Treasurer - श्रेयश गवडे) म्हणून लॉगिन!', token, user };
+        return { success: true, message: 'खजिनदार (Treasurer - श्रेयश गावडे) म्हणून लॉगिन!', token, user };
       }
     }
 
