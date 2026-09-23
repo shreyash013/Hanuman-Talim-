@@ -270,7 +270,7 @@ export function autoHealAndRenumberReceipts() {
   }
 }
 
-export const DATA_CLEAN_VERSION = '2026-09-23-v51-donors-restored';
+export const DATA_CLEAN_VERSION = '2026-09-23-v38-clean-authentic';
 
 let isRecovering = false;
 // Data recovery to ensure valid baseline mandal settings and structure
@@ -285,7 +285,7 @@ export function ensureDataRecovery() {
 
     const currentVer = localStorage.getItem('shirol_clean_version');
 
-    // Restore full 51 donors and authentic continuous receipts up to 50
+    // Restore authentic 38 donors and authentic receipts
     if (currentVer !== DATA_CLEAN_VERSION) {
       localStorage.setItem('shirol_income', JSON.stringify(CANONICAL_SHIROL_INCOME));
       localStorage.setItem('shirol_donors', JSON.stringify(CANONICAL_SHIROL_DONORS));

@@ -35,9 +35,11 @@ export async function downloadCsvReport(type = 'income', customFilename = null) 
     });
   } else if (type === 'expenses') {
     const list = getStore('expenses');
-    csvContent += 'खर्च आयडी,तपशील,रक्कम (₹),प्रकार,दिला,नोंदवणारा,दिनांक\n';
-    list.forEach(e => {
-      csvContent += `"${e.expense_id || ''}","${e.description || ''}","${e.amount || 0}","${e.category || ''}","${e.paid_to || ''}","${e.requested_by_name || ''}","${e.created_at || ''}"\n`;
+    csvContent += 'अ.क्र.,खर्च आयडी,दिनांक,तपशील,रक्कम (₹),वर्गवारी,कोणाला दिले,पेमेंट पद्धत,बिल क्र,स्थिती,नोंदवणारा\n';
+    list.forEach((e, idx) => {
+      const statusText = e.status === 'approved' ? 'मंजूर (Approved)' : (e.status === 'rejected' ? 'नाकारले (Rejected)' : 'प्रलंबित (Pending)');
+      const payMethod = e.payment_method === 'cash' ? 'रोख (Cash)' : (e.payment_method === 'upi' ? 'ऑनलाइन (UPI)' : (e.payment_method || 'रोख'));
+      csvContent += `"${idx + 1}","${e.expense_id || ''}","${e.created_at || ''}","${e.description || ''}","${e.amount || 0}","${e.category || ''}","${e.paid_to || ''}","${payMethod}","${e.bill_number || ''}","${statusText}","${e.requested_by_name || e.approved_by_name || 'खजिनदार'}"\n`;
     });
   } else if (type === 'donors') {
     const list = getStore('donors');

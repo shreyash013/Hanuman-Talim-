@@ -7,6 +7,7 @@ import { formatCurrency } from '../utils/formatCurrency';
 import { formatDate } from '../utils/dateUtils';
 import { Badge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
+import { downloadCsvReport } from '../utils/exportCsv';
 import {
   CreditCard,
   PlusCircle,
@@ -408,6 +409,22 @@ export function ExpensesPage() {
         </div>
         <div className="flex items-center space-x-2">
           <button
+            onClick={async () => {
+              try {
+                showToast('सर्व खर्च डाऊनलोड होत आहे...', 'info');
+                await downloadCsvReport('expenses');
+                showToast('सर्व खर्च यशस्वीरित्या डाऊनलोड झाला! 📥', 'success');
+              } catch (err) {
+                showToast(err.message || 'डाऊनलोड करताना त्रुटी.', 'error');
+              }
+            }}
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs shadow-md transition flex items-center space-x-1.5"
+            title="सर्व खर्च एक्सेल/CSV फाइल डाऊनलोड करा (Download All Expenses)"
+          >
+            <Download className="w-4 h-4" />
+            <span>सर्व खर्च डाऊनलोड (Download All)</span>
+          </button>
+          <button
             onClick={toggleBudgetCards}
             className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold text-xs border border-slate-700 transition flex items-center space-x-1.5"
             title={showBudgetCards ? "बजेट कार्ड्स लपवा" : "बजेट कार्ड्स दाखवा"}
@@ -577,6 +594,22 @@ export function ExpensesPage() {
               <option value="other">इतर खर्च (Other)</option>
             </select>
           </div>
+          <button
+            onClick={async () => {
+              try {
+                showToast('सर्व खर्च CSV डाऊनलोड होत आहे...', 'info');
+                await downloadCsvReport('expenses');
+                showToast('सर्व खर्च यशस्वीरित्या डाऊनलोड झाला! 📥', 'success');
+              } catch (err) {
+                showToast(err.message || 'डाऊनलोड करताना त्रुटी.', 'error');
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-700/50 bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-400 text-xs font-bold transition shadow-sm"
+            title="सर्व खर्च एक्सेल/CSV फाइल डाऊनलोड करा (Download All Expenses)"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>सर्व खर्च डाऊनलोड (CSV)</span>
+          </button>
           <span className="text-xs text-slate-400 font-medium">
             एकूण: <strong className="text-white">{filteredExpenses.length}</strong> {activeTab === 'approved' ? 'मंजूर खर्च' : 'प्रलंबित खर्च'}
           </span>
