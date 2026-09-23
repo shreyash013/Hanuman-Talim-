@@ -28,6 +28,10 @@ function expandBilingualSearchTerms(searchTerm = '') {
   if (!s) return [];
   const terms = new Set([s]);
 
+  // Add individual words
+  const words = s.split(/\s+/).filter(Boolean);
+  words.forEach(w => terms.add(w));
+
   const pairs = [
     ['पृथ्वीराज', 'Prithviraj'],
     ['गवडे', 'Gavade'],
@@ -42,9 +46,11 @@ function expandBilingualSearchTerms(searchTerm = '') {
     ['विशाल', 'Vishal'],
     ['महेश', 'Mahesh'],
     ['दीपक', 'Deepak'],
+    ['दिपक', 'Deepak'],
     ['ओमकार', 'Omkar'],
     ['फत्तेसिंग', 'Fattesing'],
     ['सुरज', 'Suraj'],
+    ['सूरज', 'Suraj'],
     ['प्रतिक', 'Pratik'],
     ['वैभव', 'Vaibhav'],
     ['प्रसाद', 'Prasad'],
@@ -54,7 +60,26 @@ function expandBilingualSearchTerms(searchTerm = '') {
     ['अंबादास', 'Ambadas'],
     ['सुमेध', 'Sumedh'],
     ['श्रेयश', 'Shreyash'],
-    ['श्रेयस', 'Shreyash']
+    ['श्रेयस', 'Shreyash'],
+    ['शहाजी', 'Shahaji'],
+    ['शाहजी', 'Shahaji'],
+    ['राहुल', 'Rahul'],
+    ['अनिकेत', 'Aniket'],
+    ['अमोल', 'Amol'],
+    ['पाटील', 'Patil'],
+    ['तानाजी', 'Tanaji'],
+    ['रोहित', 'Rohit'],
+    ['अमित', 'Amit'],
+    ['सागर', 'Sagar'],
+    ['सुनील', 'Sunil'],
+    ['घाडगे', 'Ghadge'],
+    ['जोशी', 'Joshi'],
+    ['विजय', 'Vijay'],
+    ['प्रकाश', 'Prakash'],
+    ['प्रभाकर', 'Prabhakar'],
+    ['जयवर्धन', 'Jayvardhan'],
+    ['सतीश', 'Satish'],
+    ['खातेदार', 'Khatedar']
   ];
 
   for (const [mr, en] of pairs) {
@@ -66,6 +91,16 @@ function expandBilingualSearchTerms(searchTerm = '') {
       terms.add(s.replace(new RegExp(en, 'gi'), mr));
       terms.add(mr);
     }
+    words.forEach(w => {
+      if (w.includes(mr)) {
+        terms.add(w.replace(new RegExp(mr, 'g'), en));
+        terms.add(en);
+      }
+      if (w.toLowerCase().includes(en.toLowerCase())) {
+        terms.add(w.replace(new RegExp(en, 'gi'), mr));
+        terms.add(mr);
+      }
+    });
   }
 
   return Array.from(terms).filter(Boolean);
@@ -437,20 +472,29 @@ export function DonorsPage() {
     if (areaFilter !== 'all' && (d.area || 'शिरोळ') !== areaFilter) return false;
     if (statusFilter !== 'all' && (d.status || 'unpaid') !== statusFilter) return false;
     if (search && search.trim()) {
-      const terms = expandBilingualSearchTerms(search.trim());
+      const q = search.trim().toLowerCase();
+      const rawWords = q.split(/\s+/).filter(Boolean);
+      const stopWords = new Set(['खातेदार', 'श्री', 'श्री.', 'शेठ', 'राव', 'साहेब', 'भाऊ', 'दादा']);
+      const meaningfulWords = rawWords.filter(w => !stopWords.has(w));
+      const wordsToMatch = meaningfulWords.length > 0 ? meaningfulWords : rawWords;
+
       const dName = (d.name || '').toLowerCase();
       const dMobile = (d.mobile || '').replace(/\D/g, '');
       const dArea = (d.area || '').toLowerCase();
       const dAddress = (d.address || '').toLowerCase();
-      const qDigits = search.replace(/\D/g, '');
+      const dNotes = (d.notes || '').toLowerCase();
+      const allText = `${dName} ${dArea} ${dAddress} ${dNotes}`;
+      const qDigits = q.replace(/\D/g, '');
 
-      const matchesTerm = terms.some(t => {
-        const cleanT = t.toLowerCase();
-        return dName.includes(cleanT) || dArea.includes(cleanT) || dAddress.includes(cleanT);
+      // All meaningful words in the search query must match in name, area, address, or notes
+      const matchesAllWords = wordsToMatch.every(w => {
+        if (allText.includes(w)) return true;
+        const expanded = expandBilingualSearchTerms(w);
+        return expanded.some(exp => allText.includes(exp.toLowerCase()));
       });
       const matchesPhone = qDigits.length >= 3 && dMobile.includes(qDigits);
 
-      if (!matchesTerm && !matchesPhone) return false;
+      if (!matchesAllWords && !matchesPhone) return false;
     }
     return true;
   });

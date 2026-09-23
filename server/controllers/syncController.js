@@ -131,10 +131,18 @@ export async function autoSyncAll(req, res) {
       if (cleanMobile && deletedMobileSet.has(cleanMobile)) continue;
       if (d.id && deletedIdSet.has(String(d.id))) continue;
 
-      const existing = (cleanMobile && existingDonorMapByMobile.get(cleanMobile)) ||
-                       existingDonorMapByName.get(keyName) ||
+      const matchByName = existingDonorMapByName.get(keyName);
+      const matchByMobile = cleanMobile ? existingDonorMapByMobile.get(cleanMobile) : null;
+      const isMobileNameMatch = matchByMobile && (
+        matchByMobile.name.toLowerCase() === keyName ||
+        matchByMobile.name.toLowerCase().split(/\s+/).some(w => w.length >= 3 && keyName.includes(w))
+      );
+      const matchById = d.id ? existingDonorMapById.get(String(d.id)) : null;
+
+      const existing = matchByName ||
                        existingDonorMapByName.get('pruthviraj gavade') ||
-                       (d.id && existingDonorMapById.get(String(d.id)));
+                       (isMobileNameMatch ? matchByMobile : null) ||
+                       (matchById && matchById.name.toLowerCase() === keyName ? matchById : null);
 
       const targetAmount = Number(d.target_amount || d.total_donated || d.paid_amount || 500);
       const paidAmount = Number(d.paid_amount || d.total_donated || 0);
@@ -231,8 +239,13 @@ export async function autoSyncAll(req, res) {
       await Promise.allSettled(newIncomeItems.map(async ({ inc, txId, rNo, cleanDonorName, parsedAmount }) => {
         try {
           const cleanMobile = (inc.mobile || '').trim();
-          const donorMatch = (cleanMobile && existingDonorMapByMobile.get(cleanMobile)) ||
-                             existingDonorMapByName.get(cleanDonorName.toLowerCase());
+          const matchByName = existingDonorMapByName.get(cleanDonorName.toLowerCase());
+          const matchMobile = cleanMobile ? existingDonorMapByMobile.get(cleanMobile) : null;
+          const isMobileNameMatch = matchMobile && (
+            matchMobile.name.toLowerCase() === cleanDonorName.toLowerCase() ||
+            matchMobile.name.toLowerCase().split(/\s+/).some(w => w.length >= 3 && cleanDonorName.toLowerCase().includes(w))
+          );
+          const donorMatch = matchByName || (isMobileNameMatch ? matchMobile : null);
           const donorId = donorMatch ? donorMatch.id : null;
 
           const { data: insertedTx, error: txErr } = await db.from('income_transactions').insert({

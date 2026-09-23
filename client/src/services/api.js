@@ -214,24 +214,6 @@ export function reconcileDonorsAndIncome() {
       }
     });
 
-    // 3. Purge any phantom Shahaji Gavade / receipt 50 records
-    const beforeIncLen = incomeList.length;
-    incomeList = incomeList.filter(inc => {
-      if (!inc || inc.is_deleted) return false;
-      if (inc.receipt_number === 'HANUMAN-2026-000050' || inc.receipt_number === '50') return false;
-      if (/shahaji/i.test(inc.donor_name || '')) return false;
-      return true;
-    });
-    if (incomeList.length !== beforeIncLen) incomeModified = true;
-
-    const beforeDonLen = donorsList.length;
-    donorsList = donorsList.filter(d => {
-      if (!d || !d.name) return false;
-      if (/shahaji/i.test(d.name || '')) return false;
-      return true;
-    });
-    if (donorsList.length !== beforeDonLen) donorsModified = true;
-
     if (incomeModified) {
       localStorage.setItem('shirol_income', JSON.stringify(incomeList));
     }
@@ -288,7 +270,7 @@ export function autoHealAndRenumberReceipts() {
   }
 }
 
-export const DATA_CLEAN_VERSION = '2026-09-22-v6-clean';
+export const DATA_CLEAN_VERSION = '2026-09-23-v51-donors-restored';
 
 let isRecovering = false;
 // Data recovery to ensure valid baseline mandal settings and structure
@@ -302,12 +284,9 @@ export function ensureDataRecovery() {
     }
 
     const currentVer = localStorage.getItem('shirol_clean_version');
-    const rawIncome = localStorage.getItem('shirol_income');
-    let incCount = 0;
-    try { incCount = rawIncome ? JSON.parse(rawIncome).length : 0; } catch {}
 
-    // CRITICAL: Clean up phantom records (e.g. 53 income, 44 donors, or Shahaji Gavade / receipt 50)
-    if (currentVer !== DATA_CLEAN_VERSION || incCount > 36 || (rawIncome && (rawIncome.includes('shahaji') || rawIncome.includes('000050')))) {
+    // Restore full 51 donors and authentic continuous receipts up to 50
+    if (currentVer !== DATA_CLEAN_VERSION) {
       localStorage.setItem('shirol_income', JSON.stringify(CANONICAL_SHIROL_INCOME));
       localStorage.setItem('shirol_donors', JSON.stringify(CANONICAL_SHIROL_DONORS));
       localStorage.removeItem('shirol_receipts');
@@ -512,6 +491,25 @@ export function handleLocalDonorDeletion(endpoint, options = {}) {
 
 // Cloud Synchronization with live Render database
 export async function autoSyncAllToServer() {
+  if (typeof window === 'undefined') return { success: true, mode: 'local' };
+  try {
+    const rawDonors = localStorage.getItem('shirol_donors');
+    const rawIncome = localStorage.getItem('shirol_income');
+    const donors = rawDonors ? JSON.parse(rawDonors) : CANONICAL_SHIROL_DONORS;
+    const income = rawIncome ? JSON.parse(rawIncome) : CANONICAL_SHIROL_INCOME;
+
+    const res = await fetch('https://hanuman-talim-api.onrender.com/api/sync/auto-sync-all', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ donors, income })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return { success: true, data };
+    }
+  } catch (e) {
+    console.warn('autoSyncAllToServer note:', e.message);
+  }
   return { success: true, mode: 'local' };
 }
 
@@ -522,24 +520,63 @@ export async function autoSyncFromServer() {
     if (res.ok) {
       const json = await res.json();
       if (json && json.data && Array.isArray(json.data.income) && json.data.income.length > 0) {
-        const canonicalIncome = json.data.income.filter(inc =>
-          !inc.is_deleted &&
-          !/shahaji/i.test(inc.donor_name || '') &&
-          inc.receipt_number !== 'HANUMAN-2026-000050' &&
-          inc.receipt_number !== '50'
-        );
-        const canonicalDonors = (json.data.donors || []).filter(d =>
-          !/shahaji/i.test(d.name || '')
-        );
-        const canonicalReceipts = (json.data.receipts || []).filter(r =>
-          !/shahaji/i.test(r.donor_name || '') &&
-          r.receipt_number !== 'HANUMAN-2026-000050' &&
-          r.receipt_number !== '50'
-        );
+        const serverIncome = (json.data.income || []).filter(inc => inc && !inc.is_deleted);
+        const serverDonors = (json.data.donors || []).filter(d => d && d.name);
+        const serverReceipts = (json.data.receipts || []).filter(r => r && !r.is_deleted);
+
+        // Merge server donors with canonical donors so baseline authentic 51 donors are NEVER lost
+        const mergedDonorsMap = new Map();
+        CANONICAL_SHIROL_DONORS.forEach(d => {
+          if (!d || !d.name) return;
+          const k = normalizeText(d.name) || String(d.id);
+          mergedDonorsMap.set(k, { ...d });
+        });
+        serverDonors.forEach(d => {
+          if (!d || !d.name) return;
+          const k = normalizeText(d.name) || String(d.id);
+          if (mergedDonorsMap.has(k)) {
+            const exist = mergedDonorsMap.get(k);
+            mergedDonorsMap.set(k, {
+              ...exist,
+              ...d,
+              paid_amount: Math.max(Number(exist.paid_amount) || 0, Number(d.paid_amount) || 0),
+              target_amount: Math.max(Number(exist.target_amount) || 0, Number(d.target_amount) || 0)
+            });
+          } else {
+            mergedDonorsMap.set(k, { ...d });
+          }
+        });
+        const canonicalDonors = Array.from(mergedDonorsMap.values());
+
+        // Merge income transactions
+        const mergedIncomeMap = new Map();
+        CANONICAL_SHIROL_INCOME.forEach(inc => {
+          if (!inc) return;
+          const k = inc.receipt_number || inc.transaction_id || String(inc.id);
+          mergedIncomeMap.set(k, { ...inc });
+        });
+        serverIncome.forEach(inc => {
+          if (!inc) return;
+          const k = inc.receipt_number || inc.transaction_id || String(inc.id);
+          mergedIncomeMap.set(k, { ...inc });
+        });
+        const canonicalIncome = Array.from(mergedIncomeMap.values());
+
+        // Sort newest first
+        canonicalIncome.sort((a, b) => {
+          const getNum = (item) => {
+            const m = (item.receipt_number || '').match(/(\d+)$/);
+            return m ? parseInt(m[1], 10) : 0;
+          };
+          const numA = getNum(a);
+          const numB = getNum(b);
+          if (numA !== numB) return numB - numA;
+          return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+        });
 
         localStorage.setItem('shirol_income', JSON.stringify(canonicalIncome));
         localStorage.setItem('shirol_donors', JSON.stringify(canonicalDonors));
-        localStorage.setItem('shirol_receipts', JSON.stringify(canonicalReceipts));
+        localStorage.setItem('shirol_receipts', JSON.stringify(serverReceipts));
         localStorage.setItem('shirol_clean_version', DATA_CLEAN_VERSION);
 
         window.dispatchEvent(new Event('shirol_data_updated'));
@@ -567,7 +604,11 @@ export async function forceSyncNow() {
 
 // Debounced trigger for auto-upload on every entry
 export function triggerAutoSync() {
-  // Pure local storage mode
+  if (typeof window === 'undefined') return;
+  if (syncDebounceTimer) clearTimeout(syncDebounceTimer);
+  syncDebounceTimer = setTimeout(() => {
+    autoSyncAllToServer().catch(() => {});
+  }, 1500);
 }
 
 function getLocalStore(key, defaultValue = []) {
@@ -577,7 +618,7 @@ function getLocalStore(key, defaultValue = []) {
     let data = item ? JSON.parse(item) : fallback;
 
     if (key === 'income' && Array.isArray(data)) {
-      data = data.filter(inc => inc && !inc.is_deleted && !/shahaji/i.test(inc.donor_name || '') && inc.receipt_number !== 'HANUMAN-2026-000050' && inc.receipt_number !== '50');
+      data = data.filter(inc => inc && !inc.is_deleted);
       data = data.map(inc => {
         if (inc.collector_name && (inc.collector_name.includes('सचिन') || inc.collector_name.includes('मनगूळे'))) {
           return { ...inc, collector_name: 'सुमेध गवडे (अध्यक्ष)' };
@@ -587,7 +628,7 @@ function getLocalStore(key, defaultValue = []) {
     }
 
     if (key === 'donors' && Array.isArray(data)) {
-      data = data.filter(d => d && !/shahaji/i.test(d.name || ''));
+      data = data.filter(d => d && d.name);
     }
 
     return data;
@@ -2099,24 +2140,19 @@ export async function request(endpoint, options = {}) {
       (cleanQuery.includes('1000000') ? 'HANUMAN-2026-000043' : null) ||
       (cleanQuery.includes('999999') ? 'HANUMAN-2026-000022' : null);
 
-    // 1. Check in receipts store
+    // 1. Check in receipts store by exact receipt_number
     let receipt = receipts.find(r =>
       (r.receipt_number && r.receipt_number.trim() === queryNo) ||
       (mappedQuery && r.receipt_number === mappedQuery) ||
-      String(r.id) === queryNo ||
       (r.receipt_number && r.receipt_number.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === cleanQuery)
     );
 
-    // 2. Check in income list
+    // 2. Check in income list by exact receipt_number
     if (!receipt) {
-      const inc = incomeList.find((i, idx) =>
+      const inc = incomeList.find(i =>
         (i.receipt_number && i.receipt_number.trim() === queryNo) ||
         (mappedQuery && i.receipt_number === mappedQuery) ||
-        (i.receipt_number && i.receipt_number.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === cleanQuery) ||
-        String(i.id) === queryNo ||
-        String(idx + 1) === queryNo ||
-        `HANUMAN-2026-${String(idx + 1).padStart(6, '0')}` === queryNo ||
-        `HANUMAN-2026-${String(i.id).padStart(6, '0')}` === queryNo
+        (i.receipt_number && i.receipt_number.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === cleanQuery)
       );
       if (inc) {
         receipt = {
@@ -2133,6 +2169,28 @@ export async function request(endpoint, options = {}) {
           purpose: inc.purpose,
           collector_name: inc.collector_name || 'सुमेध गवडे (अध्यक्ष)',
           created_at: inc.created_at
+        };
+      }
+    }
+
+    // 2b. Fallback check by internal ID only if exact receipt_number was not matched
+    if (!receipt) {
+      const incById = receipts.find(r => String(r.id) === queryNo) || incomeList.find(i => String(i.id) === queryNo);
+      if (incById) {
+        receipt = {
+          id: incById.id,
+          receipt_number: incById.receipt_number || `HANUMAN-2026-${String(incById.id).padStart(6, '0')}`,
+          donor_name: incById.donor_name,
+          mobile: incById.mobile,
+          address: incById.address,
+          amount: incById.amount,
+          amount_in_words_mr: incById.amount_in_words_mr,
+          amount_in_words_en: incById.amount_in_words_en,
+          payment_method: incById.payment_method,
+          category: incById.category,
+          purpose: incById.purpose,
+          collector_name: incById.collector_name || 'सुमेध गवडे (अध्यक्ष)',
+          created_at: incById.created_at
         };
       }
     }
