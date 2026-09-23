@@ -350,7 +350,7 @@ export function ExpensesPage() {
       formData.append('paid_to', paidTo.trim());
       formData.append('bill_number', billNumber.trim());
       formData.append('notes', notes.trim());
-      formData.append('status', 'pending');
+      formData.append('status', 'approved');
 
       if (fileAttachment) {
         formData.append('bill_attachment', fileAttachment);
@@ -362,11 +362,12 @@ export function ExpensesPage() {
       const res = await api.post('/expenses', formData);
 
       if (res.success) {
-        showToast('खर्च यशस्वीरित्या नोंदवला व मंजुरीच्या प्रतीक्षेत रांगेमध्ये पाठवला आहे!', 'info');
-        setActiveTab('pending');
+        showToast('नवीन खर्च मुख्य यादीत यशस्वीरित्या जोडला गेला! 💰', 'success');
+        setActiveTab('approved');
         setShowAddModal(false);
         resetForm();
-        fetchExpenses();
+        await fetchExpenses(true);
+        window.dispatchEvent(new Event('shirol_data_updated'));
       }
     } catch (err) {
       showToast(err.message || 'खर्च नोंदवताना त्रुटी.', 'error');
@@ -865,11 +866,10 @@ export function ExpensesPage() {
           <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-lg space-y-4 max-h-[85vh] overflow-y-auto">
             <h3 className="font-extrabold text-white text-base flex items-center justify-between">
               <span>नवीन खर्च नोंदवा (Add Expense)</span>
-              {!(isAdmin || isTreasurer) && (
-                <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold">
-                  मंजुरी रांगेत जोडले जाईल
-                </span>
-              )}
+              <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-bold flex items-center space-x-1">
+                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                <span>थेट मंजूर खर्च</span>
+              </span>
             </h3>
 
             {duplicateBillWarning && (
@@ -1005,9 +1005,9 @@ export function ExpensesPage() {
               </div>
 
               {/* Info Note */}
-              <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl text-xs text-amber-300 flex items-center space-x-2">
-                <Clock className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>हा खर्च प्रथम मंजुरीच्या रांगेत (Waiting Queue) जोडला जाईल. ॲडमिन मंजुरीनंतरच तो मुख्य खर्चात दिसेल.</span>
+              <div className="bg-emerald-500/10 border border-emerald-500/30 p-3 rounded-xl text-xs text-emerald-300 flex items-center space-x-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>हा खर्च थेट मुख्य मंजूर यादीमध्ये समाविष्ट होईल आणि मंडळाच्या थेट हिशोबात जोडला जाईल.</span>
               </div>
 
               <div className="flex justify-end space-x-2 pt-3">

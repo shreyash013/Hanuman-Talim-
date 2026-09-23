@@ -288,6 +288,27 @@ export function createDeletedExpenseSet(delList) {
   return set;
 }
 
+export function generateNextExpenseId(expensesList = []) {
+  let maxNum = 25; // Historical records baseline was up to 21
+  const rawDel = typeof localStorage !== 'undefined' ? localStorage.getItem('shirol_deleted_expenses') : null;
+  const delList = rawDel ? JSON.parse(rawDel) : [];
+  const scanList = [...(Array.isArray(expensesList) ? expensesList : []), ...(Array.isArray(delList) ? delList : [])];
+
+  for (const item of scanList) {
+    if (!item) continue;
+    const expStr = String(item.expense_id || item.id || '');
+    const match = expStr.match(/EXP-\d{4}-(\d+)/i);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (!isNaN(num) && num > maxNum) {
+        maxNum = num;
+      }
+    }
+  }
+  const nextNum = maxNum + 1;
+  return `EXP-2026-${String(nextNum).padStart(5, '0')}`;
+}
+
 let isRecovering = false;
 // Data recovery to ensure clean slate for donors and valid baseline mandal settings
 export function ensureDataRecovery() {
@@ -691,10 +712,29 @@ export async function autoSyncFromServer() {
           approved_by_name: (exp.approved_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गावडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गावडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गावडे (खजिनदार)').replace(/श्रेयश गवडे/g, 'श्रेयश गावडे')
         }));
 
+        // 4. Merge any local expenses that are not yet on the server and not deleted
+        const rawLocalExpenses = localStorage.getItem('shirol_expenses');
+        let localExpenses = [];
+        try { localExpenses = rawLocalExpenses ? JSON.parse(rawLocalExpenses) : []; } catch {}
+        const serverExpKeys = new Set();
+        sanitizedExpenses.forEach(e => {
+          if (e.id) serverExpKeys.add(String(e.id));
+          if (e.expense_id) serverExpKeys.add(String(e.expense_id));
+        });
+
+        const pendingLocalExps = (Array.isArray(localExpenses) ? localExpenses : []).filter(e => {
+          if (!e || e.is_deleted) return false;
+          if (delExpSet.has(String(e.id)) || delExpSet.has(String(e.expense_id))) return false;
+          if (serverExpKeys.has(String(e.expense_id)) || (e.id && serverExpKeys.has(String(e.id)))) return false;
+          return true;
+        });
+
+        const mergedExpenses = [...pendingLocalExps, ...sanitizedExpenses];
+
         localStorage.setItem('shirol_income', JSON.stringify(serverIncome));
         localStorage.setItem('shirol_donors', JSON.stringify(serverDonors));
         localStorage.setItem('shirol_receipts', JSON.stringify(serverReceipts));
-        localStorage.setItem('shirol_expenses', JSON.stringify(sanitizedExpenses));
+        localStorage.setItem('shirol_expenses', JSON.stringify(mergedExpenses));
         if (serverLoans.length > 0) {
           localStorage.setItem('shirol_loans', JSON.stringify(serverLoans));
         }
@@ -1790,11 +1830,14 @@ export async function request(endpoint, options = {}) {
       } else {
         bodyData = JSON.parse(options.body || '{}');
       }
-      const status = 'pending';
+
+      // Default to approved so it is visible immediately in the main approved expenses list
+      const status = bodyData.status || 'approved';
+      const expenseId = bodyData.expense_id || generateNextExpenseId(expensesList);
 
       const newExpense = {
         id: Date.now(),
-        expense_id: `EXP-2026-${String(expensesList.length + 1).padStart(5, '0')}`,
+        expense_id: expenseId,
         description: bodyData.description || '',
         amount: Number(bodyData.amount) || 0,
         category: bodyData.category || 'other',
@@ -1802,22 +1845,24 @@ export async function request(endpoint, options = {}) {
         paid_to: bodyData.paid_to || '',
         bill_number: bodyData.bill_number || '',
         bill_attachment_url: bodyData.bill_attachment_url || bodyData.attachment_url || '',
-        status: 'pending',
-        requested_by_id: user.id || null,
-        requested_by_name: user.name || 'स्वयंसेवक',
-        approved_by_id: null,
-        approved_by_name: null,
-        approved_at: null,
+        status: status,
+        requested_by_id: user.id || 1,
+        requested_by_name: user.name || 'श्रेयश गावडे (खजिनदार)',
+        approved_by_id: status === 'approved' ? (user.id || 1) : null,
+        approved_by_name: status === 'approved' ? (user.name || 'श्रेयश गावडे (खजिनदार)') : null,
+        approved_at: status === 'approved' ? new Date().toISOString() : null,
         notes: bodyData.notes || '',
         created_at: new Date().toISOString()
       };
       const updated = [newExpense, ...expensesList];
       setLocalStore('expenses', updated);
+
+      // Immediately push to cloud server
+      await autoSyncAllToServer().catch(() => {});
+
       return {
         success: true,
-        message: status === 'pending'
-          ? 'खर्च यशस्वीरित्या नोंदवला व मंजुरीसाठी पाठवला आहे / Sent for approval.'
-          : 'खर्च यशस्वीरित्या नोंदवला व मंजूर झाला / Expense approved.',
+        message: 'खर्च यशस्वीरित्या नोंदवला गेला!',
         data: newExpense
       };
     }
