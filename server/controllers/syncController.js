@@ -458,9 +458,6 @@ export async function autoSyncAll(req, res) {
       }
     }
 
-    // Ensure Pruthviraj Gavade continuity and un-deletion
-    await restorePruthvirajGavadeAndFixContinuity();
-
     return res.json({
       success: true,
       message: 'सर्व स्थानिक डेटा लाईव्ह सर्व्हरवर ऑटोमॅटिकली यशस्वीरित्या सिंक झाला!',
@@ -549,5 +546,10 @@ export async function getCloudFullData(req, res) {
       message: 'क्लाउड डेटा मिळवताना त्रुटी: ' + (err.message || err)
     });
   }
+}
+
+export async function restorePruthvirajGavadeAndFixContinuity() {
+  // No-op: all donors cleared as requested by user
+  return true;
 }
 

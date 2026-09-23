@@ -3,7 +3,6 @@ import { numberToWordsMarathi, numberToWordsEnglish } from '../utils/marathiNumb
 import { logAudit } from '../middleware/auditMiddleware.js';
 import { uploadFileToSupabase } from '../middleware/uploadMiddleware.js';
 import { istDayBounds, safeSearchTerm, sum, throwIfError, expandBilingualSearchTerms } from '../utils/dbHelpers.js';
-import { restorePruthvirajGavadeAndFixContinuity } from './syncController.js';
 
 function applyIncomeFilters(query, filters) {
   const { search, category, payment_method, startDate, endDate, donor_id } = filters;
@@ -27,7 +26,6 @@ function applyIncomeFilters(query, filters) {
 
 export async function getIncomeList(req, res) {
   try {
-    await restorePruthvirajGavadeAndFixContinuity();
 
     const filters = {
       search: req.query.search || '',

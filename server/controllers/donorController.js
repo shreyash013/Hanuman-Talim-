@@ -2,7 +2,6 @@ import { db } from '../database/db.js';
 import { safeSearchTerm, sum, throwIfError, expandBilingualSearchTerms } from '../utils/dbHelpers.js';
 import { numberToWordsMarathi, numberToWordsEnglish } from '../utils/marathiNumberWords.js';
 import { getNextReceiptNumber } from './incomeController.js';
-import { restorePruthvirajGavadeAndFixContinuity } from './syncController.js';
 
 function applyDonorFilters(query, search, area) {
   if (search) {
@@ -21,7 +20,6 @@ function applyDonorFilters(query, search, area) {
 
 export async function getDonorsList(req, res) {
   try {
-    await restorePruthvirajGavadeAndFixContinuity();
 
     const { page = 1, limit = 500, search = '', area = '' } = req.query;
     const pageNum = Math.max(1, Number(page) || 1);
