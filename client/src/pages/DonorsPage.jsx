@@ -171,12 +171,14 @@ export function DonorsPage() {
         const incomeList = rawIncome ? JSON.parse(rawIncome) : [];
 
         donorsList = donorsList.map(d => {
-          const matchingPayments = incomeList.filter(inc => isExactDonorMatch(d, inc));
+          const matchingPayments = incomeList.filter(inc => !inc.is_deleted && isExactDonorMatch(d, inc));
 
           const localPaid = matchingPayments.reduce((sum, inc) => sum + (Number(inc.amount) || 0), 0);
-          const serverPaid = Number(d.paid_amount || d.total_donated || 0);
-          const paid_amount = Math.max(serverPaid, localPaid);
-          const target_amount = Number(d.target_amount || d.total_donated || 500);
+          const serverPaid = Number(d.paid_amount !== undefined ? d.paid_amount : (d.total_donated || 0));
+          const paid_amount = matchingPayments.length > 0 ? localPaid : serverPaid;
+          const target_amount = (d.target_amount !== undefined && d.target_amount !== null && !isNaN(d.target_amount))
+            ? Number(d.target_amount)
+            : Number(d.total_donated || 500);
           const pending_amount = Math.max(0, target_amount - paid_amount);
           const status = (paid_amount >= target_amount && target_amount > 0) ? 'paid' : (paid_amount > 0 ? 'partial' : 'unpaid');
           const donations_count = matchingPayments.length > 0 ? matchingPayments.length : (paid_amount > 0 ? 1 : 0);
@@ -203,8 +205,8 @@ export function DonorsPage() {
 
         setDonors(donorsList);
 
-        const totalPaid = Number(res.summary?.totalPaid) || donorsList.reduce((acc, d) => acc + (Number(d.paid_amount) || 0), 0);
-        const totalTarget = Number(res.summary?.totalTarget) || donorsList.reduce((acc, d) => acc + (Number(d.target_amount) || 0), 0);
+        const totalTarget = donorsList.reduce((acc, d) => acc + (Number(d.target_amount) || 0), 0);
+        const totalPaid = donorsList.reduce((acc, d) => acc + (Number(d.paid_amount) || 0), 0);
         const totalPending = donorsList.reduce((acc, d) => acc + (Number(d.pending_amount) || 0), 0);
 
         setSummary({
@@ -399,26 +401,41 @@ export function DonorsPage() {
     const pendingVal = Math.max(0, newTarget - paidVal);
     const newStatus = (paidVal >= newTarget && newTarget > 0) ? 'paid' : (paidVal > 0 ? 'partial' : 'unpaid');
 
-    // Optimistic instant UI update on donors state
-    setDonors(prev => prev.map(d => {
-      const isMatch = (originalDonor.id && String(d.id) === String(originalDonor.id)) ||
-                      (originalDonor.name && d.name?.trim().toLowerCase() === originalDonor.name?.trim().toLowerCase());
-      if (isMatch) {
-        return {
-          ...d,
-          name: cleanName,
-          mobile: cleanMobile,
-          area: cleanArea,
-          address: cleanAddress,
-          target_amount: newTarget,
-          paid_amount: paidVal,
-          total_donated: paidVal,
-          pending_amount: pendingVal,
-          status: newStatus
-        };
-      }
-      return d;
-    }));
+    // Optimistic instant UI update on donors state and summary
+    setDonors(prev => {
+      const updated = prev.map(d => {
+        const isMatch = (originalDonor.id && String(d.id) === String(originalDonor.id)) ||
+                        (originalDonor.name && d.name?.trim().toLowerCase() === originalDonor.name?.trim().toLowerCase());
+        if (isMatch) {
+          return {
+            ...d,
+            name: cleanName,
+            mobile: cleanMobile,
+            area: cleanArea,
+            address: cleanAddress,
+            target_amount: newTarget,
+            paid_amount: paidVal,
+            total_donated: paidVal,
+            pending_amount: pendingVal,
+            status: newStatus
+          };
+        }
+        return d;
+      });
+
+      const newTotalTarget = updated.reduce((acc, d) => acc + (Number(d.target_amount) || 0), 0);
+      const newTotalPaid = updated.reduce((acc, d) => acc + (Number(d.paid_amount) || 0), 0);
+      const newTotalPending = updated.reduce((acc, d) => acc + (Number(d.pending_amount) || 0), 0);
+      setSummary({
+        totalDonors: updated.length,
+        totalTarget: newTotalTarget,
+        totalPaid: newTotalPaid,
+        totalPending: newTotalPending,
+        grandTotal: newTotalPaid
+      });
+
+      return updated;
+    });
 
     try {
       setIsSavingEdit(true);

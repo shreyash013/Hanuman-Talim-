@@ -730,44 +730,6 @@ export async function request(endpoint, options = {}) {
     return { success: true, data };
   }
 
-  // Handle Dashboard Stats (Local Engine Fallback)
-  if (endpoint.startsWith('/dashboard/stats')) {
-    const incomeList = getLocalStore('income', []);
-    const expensesList = getLocalStore('expenses', []);
-    const donorsList = getLocalStore('donors', []);
-    const loansList = getLocalStore('loans', []);
-
-    const totalIncome = incomeList.reduce((s, i) => s + (Number(i.amount) || 0), 0);
-    const totalExpense = expensesList.filter(e => e.status === 'approved').reduce((s, e) => s + (Number(e.amount) || 0), 0);
-    const currentBalance = totalIncome - totalExpense;
-
-    const todayStr = new Date().toISOString().split('T')[0];
-    const todayCollection = incomeList
-      .filter(i => (i.created_at || '').startsWith(todayStr))
-      .reduce((s, i) => s + (Number(i.amount) || 0), 0);
-
-    const pendingExpenses = expensesList.filter(e => e.status === 'pending');
-
-    return {
-      success: true,
-      data: {
-        summary: {
-          totalIncome,
-          totalExpense,
-          currentBalance,
-          todayCollection: todayCollection > 0 ? todayCollection : totalIncome,
-          totalDonors: Math.max(donorsList.length, incomeList.length),
-          totalTransactions: incomeList.length,
-          pendingExpensesCount: pendingExpenses.length,
-          pendingExpensesAmount: pendingExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0)
-        },
-        recentTransactions: incomeList.slice(0, 10),
-        dailyTrend: [
-          { date: 'आज', amount: todayCollection > 0 ? todayCollection : totalIncome }
-        ]
-      }
-    };
-  }
   if (endpoint.startsWith('/loans')) {
     let loansList = getLocalStore('loans', []);
 
@@ -907,6 +869,29 @@ export async function request(endpoint, options = {}) {
       setLocalStore('mandal_settings_custom', currentSettings);
     }
     return { success: true, data: currentSettings, mandal: currentSettings };
+  }
+
+  // Handle Target Update
+  if (endpoint.startsWith('/dashboard/target') || endpoint.startsWith('/mandal/target')) {
+    if (options.method === 'POST' || options.method === 'PUT') {
+      try {
+        const bodyData = options.body instanceof FormData ? {} : JSON.parse(options.body || '{}');
+        const targetVal = Number(bodyData.target || bodyData.vargani_target || bodyData.target_amount);
+        if (!isNaN(targetVal) && targetVal > 0) {
+          setLocalStore('daily_vargani_target', targetVal);
+          setLocalStore('shirol_target_amount', targetVal);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new Event('shirol_data_updated'));
+            window.dispatchEvent(new Event('storage'));
+          }
+          return { success: true, message: 'ध्येय (Target) अद्ययावत झाले!', target: targetVal };
+        }
+      } catch (err) {
+        console.error('Error saving target:', err);
+      }
+    }
+    const currentTarget = Number(getLocalStore('daily_vargani_target', 500000));
+    return { success: true, target: currentTarget };
   }
 
   // Handle Dashboard Stats endpoint (Calculates live stats from clean local database)
@@ -1802,8 +1787,9 @@ export async function request(endpoint, options = {}) {
         };
       }
 
-      const target = Number(bodyData.target_amount || bodyData.total_donated || bodyData.amount || 500);
-      const paid = Number(bodyData.paid_amount || bodyData.total_donated || 0);
+      const target = bodyData.target_amount !== undefined ? Number(bodyData.target_amount) : Number(bodyData.amount || 2000);
+      const paid = bodyData.paid_amount !== undefined ? Number(bodyData.paid_amount) : 0;
+      const donationDate = bodyData.created_at || (bodyData.donation_date ? `${bodyData.donation_date}T12:00:00.000Z` : new Date().toISOString());
       const newDonor = {
         id: Date.now(),
         name: bodyData.name,
@@ -1818,7 +1804,8 @@ export async function request(endpoint, options = {}) {
         pending_amount: Math.max(0, target - paid),
         donations_count: paid > 0 ? 1 : 0,
         status: paid >= target && target > 0 ? 'paid' : (paid > 0 ? 'partial' : 'unpaid'),
-        last_donated_at: new Date().toISOString()
+        created_at: donationDate,
+        last_donated_at: donationDate
       };
       donorsList = [newDonor, ...donorsList];
       setLocalStore('donors', donorsList);
@@ -1833,7 +1820,7 @@ export async function request(endpoint, options = {}) {
         }
       } catch (e) {}
 
-      // If donor was added with paid amount, also add an income transaction so dashboard total updates
+      // If donor was added with paid amount, also add an income transaction so dashboard total & collection updates
       if (paid > 0) {
         let maxReceiptNum = 0;
         incomeList.forEach(inc => {
@@ -1866,9 +1853,13 @@ export async function request(endpoint, options = {}) {
           amount_in_words_en: numberToWordsEnglish(paid),
           status: 'completed',
           is_deleted: false,
-          created_at: new Date().toISOString()
+          created_at: donationDate
         };
         setLocalStore('income', [newIncome, ...incomeList]);
+
+        // Also add receipt
+        const receipts = getLocalStore('receipts', []);
+        setLocalStore('receipts', [newIncome, ...receipts]);
       }
 
       if (typeof window !== 'undefined') {
@@ -1972,7 +1963,7 @@ export async function request(endpoint, options = {}) {
             donor_name: cleanName || inc.donor_name,
             mobile: cleanMobile !== undefined ? cleanMobile : inc.mobile,
             address: cleanAddress !== undefined ? cleanAddress : inc.address,
-            amount: !isNaN(newPaid) && newPaid > 0 ? newPaid : (newPaid === 0 ? 0 : inc.amount),
+            amount: !isNaN(newPaid) ? newPaid : inc.amount,
             amount_in_words_mr: !isNaN(newPaid) && newPaid > 0 ? numberToWordsMarathi(newPaid) : inc.amount_in_words_mr,
             amount_in_words_en: !isNaN(newPaid) && newPaid > 0 ? numberToWordsEnglish(newPaid) : inc.amount_in_words_en,
             is_deleted: newPaid === 0
@@ -1981,7 +1972,71 @@ export async function request(endpoint, options = {}) {
         return inc;
       });
 
+      // If no income record existed yet and newPaid > 0, create it!
+      if (!matchedIncome && newPaid > 0) {
+        let maxReceiptNum = 0;
+        localIncome.forEach(inc => {
+          if (inc.receipt_number) {
+            const m = inc.receipt_number.match(/(\d+)$/);
+            if (m) {
+              const n = parseInt(m[1], 10);
+              if (!isNaN(n) && n > maxReceiptNum && n < 100000) maxReceiptNum = n;
+            }
+          }
+        });
+        const count = Math.max(localIncome.length, maxReceiptNum) + 1;
+        const formattedNum = String(count).padStart(6, '0');
+        const settings = getLocalStore('mandal_settings_custom', SHIROL_MANDAL_SETTINGS);
+        const receiptNo = `${settings.receipt_prefix || 'HANUMAN-2026-'}${formattedNum}`;
+        const newInc = {
+          id: Date.now() + 1,
+          transaction_id: `TXN-2026-${formattedNum}`,
+          receipt_number: receiptNo,
+          donor_name: cleanName || origName,
+          donor_id: donorId || Date.now(),
+          mobile: cleanMobile,
+          address: cleanAddress,
+          amount: newPaid,
+          payment_method: bodyData.payment_method || 'cash',
+          category: 'vargani',
+          purpose: 'श्री गणेशोत्सव वर्गणी',
+          collector_name: 'अध्यक्ष (Admin)',
+          amount_in_words_mr: numberToWordsMarathi(newPaid),
+          amount_in_words_en: numberToWordsEnglish(newPaid),
+          status: 'completed',
+          is_deleted: false,
+          created_at: new Date().toISOString()
+        };
+        localIncome = [newInc, ...localIncome];
+      }
+
       setLocalStore('income', localIncome);
+
+      // Synchronize receipts
+      let localReceipts = getLocalStore('receipts', []);
+      localReceipts = localReceipts.map(r => {
+        if (!r) return r;
+        const idMatch = donorId && r.donor_id && String(r.donor_id) === String(donorId);
+        const rNorm = normalizeText(r.donor_name);
+        const origNorm = normalizeText(origName);
+        const newNorm = normalizeText(cleanName);
+        const nameMatch = (origNorm && (rNorm === origNorm || rNorm.includes(origNorm))) ||
+                          (newNorm && (rNorm === newNorm || rNorm.includes(newNorm)));
+        if (idMatch || nameMatch) {
+          return {
+            ...r,
+            donor_name: cleanName || r.donor_name,
+            mobile: cleanMobile !== undefined ? cleanMobile : r.mobile,
+            address: cleanAddress !== undefined ? cleanAddress : r.address,
+            amount: !isNaN(newPaid) ? newPaid : r.amount,
+            amount_in_words_mr: !isNaN(newPaid) && newPaid > 0 ? numberToWordsMarathi(newPaid) : r.amount_in_words_mr,
+            amount_in_words_en: !isNaN(newPaid) && newPaid > 0 ? numberToWordsEnglish(newPaid) : r.amount_in_words_en,
+            is_deleted: newPaid === 0
+          };
+        }
+        return r;
+      });
+      setLocalStore('receipts', localReceipts);
 
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('shirol_data_updated'));
@@ -2074,18 +2129,20 @@ export async function request(endpoint, options = {}) {
         finalDonorsMap.set(key, { ...d });
       } else {
         const exist = finalDonorsMap.get(key);
-        exist.target_amount = Math.max(Number(exist.target_amount) || 0, Number(d.target_amount) || 0);
-        exist.paid_amount = Math.max(Number(exist.paid_amount) || 0, Number(d.paid_amount) || 0);
-        exist.total_donated = Math.max(Number(exist.total_donated) || 0, Number(d.total_donated) || 0);
+        exist.target_amount = Number(d.target_amount !== undefined ? d.target_amount : exist.target_amount);
+        exist.paid_amount = Number(d.paid_amount !== undefined ? d.paid_amount : exist.paid_amount);
+        exist.total_donated = exist.paid_amount;
         exist.pending_amount = Math.max(0, exist.target_amount - exist.paid_amount);
         exist.status = (exist.paid_amount >= exist.target_amount && exist.target_amount > 0) ? 'paid' : (exist.paid_amount > 0 ? 'partial' : 'unpaid');
       }
     });
     const uniqueProcessedDonors = Array.from(finalDonorsMap.values());
 
-    // Summary: totalPaid MUST equal raw income sum to prevent mismatch
+    // Summary: accurately calculate from processed donors and live income
     const totalTarget = uniqueProcessedDonors.reduce((sum, d) => sum + (Number(d.target_amount) || 0), 0);
-    const totalPaid = incomeList.filter(i => !i.is_deleted).reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
+    const donorPaidSum = uniqueProcessedDonors.reduce((sum, d) => sum + (Number(d.paid_amount || d.total_donated) || 0), 0);
+    const incomePaidSum = incomeList.filter(i => !i.is_deleted).reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
+    const totalPaid = Math.max(donorPaidSum, incomePaidSum);
     const totalPending = Math.max(0, totalTarget - totalPaid);
 
     const summary = {

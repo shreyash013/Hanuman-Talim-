@@ -66,7 +66,13 @@ export function DashboardPage() {
   const [stats, setStats] = useState(null);
   const [loansSummary, setLoansSummary] = useState(null);
   const [graphDays, setGraphDays] = useState(7);
-  const [targetAmount, setTargetAmount] = useState(500000);
+  const [targetAmount, setTargetAmount] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('daily_vargani_target') || localStorage.getItem('shirol_target_amount');
+      if (stored && !isNaN(Number(stored)) && Number(stored) > 0) return Number(stored);
+    }
+    return 500000;
+  });
   const [showTargetModal, setShowTargetModal] = useState(false);
   const [tempTarget, setTempTarget] = useState('500000');
   const [selectedReceipt, setSelectedReceipt] = useState(null);
@@ -81,6 +87,9 @@ export function DashboardPage() {
       ]);
       if (res.success && res.data) {
         setStats(res.data);
+        if (res.data.summary?.varganiTarget) {
+          setTargetAmount(Number(res.data.summary.varganiTarget));
+        }
       }
       if (loanRes.success && loanRes.data) {
         setLoansSummary(loanRes.data);
@@ -119,7 +128,8 @@ export function DashboardPage() {
   const pendingExpensesCount = summary.pendingExpensesCount || 0;
   const pendingExpensesAmount = summary.pendingExpensesAmount || 0;
 
-  const progressPct = Math.min(100, Math.round((todayCollection / (targetAmount || 1)) * 1000) / 10);
+  const currentCollection = todayCollection > 0 ? todayCollection : totalIncome;
+  const progressPct = Math.min(100, Math.round(((currentCollection) / (targetAmount || 1)) * 1000) / 10);
 
   const dailyTrendData = (stats?.dailyTrend && stats.dailyTrend.length > 0)
     ? stats.dailyTrend
@@ -146,12 +156,23 @@ export function DashboardPage() {
 
   const COLORS = ['#ea580c', '#6366f1', '#10b981', '#8b5cf6', '#f59e0b'];
 
-  const handleSaveTarget = () => {
+  const handleSaveTarget = async () => {
     const val = Number(tempTarget);
     if (val > 0) {
       setTargetAmount(val);
+      localStorage.setItem('daily_vargani_target', String(val));
+      localStorage.setItem('shirol_target_amount', String(val));
       setShowTargetModal(false);
+      try {
+        await api.post('/dashboard/target', { target: val });
+      } catch (err) {
+        console.warn('Save target note:', err);
+      }
       showToast('आजचे ध्येय (Target) अद्ययावत झाले!', 'success');
+      window.dispatchEvent(new Event('shirol_data_updated'));
+      window.dispatchEvent(new Event('storage'));
+    } else {
+      showToast('कृपया वैध ध्येय रक्कम टाका.', 'warning');
     }
   };
 
@@ -352,7 +373,10 @@ export function DashboardPage() {
           <div className="flex items-center space-x-3">
             <span className="text-xl font-black text-amber-600 dark:text-amber-400">{progressPct}%</span>
             <button
-              onClick={() => setShowTargetModal(true)}
+              onClick={() => {
+                setTempTarget(String(targetAmount));
+                setShowTargetModal(true);
+              }}
               className="text-xs px-3.5 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-amber-700 dark:text-amber-300 rounded-xl font-bold border border-slate-200 dark:border-slate-700 transition"
             >
               ध्येय बदला
@@ -367,9 +391,17 @@ export function DashboardPage() {
             style={{ width: `${progressPct}%` }}
           />
         </div>
-        <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400 mt-2 font-semibold">
-          <span>जमा: <strong className="text-emerald-600 dark:text-emerald-400">₹{todayCollection.toLocaleString('en-IN')}</strong></span>
-          <span>उर्वरित: <strong className="text-amber-700 dark:text-amber-300">₹{Math.max(0, targetAmount - todayCollection).toLocaleString('en-IN')}</strong></span>
+        <div className="flex flex-col sm:flex-row sm:justify-between text-xs text-slate-600 dark:text-slate-400 mt-2 font-semibold gap-1">
+          <span>
+            {todayCollection > 0 ? (
+              <>आजची जमा: <strong className="text-emerald-600 dark:text-emerald-400">₹{todayCollection.toLocaleString('en-IN')}</strong> {totalIncome > todayCollection && <span className="text-[11px] text-slate-400 font-normal ml-1">(एकूण जमा: ₹{totalIncome.toLocaleString('en-IN')})</span>}</>
+            ) : totalIncome > 0 ? (
+              <>एकूण जमा: <strong className="text-emerald-600 dark:text-emerald-400">₹{totalIncome.toLocaleString('en-IN')}</strong> <span className="text-[11px] text-slate-400 font-normal ml-1">(आज: ₹0)</span></>
+            ) : (
+              <>जमा: <strong className="text-emerald-600 dark:text-emerald-400">₹0</strong></>
+            )}
+          </span>
+          <span>उर्वरित: <strong className="text-amber-700 dark:text-amber-300">₹{Math.max(0, targetAmount - currentCollection).toLocaleString('en-IN')}</strong></span>
         </div>
       </div>
 

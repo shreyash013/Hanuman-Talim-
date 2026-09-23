@@ -83,6 +83,7 @@ export async function getDashboardStats(req, res) {
           totalDonors: donorsResult.count || 0,
           totalTransactions: incomes.length + expenses.length,
           todayCollection: sum(incomes.filter(r => istDateKey(r.created_at) === today)),
+          varganiTarget: Number(settingsResult.data?.vargani_target || settingsResult.data?.daily_target || 500000),
           todayExpense: sum(approvedExpenses.filter(r => istDateKey(r.created_at) === today)),
           pendingExpensesCount: pendingExpenses.length,
           pendingExpensesAmount: sum(pendingExpenses),
