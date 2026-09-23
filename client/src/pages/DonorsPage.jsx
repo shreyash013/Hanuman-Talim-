@@ -128,6 +128,7 @@ export function DonorsPage() {
   const [area, setArea] = useState('');
   const [singleAmount, setSingleAmount] = useState('2000');
   const [paidAmount, setPaidAmount] = useState('2000');
+  const [donationDate, setDonationDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -265,6 +266,7 @@ export function DonorsPage() {
         area: area.trim() || 'शिरोळ',
         target_amount: targetAmt,
         paid_amount: paidAmt,
+        created_at: new Date((donationDate || new Date().toISOString().split('T')[0]) + 'T12:00:00').toISOString(),
         notes: notes.trim()
       });
 
@@ -279,6 +281,7 @@ export function DonorsPage() {
         setNotes('');
         setSingleAmount('2000');
         setPaidAmount('2000');
+        setDonationDate(new Date().toISOString().split('T')[0]);
         fetchDonors();
       }
     } catch (err) {
@@ -1372,9 +1375,26 @@ export function DonorsPage() {
           </div>
 
           <div>
-            <label className="text-amber-400 block mb-1 font-bold">नक्की केलेली वर्गणी रक्कम (Target Amount)</label>
+            <label className="text-slate-300 block mb-1 font-bold">
+              📅 नोंद / पावती दिनांक (Donation Date) *
+            </label>
+            <input
+              type="date"
+              required
+              value={donationDate}
+              onChange={(e) => setDonationDate(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-amber-500 font-bold"
+            />
+            <span className="text-[10px] text-slate-500">आजचा दिनांक आपोआप निवडला आहे (दिवसानुसार बदलू शकता)</span>
+          </div>
+
+          <div>
+            <label className="text-amber-400 block mb-1 font-bold">
+              💰 नक्की केलेली वर्गणी रक्कम (Fixed / Target Amount ₹) *
+            </label>
             <input
               type="number"
+              required
               value={singleAmount}
               onChange={(e) => setSingleAmount(e.target.value)}
               placeholder="2000"
@@ -1414,7 +1434,9 @@ export function DonorsPage() {
           </div>
 
           <div>
-            <label className="text-emerald-400 block mb-1 font-bold">जमा केलेली रक्कम (Paid / Collected Amount)</label>
+            <label className="text-emerald-400 block mb-1 font-bold">
+              ✅ जमा केलेली रक्कम (Paid / Collected Amount ₹) *
+            </label>
             <input
               type="number"
               value={paidAmount}

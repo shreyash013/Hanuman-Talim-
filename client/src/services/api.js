@@ -270,10 +270,10 @@ export function autoHealAndRenumberReceipts() {
   }
 }
 
-export const DATA_CLEAN_VERSION = '2026-09-23-v38-clean-authentic';
+export const DATA_CLEAN_VERSION = '2026-09-23-v-clean-slate-donors';
 
 let isRecovering = false;
-// Data recovery to ensure valid baseline mandal settings and structure
+// Data recovery to ensure clean slate for donors and valid baseline mandal settings
 export function ensureDataRecovery() {
   if (typeof window === 'undefined' || isRecovering) return;
   isRecovering = true;
@@ -285,14 +285,30 @@ export function ensureDataRecovery() {
 
     const currentVer = localStorage.getItem('shirol_clean_version');
 
-    // Restore authentic 38 donors and authentic receipts
+    // Clean slate: erase all donors, income and receipts when version changes
     if (currentVer !== DATA_CLEAN_VERSION) {
-      localStorage.setItem('shirol_income', JSON.stringify(CANONICAL_SHIROL_INCOME));
-      localStorage.setItem('shirol_donors', JSON.stringify(CANONICAL_SHIROL_DONORS));
+      localStorage.setItem('shirol_income', JSON.stringify([]));
+      localStorage.setItem('shirol_donors', JSON.stringify([]));
       localStorage.removeItem('shirol_receipts');
       localStorage.removeItem('shirol_deleted_donors');
       localStorage.removeItem('shirol_receipt_legacy_map');
       localStorage.setItem('shirol_clean_version', DATA_CLEAN_VERSION);
+    }
+
+    // Sanitize any 'मयुर बागल' in local expenses to 'श्रेयश गवडे (खजिनदार)'
+    const rawExpenses = localStorage.getItem('shirol_expenses');
+    if (rawExpenses && (rawExpenses.includes('मयुर') || rawExpenses.includes('बागल') || rawExpenses.includes('Mayur'))) {
+      try {
+        const parsedExpenses = JSON.parse(rawExpenses);
+        if (Array.isArray(parsedExpenses)) {
+          const sanitizedExpenses = parsedExpenses.map(exp => ({
+            ...exp,
+            requested_by_name: (exp.requested_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गवडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गवडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गवडे (खजिनदार)'),
+            approved_by_name: (exp.approved_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गवडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गवडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गवडे (खजिनदार)')
+          }));
+          localStorage.setItem('shirol_expenses', JSON.stringify(sanitizedExpenses));
+        }
+      } catch {}
     }
 
     // Purge any accidental Pruthviraj Gavade tombstone from localStorage
@@ -519,70 +535,31 @@ export async function autoSyncFromServer() {
     const res = await fetch('https://hanuman-talim-api.onrender.com/api/sync/full-data');
     if (res.ok) {
       const json = await res.json();
-      if (json && json.data && Array.isArray(json.data.income) && json.data.income.length > 0) {
+      if (json && json.data) {
         const serverIncome = (json.data.income || []).filter(inc => inc && !inc.is_deleted);
         const serverDonors = (json.data.donors || []).filter(d => d && d.name);
         const serverReceipts = (json.data.receipts || []).filter(r => r && !r.is_deleted);
+        const serverExpenses = (json.data.expenses || []).filter(e => e && !e.is_deleted);
 
-        // Merge server donors with canonical donors so baseline authentic 51 donors are NEVER lost
-        const mergedDonorsMap = new Map();
-        CANONICAL_SHIROL_DONORS.forEach(d => {
-          if (!d || !d.name) return;
-          const k = normalizeText(d.name) || String(d.id);
-          mergedDonorsMap.set(k, { ...d });
-        });
-        serverDonors.forEach(d => {
-          if (!d || !d.name) return;
-          const k = normalizeText(d.name) || String(d.id);
-          if (mergedDonorsMap.has(k)) {
-            const exist = mergedDonorsMap.get(k);
-            mergedDonorsMap.set(k, {
-              ...exist,
-              ...d,
-              paid_amount: Math.max(Number(exist.paid_amount) || 0, Number(d.paid_amount) || 0),
-              target_amount: Math.max(Number(exist.target_amount) || 0, Number(d.target_amount) || 0)
-            });
-          } else {
-            mergedDonorsMap.set(k, { ...d });
-          }
-        });
-        const canonicalDonors = Array.from(mergedDonorsMap.values());
+        // Sanitize expenses
+        const sanitizedExpenses = serverExpenses.map(exp => ({
+          ...exp,
+          requested_by_name: (exp.requested_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गवडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गवडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गवडे (खजिनदार)'),
+          approved_by_name: (exp.approved_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गवडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गवडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गवडे (खजिनदार)')
+        }));
 
-        // Merge income transactions
-        const mergedIncomeMap = new Map();
-        CANONICAL_SHIROL_INCOME.forEach(inc => {
-          if (!inc) return;
-          const k = inc.receipt_number || inc.transaction_id || String(inc.id);
-          mergedIncomeMap.set(k, { ...inc });
-        });
-        serverIncome.forEach(inc => {
-          if (!inc) return;
-          const k = inc.receipt_number || inc.transaction_id || String(inc.id);
-          mergedIncomeMap.set(k, { ...inc });
-        });
-        const canonicalIncome = Array.from(mergedIncomeMap.values());
-
-        // Sort newest first
-        canonicalIncome.sort((a, b) => {
-          const getNum = (item) => {
-            const m = (item.receipt_number || '').match(/(\d+)$/);
-            return m ? parseInt(m[1], 10) : 0;
-          };
-          const numA = getNum(a);
-          const numB = getNum(b);
-          if (numA !== numB) return numB - numA;
-          return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
-        });
-
-        localStorage.setItem('shirol_income', JSON.stringify(canonicalIncome));
-        localStorage.setItem('shirol_donors', JSON.stringify(canonicalDonors));
+        localStorage.setItem('shirol_income', JSON.stringify(serverIncome));
+        localStorage.setItem('shirol_donors', JSON.stringify(serverDonors));
         localStorage.setItem('shirol_receipts', JSON.stringify(serverReceipts));
+        if (sanitizedExpenses.length > 0) {
+          localStorage.setItem('shirol_expenses', JSON.stringify(sanitizedExpenses));
+        }
         localStorage.setItem('shirol_clean_version', DATA_CLEAN_VERSION);
 
         window.dispatchEvent(new Event('shirol_data_updated'));
         window.dispatchEvent(new Event('storage'));
         broadcastDataChange();
-        return { success: true, count: canonicalIncome.length };
+        return { success: true, count: serverIncome.length };
       }
     }
   } catch (err) {
@@ -616,6 +593,14 @@ function getLocalStore(key, defaultValue = []) {
     const fallback = key === 'income' ? CANONICAL_SHIROL_INCOME : key === 'donors' ? CANONICAL_SHIROL_DONORS : defaultValue;
     const item = localStorage.getItem(`shirol_${key}`);
     let data = item ? JSON.parse(item) : fallback;
+
+    if (key === 'expenses' && Array.isArray(data)) {
+      data = data.map(exp => ({
+        ...exp,
+        requested_by_name: (exp.requested_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गवडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गवडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गवडे (खजिनदार)'),
+        approved_by_name: (exp.approved_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गवडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गवडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गवडे (खजिनदार)')
+      }));
+    }
 
     if (key === 'income' && Array.isArray(data)) {
       data = data.filter(inc => inc && !inc.is_deleted);

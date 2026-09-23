@@ -21,7 +21,6 @@ import {
   Trash2,
   AlertTriangle,
   FileCheck,
-  ScanLine,
   Building,
   Target,
   Sparkles,
@@ -51,9 +50,7 @@ export function ExpensesPage() {
 
   // Modal State
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showOcrModal, setShowOcrModal] = useState(false);
   const [showEditBudgetModal, setShowEditBudgetModal] = useState(false);
-  const [ocrScanning, setOcrScanning] = useState(false);
   const [previewAttachment, setPreviewAttachment] = useState(null); // { url, type, title }
 
   // Show / Hide Budget Cards State
@@ -86,6 +83,7 @@ export function ExpensesPage() {
 
   // Form State
   const [expenseCategory, setExpenseCategory] = useState('mandap');
+  const [customCategoryName, setCustomCategoryName] = useState('');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
@@ -313,21 +311,6 @@ export function ExpensesPage() {
     reader.readAsDataURL(file);
   };
 
-  const handleSimulateOcr = () => {
-    setOcrScanning(true);
-    setTimeout(() => {
-      setPaidTo('रॉयल लाइट डिझायनर्स शिरोळ');
-      setBillNumber('BILL-2026-88');
-      setAmount('12500');
-      setDescription('गणेशोत्सव मुख्य मंडप विद्युत रोषणाई बिल');
-      setExpenseCategory('mandap');
-      setOcrScanning(false);
-      setShowOcrModal(false);
-      setShowAddModal(true);
-      showToast('AI OCR: बिलातील तपशील व रक्कम आपोआप भरली!', 'success');
-    }, 1500);
-  };
-
   const handleAddExpense = async (e) => {
     e.preventDefault();
     if (!description.trim() || !paidTo.trim() || !amount || Number(amount) <= 0) {
@@ -335,12 +318,18 @@ export function ExpensesPage() {
       return;
     }
 
+    if (expenseCategory === 'custom' && !customCategoryName.trim()) {
+      showToast('कृपया सानुकूल वर्गवारीचे नाव टाका.', 'warning');
+      return;
+    }
+
     try {
       setIsSubmitting(true);
+      const finalCategory = expenseCategory === 'custom' ? (customCategoryName.trim() || 'इतर सानुकूल खर्च') : expenseCategory;
       const formData = new FormData();
       formData.append('description', description.trim());
       formData.append('amount', Number(amount));
-      formData.append('category', expenseCategory);
+      formData.append('category', finalCategory);
       formData.append('payment_method', paymentMethod);
       formData.append('paid_to', paidTo.trim());
       formData.append('bill_number', billNumber.trim());
@@ -376,6 +365,8 @@ export function ExpensesPage() {
     setPaidTo('');
     setBillNumber('');
     setNotes('');
+    setExpenseCategory('mandap');
+    setCustomCategoryName('');
     setFileAttachment(null);
     setFilePreviewUrl('');
     setFileType(null);
@@ -431,13 +422,6 @@ export function ExpensesPage() {
           >
             {showBudgetCards ? <EyeOff className="w-4 h-4 text-rose-400" /> : <Eye className="w-4 h-4 text-emerald-400" />}
             <span className="hidden sm:inline">{showBudgetCards ? 'बजेट लपवा' : 'बजेट दाखवा'}</span>
-          </button>
-          <button
-            onClick={() => setShowOcrModal(true)}
-            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded-xl font-bold text-xs border border-slate-700 shadow-md transition flex items-center space-x-1.5"
-          >
-            <ScanLine className="w-4 h-4 text-amber-400" />
-            <span>OCR बिल स्कॅन</span>
           </button>
           <button
             onClick={() => setShowAddModal(true)}
@@ -592,6 +576,9 @@ export function ExpensesPage() {
                 <option key={b.category} value={b.category}>{b.name}</option>
               ))}
               <option value="other">इतर खर्च (Other)</option>
+              {Array.from(new Set(currentTabExpenses.map(e => e.category).filter(c => c && !rawBudgets.some(b => b.category === c) && c !== 'other'))).map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
             </select>
           </div>
           <button
@@ -657,7 +644,7 @@ export function ExpensesPage() {
                       {e.description}
                       <div className="flex items-center space-x-2 text-[10px] font-normal text-slate-400 mt-0.5">
                         {e.bill_number && <span>बिल क्र: {e.bill_number}</span>}
-                        {e.requested_by_name && <span>• नोंदणी: {e.requested_by_name}</span>}
+                        {e.requested_by_name && <span>• नोंदणी: {e.requested_by_name.replace(/मयुर बागल/g, 'श्रेयश गवडे').replace(/Mayur Bagal/gi, 'श्रेयश गवडे')}</span>}
                       </div>
                     </td>
                     <td className="p-4 text-slate-300">{e.paid_to}</td>
@@ -816,12 +803,13 @@ export function ExpensesPage() {
                   <select
                     value={expenseCategory}
                     onChange={(e) => setExpenseCategory(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-amber-500"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-amber-500 font-medium"
                   >
                     {rawBudgets.map(b => (
                       <option key={b.category} value={b.category}>{b.name}</option>
                     ))}
                     <option value="other">इतर खर्च (Other Expense)</option>
+                    <option value="custom">✏️ सानुकूल वर्गवारी (Custom Category)</option>
                   </select>
                 </div>
                 <div>
@@ -835,6 +823,22 @@ export function ExpensesPage() {
                   />
                 </div>
               </div>
+
+              {expenseCategory === 'custom' && (
+                <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-2xl space-y-1">
+                  <label className="text-amber-400 block font-bold text-xs">
+                    ✏️ सानुकूल वर्गवारीचे नाव व तपशील (Custom Category Name / Description) *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={customCategoryName}
+                    onChange={(e) => setCustomCategoryName(e.target.value)}
+                    placeholder="उदा. स्वागत कमान, हार तुरे, ध्वज, किंवा इतर सानुकूल खर्च..."
+                    className="w-full bg-slate-950 border border-amber-500/60 rounded-xl px-3.5 py-2 text-white font-bold focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+              )}
 
               {/* File Attachment Upload Input (Image or PDF) */}
               <div>
@@ -904,27 +908,6 @@ export function ExpensesPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* OCR Scanner Simulation Modal */}
-      {showOcrModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-sm text-center space-y-4">
-            <div className="w-16 h-16 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto border border-amber-500/30">
-              {ocrScanning ? <Loader2 className="w-8 h-8 animate-spin" /> : <ScanLine className="w-8 h-8" />}
-            </div>
-            <h3 className="font-bold text-white text-base">AI OCR बिल स्कॅनर (Bill Scanner)</h3>
-            <p className="text-xs text-slate-400">बिलाचा फोटो किंवा PDF अपलोड करून तपशील स्कॅन करा.</p>
-
-            <button
-              onClick={handleSimulateOcr}
-              disabled={ocrScanning}
-              className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow transition"
-            >
-              {ocrScanning ? 'स्कॅन सुरू आहे...' : 'स्कॅन सुरू करा (Simulate OCR)'}
-            </button>
           </div>
         </div>
       )}

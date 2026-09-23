@@ -61,6 +61,7 @@ export function IncomePage() {
   const [purpose, setPurpose] = useState('');
   const [notes, setNotes] = useState('');
   const [attachment, setAttachment] = useState(null);
+  const [incomeDate, setIncomeDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form State (Edit)
@@ -199,6 +200,7 @@ export function IncomePage() {
       formData.append('payment_method', incomePaymentMethod);
       formData.append('purpose', purpose.trim() || 'गणेशोत्सव सहकार्य');
       formData.append('notes', notes.trim());
+      formData.append('created_at', new Date((incomeDate || new Date().toISOString().split('T')[0]) + 'T12:00:00').toISOString());
       if (attachment) {
         formData.append('attachment', attachment);
       }
@@ -216,6 +218,7 @@ export function IncomePage() {
         setPurpose('');
         setNotes('');
         setAttachment(null);
+        setIncomeDate(new Date().toISOString().split('T')[0]);
         fetchIncome();
         if (res.data?.receipt) {
           const finalReceipt = {
@@ -557,6 +560,17 @@ export function IncomePage() {
                 placeholder="98230XXXXX"
                 maxLength={10}
                 className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs outline-none focus:ring-2 focus:ring-amber-500"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">📅 पावती / नोंद दिनांक (Date) *</label>
+              <input
+                type="date"
+                required
+                value={incomeDate}
+                onChange={(e) => setIncomeDate(e.target.value)}
+                className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold outline-none focus:ring-2 focus:ring-amber-500"
               />
             </div>
 

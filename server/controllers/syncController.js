@@ -475,116 +475,37 @@ export async function autoSyncAll(req, res) {
   }
 }
 
-export async function restorePruthvirajGavadeAndFixContinuity() {
+export async function wipeDonorsAndIncome(req, res) {
   try {
-    // 1. Find or create Pruthviraj Gavade in donors table
-    const { data: dRows } = await db.from('donors')
-      .select('id, name, target_amount, paid_amount')
-      .ilike('name', '%Pruthvi%')
-      .limit(1);
+    // 1. Delete all receipts, income transactions, and donors
+    await db.from('receipts').delete().neq('id', 0);
+    await db.from('income_transactions').delete().neq('id', 0);
+    await db.from('donors').delete().neq('id', 0);
 
-    let donorId = dRows?.[0]?.id;
-    if (!donorId) {
-      const { data: insD } = await db.from('donors').insert({
-        name: 'Pruthviraj Gavade',
-        mobile: '',
-        email: '',
-        address: 'नदीवेस शिरोळ',
-        area: 'नदीवेस शिरोळ',
-        target_amount: 3000,
-        paid_amount: 2501,
-        total_donated: 2501,
-        donations_count: 1,
-        status: 'partial',
-        notes: 'वर्गणी नोंदणी'
-      }).select('id').single();
-      donorId = insD?.id;
-    } else {
-      await db.from('donors').update({
-        name: 'Pruthviraj Gavade',
-        area: 'नदीवेस शिरोळ',
-        target_amount: 3000,
-        paid_amount: 2501,
-        total_donated: 2501,
-        donations_count: 1,
-        status: 'partial'
-      }).eq('id', donorId);
+    // 2. Sanitize Mayur Bagal in expense_transactions to Shreyash Gavade
+    await db.from('expense_transactions').update({ requested_by_name: 'श्रेयश गवडे (खजिनदार)' }).ilike('requested_by_name', '%मयुर%');
+    await db.from('expense_transactions').update({ approved_by_name: 'श्रेयश गवडे (खजिनदार)' }).ilike('approved_by_name', '%मयुर%');
+    await db.from('expense_transactions').update({ requested_by_name: 'श्रेयश गवडे (खजिनदार)' }).ilike('requested_by_name', '%Mayur%');
+    await db.from('expense_transactions').update({ approved_by_name: 'श्रेयश गवडे (खजिनदार)' }).ilike('approved_by_name', '%Mayur%');
+
+    if (res) {
+      return res.json({
+        success: true,
+        message: 'सर्व देणगीदार, जमा पावत्या व उत्पन्न नोंदी यशस्वीरित्या हटवल्या! (All donors & income wiped, expenses preserved intact)'
+      });
     }
-
-    // 2. Ensure Transaction 37 / Pruthviraj transaction is un-deleted (is_deleted = false)
-    const { data: txRows } = await db.from('income_transactions')
-      .select('id, receipt_number')
-      .or(`id.eq.37,donor_name.ilike.%Pruthvi%,receipt_number.eq.HANUMAN-2026-000016`);
-
-    let txId = null;
-    if (txRows && txRows.length > 0) {
-      txId = txRows[0].id;
-      for (const tx of txRows) {
-        await db.from('income_transactions').update({
-          is_deleted: false,
-          donor_id: donorId,
-          donor_name: 'Pruthviraj Gavade',
-          amount: 2501,
-          receipt_number: 'HANUMAN-2026-000016',
-          transaction_id: 'TXN-2026-000016',
-          status: 'completed'
-        }).eq('id', tx.id);
-      }
-    } else {
-      const { data: insTx } = await db.from('income_transactions').insert({
-        id: 37,
-        transaction_id: 'TXN-2026-000016',
-        donor_id: donorId,
-        donor_name: 'Pruthviraj Gavade',
-        amount: 2501,
-        payment_method: 'cash',
-        category: 'vargani',
-        purpose: 'श्री गणेशोत्सव वर्गणी',
-        collector_name: 'अध्यक्ष (Admin)',
-        receipt_number: 'HANUMAN-2026-000016',
-        status: 'completed',
-        is_deleted: false
-      }).select('id').single();
-      txId = insTx?.id;
+    return { success: true };
+  } catch (err) {
+    console.error('wipeDonorsAndIncome error:', err);
+    if (res) {
+      return res.status(500).json({ success: false, message: err.message || err });
     }
-
-    // 3. Ensure receipt exists for HANUMAN-2026-000016 and link receipt_id
-    const { data: recRows } = await db.from('receipts')
-      .select('id')
-      .eq('receipt_number', 'HANUMAN-2026-000016')
-      .limit(1);
-
-    let recId = recRows?.[0]?.id;
-    if (!recId && txId) {
-      const verificationCode = `V-${Math.random().toString(36).substring(2, 8).toUpperCase()}-${Date.now().toString(36).slice(-3).toUpperCase()}`;
-      const { data: insRec } = await db.from('receipts').insert({
-        receipt_number: 'HANUMAN-2026-000016',
-        transaction_id: txId,
-        donor_name: 'Pruthviraj Gavade',
-        amount: 2501,
-        amount_in_words_mr: 'दोन हजार पाचशे एक रुपये फक्त',
-        amount_in_words_en: 'Two Thousand Five Hundred One Rupees Only',
-        payment_method: 'cash',
-        category: 'vargani',
-        purpose: 'श्री गणेशोत्सव वर्गणी',
-        collector_name: 'अध्यक्ष (Admin)',
-        verification_code: verificationCode
-      }).select('id').single();
-      recId = insRec?.id;
-    }
-
-    if (recId && txId) {
-      await db.from('income_transactions').update({ receipt_id: recId }).eq('id', txId);
-    }
-  } catch (e) {
-    console.warn('restorePruthvirajGavadeAndFixContinuity note:', e.message);
+    return { success: false, error: err.message };
   }
 }
 
 export async function getCloudFullData(req, res) {
   try {
-    await restorePruthvirajGavadeAndFixContinuity();
-
     const [
       incomeRes,
       expensesRes,
@@ -603,11 +524,17 @@ export async function getCloudFullData(req, res) {
       db.from('committee_members').select('*').order('display_order', { ascending: true })
     ]);
 
+    const sanitizedExpenses = (expensesRes.data || []).map(exp => ({
+      ...exp,
+      requested_by_name: (exp.requested_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गवडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गवडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गवडे (खजिनदार)'),
+      approved_by_name: (exp.approved_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गवडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गवडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गवडे (खजिनदार)')
+    }));
+
     return res.json({
       success: true,
       data: {
         income: incomeRes.data || [],
-        expenses: expensesRes.data || [],
+        expenses: sanitizedExpenses,
         donors: donorsRes.data || [],
         loans: loansRes.data || [],
         receipts: receiptsRes.data || [],
@@ -623,3 +550,4 @@ export async function getCloudFullData(req, res) {
     });
   }
 }
+

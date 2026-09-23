@@ -24,7 +24,7 @@ function formatUserRoleAndName(u) {
   }
 
   // Check if Treasurer
-  if (email === 'shreyashgavade7@gmail.com' || email === 'treasurer@mandal.org' || email === 'treasurer@ganeshmandal.org' || u.role === 'treasurer' || name.includes('मयुर') || name.includes('बागल') || name.includes('Mayur') || name.includes('श्रेयश') || name.includes('श्रेयस')) {
+  if (email === 'shreyashgavade7@gmail.com' || email === 'treasurer@mandal.org' || email === 'treasurer@ganeshmandal.org' || u.role === 'treasurer' || name.includes('श्रेयश') || name.includes('श्रेयस')) {
     return {
       ...u,
       id: u.id || 102,

@@ -38,6 +38,7 @@ router.get('/public/festival', festivalController.getFestivalInfo);
 // Auto-Sync Routes (Real-time automatic cloud sync & cross-device backup)
 router.post('/sync/auto-sync-all', syncController.autoSyncAll);
 router.get('/sync/full-data', syncController.getCloudFullData);
+router.post('/sync/wipe-donors-and-income', syncController.wipeDonorsAndIncome);
 
 router.use(authenticate);
 
