@@ -297,13 +297,27 @@ export function ensureDataRecovery() {
       localStorage.setItem('shirol_clean_version', DATA_CLEAN_VERSION);
     }
 
-    // Sanitize any 'मयुर बागल' or 'श्रेयश गवडे' in local expenses to 'श्रेयश गावडे (खजिनदार)'
+    // Sanitize any 'मयुर बागल' or 'श्रेयश गवडे' in local expenses to 'श्रेयश गावडे (खजिनदार)' and purge loan/deleted records
     const rawExpenses = localStorage.getItem('shirol_expenses');
-    if (rawExpenses && (rawExpenses.includes('मयुर') || rawExpenses.includes('बागल') || rawExpenses.includes('Mayur') || rawExpenses.includes('श्रेयश गवडे'))) {
+    if (rawExpenses) {
       try {
         const parsedExpenses = JSON.parse(rawExpenses);
         if (Array.isArray(parsedExpenses)) {
-          const sanitizedExpenses = parsedExpenses.map(exp => ({
+          // 1. Remove loan repayment records (loans must NEVER be added to expenses)
+          const nonLoanExpenses = parsedExpenses.filter(exp =>
+            exp &&
+            exp.category !== 'loan_repayment' &&
+            !(exp.expense_id && String(exp.expense_id).startsWith('EXP-LOAN-')) &&
+            !(exp.description && (exp.description.includes('कर्ज / उधारी परतफेड') || exp.description.includes('EXP-LOAN')))
+          );
+          // 2. Remove any previously deleted expenses
+          const rawDel = localStorage.getItem('shirol_deleted_expenses');
+          const delList = rawDel ? JSON.parse(rawDel) : [];
+          const delSet = new Set(delList.map(d => String(d.expense_id || d.id || d)).filter(Boolean));
+          const finalExpenses = nonLoanExpenses.filter(exp =>
+            !delSet.has(String(exp.id)) && !delSet.has(String(exp.expense_id))
+          );
+          const sanitizedExpenses = finalExpenses.map(exp => ({
             ...exp,
             requested_by_name: (exp.requested_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गावडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गावडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गावडे (खजिनदार)').replace(/श्रेयश गवडे/g, 'श्रेयश गावडे'),
             approved_by_name: (exp.approved_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गावडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गावडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गावडे (खजिनदार)').replace(/श्रेयश गवडे/g, 'श्रेयश गावडे')
@@ -527,11 +541,19 @@ export async function autoSyncAllToServer() {
     const rawReceipts = localStorage.getItem('shirol_receipts');
     const rawMembers = localStorage.getItem('shirol_members');
     const rawDeletedDonors = localStorage.getItem('shirol_deleted_donors');
+    const rawDeletedExpenses = localStorage.getItem('shirol_deleted_expenses');
     const rawSettings = localStorage.getItem('shirol_mandal_settings_custom');
 
     const donors = rawDonors ? JSON.parse(rawDonors) : CANONICAL_SHIROL_DONORS;
     const income = rawIncome ? JSON.parse(rawIncome) : CANONICAL_SHIROL_INCOME;
-    const expenses = rawExpenses ? JSON.parse(rawExpenses) : [];
+    const rawExpList = rawExpenses ? JSON.parse(rawExpenses) : [];
+    // Ensure loans are NEVER sent as expenses
+    const expenses = rawExpList.filter(e =>
+      e &&
+      e.category !== 'loan_repayment' &&
+      !(e.expense_id && String(e.expense_id).startsWith('EXP-LOAN-')) &&
+      !(e.description && (e.description.includes('कर्ज / उधारी परतफेड') || e.description.includes('EXP-LOAN')))
+    );
     const loans = rawLoans ? JSON.parse(rawLoans) : [];
     const receipts = rawReceipts ? JSON.parse(rawReceipts) : [];
     const members = rawMembers ? JSON.parse(rawMembers) : [];
@@ -555,6 +577,23 @@ export async function autoSyncAllToServer() {
       }
     }
 
+    // Flatten deleted_expenses for server compatibility
+    const parsedDeletedExp = rawDeletedExpenses ? JSON.parse(rawDeletedExpenses) : [];
+    const deleted_expenses = [];
+    if (Array.isArray(parsedDeletedExp)) {
+      for (const item of parsedDeletedExp) {
+        if (!item) continue;
+        if (typeof item === 'string' || typeof item === 'number') {
+          deleted_expenses.push({ id: item, expense_id: item });
+        } else if (typeof item === 'object') {
+          deleted_expenses.push({
+            id: item.id || null,
+            expense_id: item.expense_id || null
+          });
+        }
+      }
+    }
+
     const res = await fetch('https://hanuman-talim-api.onrender.com/api/sync/auto-sync-all', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -566,7 +605,8 @@ export async function autoSyncAllToServer() {
         receipts,
         members,
         settings,
-        deleted_donors
+        deleted_donors,
+        deleted_expenses
       })
     });
     if (res.ok) {
@@ -599,7 +639,24 @@ export async function autoSyncFromServer() {
         let serverLoans = (json.data.loans || []).filter(l => l && !l.is_deleted);
         let serverMembers = (json.data.members || []).filter(m => m && m.name);
 
-        // Sanitize expenses
+        // 1. Exclude any loan repayment records (loans must NEVER be in expenses)
+        serverExpenses = serverExpenses.filter(e =>
+          e.category !== 'loan_repayment' &&
+          !(e.expense_id && String(e.expense_id).startsWith('EXP-LOAN-')) &&
+          !(e.description && (e.description.includes('कर्ज / उधारी परतफेड') || e.description.includes('EXP-LOAN')))
+        );
+
+        // 2. Exclude locally deleted expenses so they NEVER resurrect on sync
+        const rawDelExp = localStorage.getItem('shirol_deleted_expenses');
+        const delExpList = rawDelExp ? JSON.parse(rawDelExp) : [];
+        if (Array.isArray(delExpList) && delExpList.length > 0) {
+          const delExpSet = new Set(delExpList.map(d => String(d.expense_id || d.id || d)).filter(Boolean));
+          serverExpenses = serverExpenses.filter(e =>
+            !delExpSet.has(String(e.id)) && !delExpSet.has(String(e.expense_id))
+          );
+        }
+
+        // 3. Sanitize expenses
         const sanitizedExpenses = serverExpenses.map(exp => ({
           ...exp,
           requested_by_name: (exp.requested_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गावडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गावडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गावडे (खजिनदार)').replace(/श्रेयश गवडे/g, 'श्रेयश गावडे'),
@@ -609,9 +666,7 @@ export async function autoSyncFromServer() {
         localStorage.setItem('shirol_income', JSON.stringify(serverIncome));
         localStorage.setItem('shirol_donors', JSON.stringify(serverDonors));
         localStorage.setItem('shirol_receipts', JSON.stringify(serverReceipts));
-        if (sanitizedExpenses.length > 0) {
-          localStorage.setItem('shirol_expenses', JSON.stringify(sanitizedExpenses));
-        }
+        localStorage.setItem('shirol_expenses', JSON.stringify(sanitizedExpenses));
         if (serverLoans.length > 0) {
           localStorage.setItem('shirol_loans', JSON.stringify(serverLoans));
         }
@@ -708,6 +763,20 @@ function getLocalStore(key, defaultValue = []) {
     let data = item ? JSON.parse(item) : fallback;
 
     if (key === 'expenses' && Array.isArray(data)) {
+      // 1. Exclude loan repayment records (loans must NEVER be in expenses)
+      data = data.filter(exp =>
+        exp &&
+        exp.category !== 'loan_repayment' &&
+        !(exp.expense_id && String(exp.expense_id).startsWith('EXP-LOAN-')) &&
+        !(exp.description && (exp.description.includes('कर्ज / उधारी परतफेड') || exp.description.includes('EXP-LOAN')))
+      );
+      // 2. Exclude locally deleted expenses
+      const rawDel = localStorage.getItem('shirol_deleted_expenses');
+      const delList = rawDel ? JSON.parse(rawDel) : [];
+      if (Array.isArray(delList) && delList.length > 0) {
+        const delSet = new Set(delList.map(d => String(d.expense_id || d.id || d)).filter(Boolean));
+        data = data.filter(exp => !delSet.has(String(exp.id)) && !delSet.has(String(exp.expense_id)));
+      }
       data = data.map(exp => ({
         ...exp,
         requested_by_name: (exp.requested_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गावडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गावडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गावडे (खजिनदार)').replace(/श्रेयश गवडे/g, 'श्रेयश गावडे'),
@@ -907,27 +976,7 @@ export async function request(endpoint, options = {}) {
 
       setLocalStore('loans', loansList);
 
-      // Automatically add loan repayment to Expenses
-      if (targetLoan && (targetLoan.type === 'borrowed' || !targetLoan.type) && repayAmount > 0) {
-        const expensesList = getLocalStore('expenses', []);
-        const expCount = expensesList.length + 1;
-        const newExpense = {
-          id: Date.now(),
-          expense_id: `EXP-LOAN-${String(expCount).padStart(4, '0')}`,
-          category: 'loan_repayment',
-          paid_to: targetLoan.person_name,
-          amount: repayAmount,
-          payment_method: bodyData.payment_method || 'cash',
-          description: `कर्ज / उधारी परतफेड: ${targetLoan.person_name} (${targetLoan.remaining_amount === 0 ? 'पूर्ण फेडली' : 'अंशतः परतफेड'}${bodyData.notes ? ` - ${bodyData.notes}` : ''})`,
-          notes: bodyData.notes || 'कर्ज परतफेड',
-          status: 'approved',
-          approved_by_name: 'खजिनदार',
-          created_at: new Date().toISOString()
-        };
-        setLocalStore('expenses', [newExpense, ...expensesList]);
-      }
-
-      return { success: true, message: 'उधारी परतफेड नोंदवली व खर्चात जमा झाली! 💸' };
+      return { success: true, message: 'उधारी परतफेड यशस्वीरित्या नोंदवली! ✅' };
     }
 
     if (options.method === 'POST') {
@@ -1783,10 +1832,49 @@ export async function request(endpoint, options = {}) {
     }
 
     if (options.method === 'DELETE') {
-      const id = endpoint.split('/expenses/')[1];
-      const filtered = expensesList.filter(item => String(item.id) !== String(id));
+      const urlObj = new URL(endpoint, 'http://dummy.local');
+      const rawPathId = urlObj.pathname.split('/expenses/')[1] || '';
+      const queryExpId = urlObj.searchParams.get('expense_id') || '';
+
+      const targetExp = expensesList.find(item =>
+        (rawPathId && (String(item.id) === String(rawPathId) || String(item.expense_id) === String(rawPathId))) ||
+        (queryExpId && String(item.expense_id) === String(queryExpId))
+      );
+
+      const targetId = targetExp?.id || rawPathId;
+      const targetExpId = targetExp?.expense_id || queryExpId || (String(rawPathId).startsWith('EXP-') ? rawPathId : null);
+
+      // Filter locally from expenses
+      const filtered = expensesList.filter(item =>
+        !(
+          (targetId && String(item.id) === String(targetId)) ||
+          (targetExpId && String(item.expense_id) === String(targetExpId)) ||
+          (rawPathId && (String(item.id) === String(rawPathId) || String(item.expense_id) === String(rawPathId)))
+        )
+      );
       setLocalStore('expenses', filtered);
-      return { success: true, message: 'खर्च हटवला.' };
+
+      // Record tombstone in shirol_deleted_expenses so sync NEVER brings it back
+      const deletedExpenses = getLocalStore('deleted_expenses', []);
+      deletedExpenses.push({
+        id: targetId,
+        expense_id: targetExpId,
+        description: targetExp?.description || '',
+        timestamp: Date.now()
+      });
+      localStorage.setItem('shirol_deleted_expenses', JSON.stringify(deletedExpenses));
+
+      // Asynchronously trigger server deletion call immediately
+      fetch('https://hanuman-talim-api.onrender.com/api/sync/delete-expense', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: targetId, expense_id: targetExpId })
+      }).catch(err => console.warn('Cloud expense delete note:', err.message));
+
+      // Trigger background sync to propagate tombstone to server
+      triggerAutoSync();
+
+      return { success: true, message: 'खर्च यशस्वीरित्या हटवला.' };
     }
 
     // GET Request - handle filtering

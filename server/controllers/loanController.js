@@ -139,34 +139,13 @@ export async function repayLoan(req, res) {
           repayments: updatedRepayments
         })
         .eq('id', id);
-
-      // Auto-record loan repayment as an approved expense
-      if (loan.type === 'borrowed' || !loan.type) {
-        const { count } = await db.from('expense_transactions').select('*', { count: 'exact', head: true });
-        const nextNum = (count || 0) + 1;
-        const expenseId = `EXP-LOAN-${String(nextNum).padStart(4, '0')}`;
-
-        await db.from('expense_transactions').insert({
-          expense_id: expenseId,
-          category: 'loan_repayment',
-          paid_to: loan.person_name,
-          amount: repayAmount,
-          payment_method,
-          description: `कर्ज / उधारी परतफेड: ${loan.person_name} (${newStatus === 'fully_paid' ? 'पूर्ण फेडली' : 'अंशतः परतफेड'}${notes ? ` - ${notes}` : ''})`,
-          notes: notes || 'कर्ज परतफेड',
-          status: 'approved',
-          approved_by_id: req.user?.id || null,
-          approved_by_name: req.user?.name || 'खजिनदार',
-          created_at: new Date().toISOString()
-        });
-      }
     } catch (dbErr) {
-      console.warn('Repay DB update / expense insert note:', dbErr.message);
+      console.warn('Repay DB update note:', dbErr.message);
     }
 
     return res.json({
       success: true,
-      message: newStatus === 'fully_paid' ? 'उधारी पूर्ण परतफेड झाली व खर्चात (Expenses) जमा झाली! ✅' : 'उधारी अंशतः परतफेड खर्चात नोंदवली.',
+      message: newStatus === 'fully_paid' ? 'उधारी पूर्ण परतफेड यशस्वीरित्या नोंदवली! ✅' : 'उधारी अंशतः परतफेड यशस्वीरित्या नोंदवली.',
       data: {
         id,
         paid_amount: newPaid,

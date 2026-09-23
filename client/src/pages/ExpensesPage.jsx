@@ -198,20 +198,25 @@ export function ExpensesPage() {
     return { ...b, used };
   });
 
-  const handleDeleteExpense = async (id, expDesc) => {
+  const handleDeleteExpense = async (id, expDesc, expId) => {
     if (!window.confirm(`तुम्हाला नक्की "${expDesc || 'हा खर्च'}" हटवायचा आहे का?`)) {
       return;
     }
     try {
-      const res = await api.delete(`/expenses/${id}`);
+      // Optimistically remove from state immediately
+      setExpenses(prev => prev.filter(e => String(e.id) !== String(id) && (!expId || String(e.expense_id) !== String(expId))));
+      const deleteUrl = `/expenses/${encodeURIComponent(id || expId)}${expId ? `?expense_id=${encodeURIComponent(expId)}` : ''}`;
+      const res = await api.delete(deleteUrl);
       if (res.success) {
         showToast('खर्च यशस्वीरित्या हटवला.', 'success');
-        fetchExpenses();
+        fetchExpenses(true);
       } else {
         showToast(res.message || 'खर्च हटवताना त्रुटी.', 'error');
+        fetchExpenses();
       }
     } catch (err) {
       showToast(err.message || 'खर्च हटवताना त्रुटी.', 'error');
+      fetchExpenses();
     }
   };
 
@@ -687,7 +692,7 @@ export function ExpensesPage() {
                               मंजूर
                             </span>
                             <button
-                              onClick={() => handleDeleteExpense(e.id, e.description)}
+                              onClick={() => handleDeleteExpense(e.id, e.description, e.expense_id)}
                               title="खर्च हटवा (Delete Expense)"
                               className="p-1.5 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 rounded-lg transition"
                             >
@@ -722,7 +727,7 @@ export function ExpensesPage() {
                               </div>
                             )}
                             <button
-                              onClick={() => handleDeleteExpense(e.id, e.description)}
+                              onClick={() => handleDeleteExpense(e.id, e.description, e.expense_id)}
                               title="खर्च हटवा (Delete Expense)"
                               className="p-1.5 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 rounded-lg transition ml-1"
                             >

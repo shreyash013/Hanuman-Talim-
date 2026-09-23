@@ -12,7 +12,8 @@ export async function autoSyncAll(req, res) {
       members = [],
       cash_history = [],
       settings = null,
-      deleted_donors = []
+      deleted_donors = [],
+      deleted_expenses = []
     } = req.body;
 
     const counts = {
@@ -97,6 +98,52 @@ export async function autoSyncAll(req, res) {
       } catch (delErr) {
         console.warn('Sync deleted donors note:', delErr.message);
       }
+    }
+
+    // 1.6 Handle Deleted Expenses Synchronization & Purge Loan Repayments
+    const deletedExpSet = new Set();
+    const deletedExpIdSet = new Set();
+
+    if (Array.isArray(deleted_expenses) && deleted_expenses.length > 0) {
+      for (const item of deleted_expenses) {
+        if (!item) continue;
+        if (typeof item === 'string' || typeof item === 'number') {
+          const s = String(item).trim();
+          if (s.startsWith('EXP-')) deletedExpSet.add(s);
+          else deletedExpIdSet.add(s);
+        } else if (typeof item === 'object') {
+          if (item.expense_id) deletedExpSet.add(String(item.expense_id).trim());
+          if (item.id) {
+            const sid = String(item.id).trim();
+            if (sid.startsWith('EXP-')) deletedExpSet.add(sid);
+            else deletedExpIdSet.add(sid);
+          }
+        }
+      }
+
+      try {
+        for (const expId of deletedExpSet) {
+          await db.from('expense_transactions').update({ is_deleted: true }).eq('expense_id', expId);
+          await db.from('expense_transactions').delete().eq('expense_id', expId);
+        }
+        for (const id of deletedExpIdSet) {
+          const numId = Number(id);
+          if (!isNaN(numId) && numId > 0) {
+            await db.from('expense_transactions').update({ is_deleted: true }).eq('id', numId);
+            await db.from('expense_transactions').delete().eq('id', numId);
+          }
+        }
+      } catch (delExpErr) {
+        console.warn('Sync deleted expenses note:', delExpErr.message);
+      }
+    }
+
+    // Purge any loan repayment records from expense_transactions (loans must NEVER be in expenses)
+    try {
+      await db.from('expense_transactions').update({ is_deleted: true }).or('category.eq.loan_repayment,expense_id.ilike.EXP-LOAN-%');
+      await db.from('expense_transactions').delete().or('category.eq.loan_repayment,expense_id.ilike.EXP-LOAN-%');
+    } catch (lErr) {
+      console.warn('Purge loan from expenses note:', lErr.message);
     }
 
     // 2. Sync Donors (Diff-checked & Batch Inserted for 100x speed)
@@ -330,7 +377,13 @@ export async function autoSyncAll(req, res) {
 
     for (const exp of expenses) {
       if (!exp || !exp.description || exp.is_deleted) continue;
+      // Do NOT sync loan repayments or loan records as expenses
+      if (exp.category === 'loan_repayment' || (exp.expense_id && String(exp.expense_id).startsWith('EXP-LOAN-')) || (exp.description && exp.description.includes('कर्ज / उधारी परतफेड'))) {
+        continue;
+      }
       const expId = exp.expense_id || `EXP-2026-${String(counts.expenses + 1).padStart(5, '0')}`;
+      if (deletedExpSet.has(expId) || (exp.id && deletedExpIdSet.has(String(exp.id)))) continue;
+
       const existingExp = existingExpMap.get(expId);
 
       if (existingExp) {
@@ -488,6 +541,9 @@ export async function wipeDonorsAndIncome(req, res) {
     await db.from('expense_transactions').update({ requested_by_name: 'श्रेयश गावडे (खजिनदार)' }).ilike('requested_by_name', '%श्रेयश गवडे%');
     await db.from('expense_transactions').update({ approved_by_name: 'श्रेयश गावडे (खजिनदार)' }).ilike('approved_by_name', '%श्रेयश गवडे%');
 
+    // 3. Purge any loan repayments from expenses
+    await db.from('expense_transactions').delete().or('category.eq.loan_repayment,expense_id.ilike.EXP-LOAN-%');
+
     if (res) {
       return res.json({
         success: true,
@@ -504,6 +560,34 @@ export async function wipeDonorsAndIncome(req, res) {
   }
 }
 
+export async function syncDeleteExpense(req, res) {
+  try {
+    const { id, expense_id } = req.body || {};
+    if (expense_id) {
+      const expStr = String(expense_id).trim();
+      await db.from('expense_transactions').update({ is_deleted: true }).eq('expense_id', expStr);
+      await db.from('expense_transactions').delete().eq('expense_id', expStr);
+    }
+    if (id) {
+      const sid = String(id).trim();
+      if (sid.startsWith('EXP-')) {
+        await db.from('expense_transactions').update({ is_deleted: true }).eq('expense_id', sid);
+        await db.from('expense_transactions').delete().eq('expense_id', sid);
+      } else {
+        const numId = Number(sid);
+        if (!isNaN(numId) && numId > 0) {
+          await db.from('expense_transactions').update({ is_deleted: true }).eq('id', numId);
+          await db.from('expense_transactions').delete().eq('id', numId);
+        }
+      }
+    }
+    return res.json({ success: true, message: 'खर्च क्लाऊडवरून कायमचा हटवला.' });
+  } catch (err) {
+    console.error('syncDeleteExpense error:', err);
+    return res.status(500).json({ success: false, message: err.message || err });
+  }
+}
+
 export async function getCloudFullData(req, res) {
   try {
     const [
@@ -516,7 +600,7 @@ export async function getCloudFullData(req, res) {
       membersRes
     ] = await Promise.all([
       db.from('income_transactions').select('*').eq('is_deleted', false).order('created_at', { ascending: false }),
-      db.from('expense_transactions').select('*').eq('is_deleted', false).order('created_at', { ascending: false }),
+      db.from('expense_transactions').select('*').eq('is_deleted', false).neq('category', 'loan_repayment').not('expense_id', 'ilike', 'EXP-LOAN-%').order('created_at', { ascending: false }),
       db.from('donors').select('*').order('total_donated', { ascending: false }),
       db.from('loans').select('*').order('created_at', { ascending: false }),
       db.from('receipts').select('*').order('created_at', { ascending: false }),
@@ -524,7 +608,14 @@ export async function getCloudFullData(req, res) {
       db.from('committee_members').select('*').order('display_order', { ascending: true })
     ]);
 
-    const sanitizedExpenses = (expensesRes.data || []).map(exp => ({
+    const nonLoanExpenses = (expensesRes.data || []).filter(e =>
+      e && !e.is_deleted &&
+      e.category !== 'loan_repayment' &&
+      !(e.expense_id && String(e.expense_id).startsWith('EXP-LOAN-')) &&
+      !(e.description && e.description.includes('कर्ज / उधारी परतफेड'))
+    );
+
+    const sanitizedExpenses = nonLoanExpenses.map(exp => ({
       ...exp,
       requested_by_name: (exp.requested_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गावडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गावडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गावडे (खजिनदार)').replace(/श्रेयश गवडे/g, 'श्रेयश गावडे'),
       approved_by_name: (exp.approved_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गावडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गावडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गावडे (खजिनदार)').replace(/श्रेयश गवडे/g, 'श्रेयश गावडे')

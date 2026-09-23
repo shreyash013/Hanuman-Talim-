@@ -39,6 +39,7 @@ router.get('/public/festival', festivalController.getFestivalInfo);
 router.post('/sync/auto-sync-all', syncController.autoSyncAll);
 router.get('/sync/full-data', syncController.getCloudFullData);
 router.post('/sync/wipe-donors-and-income', syncController.wipeDonorsAndIncome);
+router.post('/sync/delete-expense', syncController.syncDeleteExpense);
 
 router.use(authenticate);
 
