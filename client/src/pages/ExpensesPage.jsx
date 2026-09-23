@@ -206,17 +206,19 @@ export function ExpensesPage() {
     setIsDeletingExpense(true);
     try {
       // Optimistically remove from state immediately
-      setExpenses(prev => prev.filter(e =>
-        String(e.id) !== String(target.id) &&
-        (!target.expense_id || String(e.expense_id) !== String(target.expense_id))
-      ));
+      setExpenses(prev => prev.filter(e => {
+        if (!e) return false;
+        if (target.id && String(e.id) === String(target.id)) return false;
+        if (target.expense_id && String(e.expense_id) === String(target.expense_id)) return false;
+        return true;
+      }));
 
       const deleteUrl = `/expenses/${encodeURIComponent(target.id || target.expense_id)}${target.expense_id ? `?expense_id=${encodeURIComponent(target.expense_id)}` : ''}`;
       const res = await api.delete(deleteUrl);
       if (res.success) {
-        showToast(`खर्च "${target.description || ''}" यशस्वीरित्या हटवला. 🗑️`, 'success');
+        showToast(`खर्च "${target.description || ''}" यशस्वीरित्या कायमचा हटवला! 🗑️`, 'success');
         setExpenseToDelete(null);
-        fetchExpenses(true);
+        await fetchExpenses(true);
       } else {
         showToast(res.message || 'खर्च हटवताना त्रुटी.', 'error');
         fetchExpenses();
@@ -617,8 +619,111 @@ export function ExpensesPage() {
         </div>
       </div>
 
-      {/* Expenses Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-xl">
+      {/* Mobile Card View (Visible on small & mobile screens) */}
+      <div className="block md:hidden space-y-3">
+        {loading ? (
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center text-slate-400">
+            <Loader2 className="w-6 h-6 animate-spin mx-auto text-amber-400 mb-2" />
+            खर्च यादी लोड होत आहे...
+          </div>
+        ) : filteredExpenses.length === 0 ? (
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center text-slate-400 text-xs">
+            {activeTab === 'approved'
+              ? 'कोणतेही मंजूर खर्च सापडले नाहीत.'
+              : 'सध्या मंजुरीच्या प्रतीक्षेत कोणताही खर्च नाही.'}
+          </div>
+        ) : (
+          filteredExpenses.map((e, idx) => (
+            <div key={e.id || e.expense_id || idx} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3 shadow-md">
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center space-x-2">
+                  <span className="font-bold text-slate-500">#{idx + 1}</span>
+                  <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30 capitalize">
+                    {e.category || 'इतर खर्च'}
+                  </span>
+                  {e.status === 'pending' ? (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                      मंजुरी बाकी
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                      मंजूर
+                    </span>
+                  )}
+                </div>
+                <span className="text-base font-black text-rose-400">
+                  ₹{(Number(e.amount) || 0).toLocaleString('en-IN')}
+                </span>
+              </div>
+
+              <div>
+                <h4 className="font-bold text-white text-sm">{e.description}</h4>
+                <div className="text-xs text-slate-400 mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                  <span>कोणाला दिले: <strong className="text-slate-200">{e.paid_to || '-'}</strong></span>
+                  {e.bill_number && <span>• बिल क्र: {e.bill_number}</span>}
+                  {e.payment_method && <span>• {e.payment_method === 'cash' ? '💵 रोख' : '📱 ऑनलाइन'}</span>}
+                </div>
+              </div>
+
+              {e.bill_attachment_url && (
+                <div>
+                  <button
+                    onClick={() => openAttachmentPreview(e.bill_attachment_url, e.description)}
+                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 transition text-xs font-bold"
+                  >
+                    {e.bill_attachment_url.toLowerCase().includes('.pdf') || e.bill_attachment_url.startsWith('data:application/pdf') ? (
+                      <>
+                        <FileText className="w-3.5 h-3.5 text-rose-400" />
+                        <span>PDF बिल पहा</span>
+                      </>
+                    ) : (
+                      <>
+                        <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
+                        <span>फोटो बिल पहा</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="pt-2 border-t border-slate-800/80 flex flex-col gap-2">
+                {activeTab === 'pending' && (isAdmin || isTreasurer) && (
+                  <div className="flex items-center space-x-2">
+                    <button
+                      disabled={actionProcessing}
+                      onClick={() => handleApproveExpense(e.id, e.expense_id)}
+                      className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-extrabold transition flex items-center justify-center space-x-1 shadow"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>मंजूर करा</span>
+                    </button>
+                    <button
+                      disabled={actionProcessing}
+                      onClick={() => handleRejectExpense(e.id, e.expense_id)}
+                      className="flex-1 py-2 bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white rounded-xl text-xs font-bold border border-rose-500/30 transition flex items-center justify-center space-x-1"
+                    >
+                      <XCircle className="w-3.5 h-3.5" />
+                      <span>नामंजूर करा</span>
+                    </button>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setExpenseToDelete(e)}
+                  className="w-full py-2.5 px-3 bg-rose-500/10 hover:bg-rose-500/20 active:bg-rose-600/30 text-rose-400 border border-rose-500/30 rounded-xl text-xs font-extrabold flex items-center justify-center space-x-2 transition"
+                >
+                  <Trash2 className="w-4 h-4 text-rose-400" />
+                  <span>हा खर्च कायमचा हटवा (Delete Expense)</span>
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Desktop Expenses Table (Visible on medium & large screens) */}
+      <div className="hidden md:block bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
@@ -650,7 +755,7 @@ export function ExpensesPage() {
                 </tr>
               ) : (
                 filteredExpenses.map((e, idx) => (
-                  <tr key={e.id} className="hover:bg-slate-800/40 transition group">
+                  <tr key={e.id || e.expense_id || idx} className="hover:bg-slate-800/40 transition group">
                     <td className="p-4 text-center font-bold text-slate-400">
                       {idx + 1}
                     </td>
@@ -689,7 +794,7 @@ export function ExpensesPage() {
                     </td>
 
                     <td className="p-4 text-right font-extrabold text-rose-400">
-                      ₹{(e.amount || 0).toLocaleString('en-IN')}
+                      ₹{(Number(e.amount) || 0).toLocaleString('en-IN')}
                     </td>
 
                     {/* Status & Actions Column */}
@@ -702,7 +807,7 @@ export function ExpensesPage() {
                             </span>
                             <button
                               onClick={() => setExpenseToDelete(e)}
-                              title="खर्च हटवा (Delete Expense)"
+                              title="खर्च कायमचा हटवा (Delete Expense)"
                               className="p-1.5 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 rounded-lg transition"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -737,7 +842,7 @@ export function ExpensesPage() {
                             )}
                             <button
                               onClick={() => setExpenseToDelete(e)}
-                              title="खर्च हटवा (Delete Expense)"
+                              title="खर्च कायमचा हटवा (Delete Expense)"
                               className="p-1.5 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 rounded-lg transition ml-1"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -1142,7 +1247,7 @@ export function ExpensesPage() {
 
       {/* Delete Expense In-App Confirmation Modal */}
       {expenseToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
           <div className="bg-slate-900 border border-rose-500/40 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4">
             <div className="flex items-center space-x-3 text-rose-400">
               <div className="p-3 bg-rose-500/10 rounded-2xl border border-rose-500/20">

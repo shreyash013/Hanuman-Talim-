@@ -1872,37 +1872,35 @@ export async function request(endpoint, options = {}) {
       const targetId = targetExp?.id || rawPathId;
       const targetExpId = targetExp?.expense_id || queryExpId || (String(rawPathId).startsWith('EXP-') ? rawPathId : null);
 
-      // Filter locally from expenses
-      const filtered = expensesList.filter(item =>
-        !(
-          (targetId && String(item.id) === String(targetId)) ||
-          (targetExpId && String(item.expense_id) === String(targetExpId)) ||
-          (rawPathId && (String(item.id) === String(rawPathId) || String(item.expense_id) === String(rawPathId)))
-        )
-      );
-      setLocalStore('expenses', filtered);
-
-      // Record tombstone in shirol_deleted_expenses so sync NEVER brings it back
+      // 1. Record tombstone in shirol_deleted_expenses FIRST so sync NEVER resurrects it
       const deletedExpenses = getLocalStore('deleted_expenses', []);
       const currentDelSet = createDeletedExpenseSet(deletedExpenses);
+      const tombstone = {
+        id: targetId || null,
+        expense_id: targetExpId || null,
+        description: targetExp?.description || '',
+        timestamp: Date.now()
+      };
       if (targetId && !currentDelSet.has(String(targetId))) {
-        deletedExpenses.push({
-          id: targetId,
-          expense_id: targetExpId,
-          description: targetExp?.description || '',
-          timestamp: Date.now()
-        });
+        deletedExpenses.push(tombstone);
       } else if (targetExpId && !currentDelSet.has(String(targetExpId))) {
-        deletedExpenses.push({
-          id: targetId,
-          expense_id: targetExpId,
-          description: targetExp?.description || '',
-          timestamp: Date.now()
-        });
+        deletedExpenses.push(tombstone);
+      } else if (!targetId && !targetExpId) {
+        deletedExpenses.push(tombstone);
       }
       localStorage.setItem('shirol_deleted_expenses', JSON.stringify(deletedExpenses));
 
-      // Asynchronously trigger server deletion call and wait for it
+      // 2. Filter locally from expenses and persist
+      const filtered = expensesList.filter(item => {
+        if (!item) return false;
+        if (targetId && String(item.id) === String(targetId)) return false;
+        if (targetExpId && String(item.expense_id) === String(targetExpId)) return false;
+        if (rawPathId && (String(item.id) === String(rawPathId) || String(item.expense_id) === String(rawPathId))) return false;
+        return true;
+      });
+      setLocalStore('expenses', filtered);
+
+      // 3. Directly call cloud delete-expense endpoint on Render
       try {
         await fetch('https://hanuman-talim-api.onrender.com/api/sync/delete-expense', {
           method: 'POST',
@@ -1913,8 +1911,8 @@ export async function request(endpoint, options = {}) {
         console.warn('Cloud expense delete note:', err.message);
       }
 
-      // Flush tombstones to cloud immediately
-      autoSyncAllToServer().catch(() => {});
+      // 4. Await cloud synchronization of tombstones
+      await autoSyncAllToServer().catch(() => {});
 
       return { success: true, message: 'खर्च यशस्वीरित्या हटवला.' };
     }

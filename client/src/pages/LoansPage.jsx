@@ -657,7 +657,7 @@ Remaining *बाकी रक्कम:* ₹${remaining}
 
       {/* Delete Loan In-App Confirmation Modal */}
       {loanToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
           <div className="bg-slate-900 border border-rose-500/40 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4">
             <div className="flex items-center space-x-3 text-rose-400">
               <div className="p-3 bg-rose-500/10 rounded-2xl border border-rose-500/20">
