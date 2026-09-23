@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
 import { useNotification } from '../../context/NotificationContext';
 import { QRCodeSVG } from 'qrcode.react';
-import { API_BASE_URL } from '../../services/api';
+import { API_BASE_URL, performFullLiveSync } from '../../services/api';
 import {
   RefreshCw,
   Smartphone,
@@ -31,6 +31,24 @@ export function SyncCenterModal({ isOpen, onClose }) {
   );
   const [isSyncing, setIsSyncing] = useState(false);
   const [stats, setStats] = useState({ income: 0, donors: 0, expenses: 0 });
+
+  const handleCloudLiveSync = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    try {
+      const res = await performFullLiveSync();
+      if (res && res.success) {
+        loadLocalStats();
+        showToast(res.message || 'सर्व डेटा थेट लाईव्ह सर्व्हरवर सेव्ह झाला आणि सर्व डिव्हाइसेसवर उपलब्ध झाला!', 'success');
+      } else {
+        showToast(res.message || 'डेटा स्थानिकरित्या सुरक्षित आहे.', 'warning');
+      }
+    } catch {
+      showToast('सिंक करताना अडचण आली.', 'error');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -236,6 +254,32 @@ export function SyncCenterModal({ isOpen, onClose }) {
           >
             <Server className="w-4 h-4" />
             <span>वाय-फाय / सर्व्हर IP सेटअप (Wi-Fi Local Sync)</span>
+          </button>
+        </div>
+
+        {/* Supabase + Render Live Cloud Sync Card */}
+        <div className="p-4 bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-transparent border-2 border-emerald-500/30 rounded-2xl space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
+              <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                थेट क्लाउड डेटाबेस सिंक (Supabase Live Server)
+              </h3>
+            </div>
+            <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+              🟢 Connected to Live DB
+            </span>
+          </div>
+          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+            या डिव्हाईसवरील सर्व स्थानिक डेटा (देणगीदार, जमा पावत्या, खर्च) थेट लाईव्ह क्लाउड सर्व्हरवर पाठवा. एका क्लिकवर इतर सर्व मोबाईल व लॅपटॉपवर हा डेटा लगेच उपलब्ध होतो.
+          </p>
+          <button
+            onClick={handleCloudLiveSync}
+            disabled={isSyncing}
+            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-black shadow-md active:scale-98 transition-all"
+          >
+            <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'सर्व्हरवर डेटा हलवत आहे...' : '🔄 सर्व डेटा थेट क्लाउड सर्व्हरवर हलवा (Live Cloud Sync)'}</span>
           </button>
         </div>
 

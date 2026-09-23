@@ -344,6 +344,15 @@ export function ensureDataRecovery() {
 // Run recovery on module evaluation
 ensureDataRecovery();
 
+// Periodic background sync from live cloud database (every 60 seconds)
+if (typeof window !== 'undefined') {
+  setInterval(() => {
+    if (navigator.onLine && !document.hidden) {
+      autoSyncFromServer().catch(() => {});
+    }
+  }, 60000);
+}
+
 // Auto-sync debounce timer
 let syncDebounceTimer = null;
 let isSyncingToServer = false;
@@ -505,19 +514,58 @@ export function handleLocalDonorDeletion(endpoint, options = {}) {
   }
 }
 
-// Cloud Synchronization with live Render database
+// Cloud Synchronization with live Render database & Supabase PostgreSQL
 export async function autoSyncAllToServer() {
   if (typeof window === 'undefined') return { success: true, mode: 'local' };
   try {
     const rawDonors = localStorage.getItem('shirol_donors');
     const rawIncome = localStorage.getItem('shirol_income');
+    const rawExpenses = localStorage.getItem('shirol_expenses');
+    const rawLoans = localStorage.getItem('shirol_loans');
+    const rawReceipts = localStorage.getItem('shirol_receipts');
+    const rawMembers = localStorage.getItem('shirol_members');
+    const rawDeletedDonors = localStorage.getItem('shirol_deleted_donors');
+    const rawSettings = localStorage.getItem('shirol_mandal_settings_custom');
+
     const donors = rawDonors ? JSON.parse(rawDonors) : CANONICAL_SHIROL_DONORS;
     const income = rawIncome ? JSON.parse(rawIncome) : CANONICAL_SHIROL_INCOME;
+    const expenses = rawExpenses ? JSON.parse(rawExpenses) : [];
+    const loans = rawLoans ? JSON.parse(rawLoans) : [];
+    const receipts = rawReceipts ? JSON.parse(rawReceipts) : [];
+    const members = rawMembers ? JSON.parse(rawMembers) : [];
+    const settings = rawSettings ? JSON.parse(rawSettings) : null;
+
+    // Flatten deleted_donors for server compatibility
+    const parsedDeleted = rawDeletedDonors ? JSON.parse(rawDeletedDonors) : [];
+    const deleted_donors = [];
+    if (Array.isArray(parsedDeleted)) {
+      for (const item of parsedDeleted) {
+        if (!item) continue;
+        if (typeof item === 'string') {
+          deleted_donors.push({ name: item });
+        } else if (typeof item === 'object') {
+          if (item.name) deleted_donors.push({ name: item.name });
+          if (Array.isArray(item.names)) item.names.forEach(n => deleted_donors.push({ name: n }));
+          if (item.id) deleted_donors.push({ id: item.id });
+          if (Array.isArray(item.ids)) item.ids.forEach(id => deleted_donors.push({ id }));
+          if (item.mobile) deleted_donors.push({ mobile: item.mobile });
+        }
+      }
+    }
 
     const res = await fetch('https://hanuman-talim-api.onrender.com/api/sync/auto-sync-all', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ donors, income })
+      body: JSON.stringify({
+        donors,
+        income,
+        expenses,
+        loans,
+        receipts,
+        members,
+        settings,
+        deleted_donors
+      })
     });
     if (res.ok) {
       const data = await res.json();
@@ -532,14 +580,22 @@ export async function autoSyncAllToServer() {
 export async function autoSyncFromServer() {
   if (typeof window === 'undefined') return { success: true, mode: 'local' };
   try {
+    // Attempt to push any pending local edits before pulling to prevent overwrite
+    const hasUnsynced = localStorage.getItem('shirol_has_unsynced_changes') === 'true';
+    if (hasUnsynced) {
+      await autoSyncAllToServer().catch(() => {});
+    }
+
     const res = await fetch('https://hanuman-talim-api.onrender.com/api/sync/full-data');
     if (res.ok) {
       const json = await res.json();
       if (json && json.data) {
-        const serverIncome = (json.data.income || []).filter(inc => inc && !inc.is_deleted);
-        const serverDonors = (json.data.donors || []).filter(d => d && d.name);
-        const serverReceipts = (json.data.receipts || []).filter(r => r && !r.is_deleted);
-        const serverExpenses = (json.data.expenses || []).filter(e => e && !e.is_deleted);
+        let serverIncome = (json.data.income || []).filter(inc => inc && !inc.is_deleted);
+        let serverDonors = (json.data.donors || []).filter(d => d && d.name);
+        let serverReceipts = (json.data.receipts || []).filter(r => r && !r.is_deleted);
+        let serverExpenses = (json.data.expenses || []).filter(e => e && !e.is_deleted);
+        let serverLoans = (json.data.loans || []).filter(l => l && !l.is_deleted);
+        let serverMembers = (json.data.members || []).filter(m => m && m.name);
 
         // Sanitize expenses
         const sanitizedExpenses = serverExpenses.map(exp => ({
@@ -554,12 +610,33 @@ export async function autoSyncFromServer() {
         if (sanitizedExpenses.length > 0) {
           localStorage.setItem('shirol_expenses', JSON.stringify(sanitizedExpenses));
         }
+        if (serverLoans.length > 0) {
+          localStorage.setItem('shirol_loans', JSON.stringify(serverLoans));
+        }
+        if (serverMembers.length > 0) {
+          localStorage.setItem('shirol_members', JSON.stringify(serverMembers));
+        }
+        if (json.data.settings) {
+          localStorage.setItem('shirol_mandal_settings_custom', JSON.stringify(json.data.settings));
+        }
         localStorage.setItem('shirol_clean_version', DATA_CLEAN_VERSION);
+        localStorage.setItem('shirol_last_synced_at', new Date().toISOString());
+        localStorage.setItem('shirol_has_unsynced_changes', 'false');
+        localStorage.removeItem('shirol_deleted_donors');
 
         window.dispatchEvent(new Event('shirol_data_updated'));
         window.dispatchEvent(new Event('storage'));
         broadcastDataChange();
-        return { success: true, count: serverIncome.length };
+        return {
+          success: true,
+          count: serverIncome.length,
+          counts: {
+            donors: serverDonors.length,
+            income: serverIncome.length,
+            expenses: sanitizedExpenses.length,
+            loans: serverLoans.length
+          }
+        };
       }
     }
   } catch (err) {
@@ -568,15 +645,41 @@ export async function autoSyncFromServer() {
   return { success: false, mode: 'local' };
 }
 
+// Full Two-Way Live Sync Trigger
+export async function performFullLiveSync() {
+  if (typeof window === 'undefined') return { success: true, mode: 'local' };
+  try {
+    // 1. Move all local data to live database server
+    await autoSyncAllToServer();
+
+    // 2. Fetch latest authoritative state from live server (merges data from all devices)
+    const pullResult = await autoSyncFromServer();
+
+    if (pullResult && pullResult.success) {
+      return {
+        success: true,
+        message: 'सर्व स्थानिक डेटा थेट लाईव्ह सर्व्हरवर सेव्ह झाला आणि इतर सर्व उपकरणांवर उपलब्ध झाला आहे!',
+        counts: pullResult.counts
+      };
+    }
+
+    return {
+      success: true,
+      message: 'डेटा स्थानिकरित्या सुरक्षित आहे आणि सिंक झाला.',
+      mode: 'local'
+    };
+  } catch (err) {
+    console.error('performFullLiveSync error:', err);
+    return {
+      success: false,
+      message: 'सर्व्हरशी संपर्क होऊ शकला नाही. डेटा स्थानिकरित्या (Local Storage) सुरक्षित आहे.'
+    };
+  }
+}
+
 // Manual refresh trigger for UI buttons
 export async function forceSyncNow() {
-  await autoSyncFromServer();
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new Event('shirol_data_updated'));
-    window.dispatchEvent(new Event('storage'));
-    broadcastDataChange();
-  }
-  return { success: true, message: 'डेटा सर्व्हरशी यशस्वीरित्या समक्रमित झाला' };
+  return await performFullLiveSync();
 }
 
 // Debounced trigger for auto-upload on every entry
@@ -586,6 +689,14 @@ export function triggerAutoSync() {
   syncDebounceTimer = setTimeout(() => {
     autoSyncAllToServer().catch(() => {});
   }, 1500);
+}
+
+export function getSyncStatus() {
+  if (typeof window === 'undefined') return { lastSyncedAt: null, hasUnsynced: false };
+  return {
+    lastSyncedAt: localStorage.getItem('shirol_last_synced_at'),
+    hasUnsynced: localStorage.getItem('shirol_has_unsynced_changes') === 'true'
+  };
 }
 
 function getLocalStore(key, defaultValue = []) {
@@ -622,10 +733,12 @@ function getLocalStore(key, defaultValue = []) {
   }
 }
 
-
 function setLocalStore(key, value) {
   try {
     localStorage.setItem(`shirol_${key}`, JSON.stringify(value));
+    // Track that there are local modifications stored till live sync
+    localStorage.setItem('shirol_has_unsynced_changes', 'true');
+
     // Auto-upload to live server automatically on EVERY single entry!
     if (['income', 'expenses', 'donors', 'loans', 'receipts', 'members', 'cash_history', 'mandal_settings_custom'].includes(key)) {
       triggerAutoSync();

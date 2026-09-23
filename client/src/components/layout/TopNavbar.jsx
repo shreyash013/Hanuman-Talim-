@@ -1,35 +1,70 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useMandal } from '../../context/MandalContext';
+import { useNotification } from '../../context/NotificationContext';
 import {
   Menu,
   Sun,
   Moon,
   ChevronDown,
   RefreshCw,
-  CheckCircle2
+  CheckCircle2,
+  Cloud,
+  CloudUpload
 } from 'lucide-react';
 import { GanpatiLogo } from '../common/GanpatiLogo';
-import { forceSyncNow } from '../../services/api';
+import { performFullLiveSync, getSyncStatus } from '../../services/api';
 
 export function TopNavbar({ onOpenMobileMenu }) {
   const { lang, setLang, t } = useLanguage();
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { mandal } = useMandal();
+  const { showToast } = useNotification();
 
   const [showLangMenu, setShowLangMenu] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncInfo, setSyncInfo] = useState({ lastSyncedAt: null, hasUnsynced: false });
+
+  // Load and listen for local sync changes
+  useEffect(() => {
+    const updateSyncState = () => {
+      setSyncInfo(getSyncStatus());
+    };
+
+    updateSyncState();
+    window.addEventListener('shirol_data_updated', updateSyncState);
+    window.addEventListener('storage', updateSyncState);
+
+    return () => {
+      window.removeEventListener('shirol_data_updated', updateSyncState);
+      window.removeEventListener('storage', updateSyncState);
+    };
+  }, []);
 
   const handleManualSync = async () => {
     if (isSyncing) return;
     setIsSyncing(true);
     try {
-      await forceSyncNow();
+      const res = await performFullLiveSync();
+      if (res && res.success) {
+        setSyncInfo(getSyncStatus());
+        showToast(
+          res.message || 'सर्व डेटा थेट लाईव्ह सर्व्हरवर सेव्ह झाला आणि इतर सर्व डिव्हाइसेसवर उपलब्ध झाला आहे!',
+          'success'
+        );
+      } else {
+        showToast(
+          res.message || 'सर्व्हरशी संपर्क होऊ शकला नाही. डेटा स्थानिकरित्या (Local Storage) सुरक्षित आहे.',
+          'warning'
+        );
+      }
+    } catch (err) {
+      showToast('सिंक करताना अडचण आली. डेटा स्थानिकरित्या सुरक्षित आहे.', 'error');
     } finally {
-      setTimeout(() => setIsSyncing(false), 500);
+      setTimeout(() => setIsSyncing(false), 600);
     }
   };
 
@@ -67,21 +102,48 @@ export function TopNavbar({ onOpenMobileMenu }) {
       </div>
 
       {/* Right Controls */}
-      <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
-        {/* Local Storage Safe Status Indicator & Refresh Button */}
+      <div className="flex items-center gap-1.5 sm:gap-2.5 flex-shrink-0">
+        {/* Dedicated Live Cloud Sync Button (Local Storage -> Live Supabase Server) */}
         <button
           onClick={handleManualSync}
           disabled={isSyncing}
-          className="flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl border text-[11px] font-bold select-none shadow-xs active:scale-95 transition-all bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50"
-          title="डेटा सुरक्षित आहे (स्थानिक साठवणूक)"
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-xl border text-[11px] sm:text-xs font-black select-none shadow-xs active:scale-95 transition-all duration-200 ${
+            isSyncing
+              ? 'bg-amber-500/15 border-amber-500/40 text-amber-700 dark:text-amber-300 cursor-wait'
+              : syncInfo.hasUnsynced
+              ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black shadow-glow-amber border-amber-400 ring-2 ring-amber-400/40 animate-pulse'
+              : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
+          }`}
+          title={
+            syncInfo.hasUnsynced
+              ? 'स्थानिक डेटा साठवला आहे - सर्व्हरवर हलवण्यासाठी व इतर डिव्हाइसेसवर उपलब्ध करण्यासाठी क्लिक करा'
+              : syncInfo.lastSyncedAt
+              ? `शेवटचा सिंक: ${new Date(syncInfo.lastSyncedAt).toLocaleTimeString('mr-IN')} (डेटा सर्व उपकरणांवर उपलब्ध आहे)`
+              : 'सर्व डेटा थेट क्लाउड डेटाबेसवर सेव्ह करा (Live Sync)'
+          }
         >
-          {isSyncing ? (
-            <RefreshCw className="w-3 h-3 sm:w-3.5 sm:h-3.5 animate-spin text-emerald-600" />
-          ) : (
-            <CheckCircle2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-600" />
-          )}
-          <span className="text-[10px] sm:text-[11px] font-bold">
-            {isSyncing ? 'रिफ्रेश...' : 'डेटा सुरक्षित ✓'}
+          <RefreshCw
+            className={`w-3.5 h-3.5 flex-shrink-0 transition-transform ${
+              isSyncing ? 'animate-spin text-amber-600 dark:text-amber-400' : syncInfo.hasUnsynced ? 'text-slate-950' : 'text-emerald-600 dark:text-emerald-400'
+            }`}
+          />
+          <span className="font-extrabold">
+            {isSyncing
+              ? 'हलवत आहे...'
+              : syncInfo.hasUnsynced
+              ? 'थेट सिंक करा'
+              : 'थेट सिंक'}
+          </span>
+          {/* Status Dot */}
+          <span className="relative flex h-2 w-2 ml-0.5">
+            {syncInfo.hasUnsynced ? (
+              <>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-950 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-950"></span>
+              </>
+            ) : (
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            )}
           </span>
         </button>
 

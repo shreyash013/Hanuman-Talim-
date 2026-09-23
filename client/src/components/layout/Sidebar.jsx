@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import { useMandal } from '../../context/MandalContext';
+import { useNotification } from '../../context/NotificationContext';
+import { performFullLiveSync, getSyncStatus } from '../../services/api';
 import { GanpatiLogo } from '../common/GanpatiLogo';
 import {
   LayoutDashboard,
@@ -23,14 +25,50 @@ import {
   LogOut,
   HeartHandshake,
   Award,
-  Landmark
+  Landmark,
+  RefreshCw
 } from 'lucide-react';
 
 export function Sidebar({ onCloseMobile }) {
   const { t } = useLanguage();
   const { user, logout, isAdmin, isTreasurer, isSecretary, isVolunteer, isMember } = useAuth();
   const { mandal } = useMandal();
+  const { showToast } = useNotification();
   const navigate = useNavigate();
+
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncInfo, setSyncInfo] = useState({ lastSyncedAt: null, hasUnsynced: false });
+
+  useEffect(() => {
+    const updateSyncState = () => {
+      setSyncInfo(getSyncStatus());
+    };
+    updateSyncState();
+    window.addEventListener('shirol_data_updated', updateSyncState);
+    window.addEventListener('storage', updateSyncState);
+    return () => {
+      window.removeEventListener('shirol_data_updated', updateSyncState);
+      window.removeEventListener('storage', updateSyncState);
+    };
+  }, []);
+
+  const handleSidebarSync = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    try {
+      const res = await performFullLiveSync();
+      if (res && res.success) {
+        setSyncInfo(getSyncStatus());
+        showToast(res.message || 'सर्व डेटा लाईव्ह सर्व्हरवर सेव्ह झाला आणि सर्व डिव्हाइसेसवर उपलब्ध झाला!', 'success');
+      } else {
+        showToast(res.message || 'डेटा स्थानिकरित्या सुरक्षित आहे.', 'warning');
+      }
+    } catch {
+      showToast('सिंक करताना अडचण आली. डेटा सुरक्षित आहे.', 'error');
+    } finally {
+      setTimeout(() => setIsSyncing(false), 600);
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -120,6 +158,38 @@ export function Sidebar({ onCloseMobile }) {
             </NavLink>
           );
         })}
+      </div>
+
+      {/* Live Cloud Sync Card */}
+      <div className="mx-3 my-2 p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 shadow-xs">
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full ${syncInfo.hasUnsynced ? 'bg-amber-500 animate-ping' : 'bg-emerald-500'}`} />
+            <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+              {syncInfo.hasUnsynced ? 'स्थानिक बदल' : 'क्लाउड सिंक'}
+            </span>
+          </div>
+          <span className="text-[9px] font-extrabold text-emerald-600 dark:text-emerald-400">
+            {syncInfo.lastSyncedAt ? 'डेटा सुरक्षित ✓' : 'Supabase Live'}
+          </span>
+        </div>
+        <button
+          onClick={handleSidebarSync}
+          disabled={isSyncing}
+          className={`w-full flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-xs font-black shadow-xs active:scale-95 transition-all ${
+            isSyncing
+              ? 'bg-amber-500/20 text-amber-700 dark:text-amber-400 cursor-wait'
+              : syncInfo.hasUnsynced
+              ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black shadow-glow-amber'
+              : 'bg-emerald-600 hover:bg-emerald-700 text-white font-bold'
+          }`}
+          title="सर्व स्थानिक डेटा थेट लाईव्ह सर्व्हरवर पाठवून इतर उपकरणांशी सिंक करा"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+          <span>
+            {isSyncing ? 'सिंक होत आहे...' : syncInfo.hasUnsynced ? 'थेट सिंक करा (Live Sync)' : 'थेट सिंक करा (Live)'}
+          </span>
+        </button>
       </div>
 
       {/* Logout Footer */}
