@@ -124,13 +124,11 @@ export async function autoSyncAll(req, res) {
       try {
         for (const expId of deletedExpSet) {
           await db.from('expense_transactions').update({ is_deleted: true }).eq('expense_id', expId);
-          await db.from('expense_transactions').delete().eq('expense_id', expId);
         }
         for (const id of deletedExpIdSet) {
           const numId = Number(id);
           if (!isNaN(numId) && numId > 0) {
             await db.from('expense_transactions').update({ is_deleted: true }).eq('id', numId);
-            await db.from('expense_transactions').delete().eq('id', numId);
           }
         }
       } catch (delExpErr) {
@@ -369,8 +367,9 @@ export async function autoSyncAll(req, res) {
     }
 
     // 4. Sync Expense Transactions (Diff-checked & Batch Inserted)
-    const { data: existingExpenses } = await db.from('expense_transactions').select('id, expense_id, description, amount, status');
+    const { data: existingExpenses } = await db.from('expense_transactions').select('id, expense_id, description, amount, status, is_deleted');
     const existingExpMap = new Map((existingExpenses || []).map(e => [e.expense_id, e]));
+    const existingExpMapById = new Map((existingExpenses || []).map(e => [String(e.id), e]));
 
     const expensesToInsert = [];
     const expenseUpdates = [];
@@ -384,9 +383,12 @@ export async function autoSyncAll(req, res) {
       const expId = exp.expense_id || `EXP-2026-${String(counts.expenses + 1).padStart(5, '0')}`;
       if (deletedExpSet.has(expId) || (exp.id && deletedExpIdSet.has(String(exp.id)))) continue;
 
-      const existingExp = existingExpMap.get(expId);
+      const existingExp = existingExpMap.get(expId) || (exp.id ? existingExpMapById.get(String(exp.id)) : null);
 
       if (existingExp) {
+        // If already deleted in database, NEVER resurrect it!
+        if (existingExp.is_deleted) continue;
+
         // Diff check: only update if status actually changed!
         if (exp.status && ['approved', 'rejected', 'paid'].includes(exp.status) && existingExp.status !== exp.status) {
           expenseUpdates.push(
@@ -566,18 +568,15 @@ export async function syncDeleteExpense(req, res) {
     if (expense_id) {
       const expStr = String(expense_id).trim();
       await db.from('expense_transactions').update({ is_deleted: true }).eq('expense_id', expStr);
-      await db.from('expense_transactions').delete().eq('expense_id', expStr);
     }
     if (id) {
       const sid = String(id).trim();
       if (sid.startsWith('EXP-')) {
         await db.from('expense_transactions').update({ is_deleted: true }).eq('expense_id', sid);
-        await db.from('expense_transactions').delete().eq('expense_id', sid);
       } else {
         const numId = Number(sid);
         if (!isNaN(numId) && numId > 0) {
           await db.from('expense_transactions').update({ is_deleted: true }).eq('id', numId);
-          await db.from('expense_transactions').delete().eq('id', numId);
         }
       }
     }
@@ -597,7 +596,8 @@ export async function getCloudFullData(req, res) {
       loansRes,
       receiptsRes,
       settingsRes,
-      membersRes
+      membersRes,
+      deletedExpensesRes
     ] = await Promise.all([
       db.from('income_transactions').select('*').eq('is_deleted', false).order('created_at', { ascending: false }),
       db.from('expense_transactions').select('*').eq('is_deleted', false).neq('category', 'loan_repayment').not('expense_id', 'ilike', 'EXP-LOAN-%').order('created_at', { ascending: false }),
@@ -605,7 +605,8 @@ export async function getCloudFullData(req, res) {
       db.from('loans').select('*').order('created_at', { ascending: false }),
       db.from('receipts').select('*').order('created_at', { ascending: false }),
       db.from('mandal_settings').select('*').limit(1).maybeSingle(),
-      db.from('committee_members').select('*').order('display_order', { ascending: true })
+      db.from('committee_members').select('*').order('display_order', { ascending: true }),
+      db.from('expense_transactions').select('id, expense_id').eq('is_deleted', true)
     ]);
 
     const nonLoanExpenses = (expensesRes.data || []).filter(e =>
@@ -630,7 +631,8 @@ export async function getCloudFullData(req, res) {
         loans: loansRes.data || [],
         receipts: receiptsRes.data || [],
         settings: settingsRes.data || null,
-        members: membersRes.data || []
+        members: membersRes.data || [],
+        deleted_expenses: (deletedExpensesRes?.data || [])
       }
     });
   } catch (err) {

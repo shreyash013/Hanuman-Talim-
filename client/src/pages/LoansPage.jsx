@@ -66,6 +66,7 @@ export function LoansPage() {
   // Ledger Modal State
   const [ledgerLoan, setLedgerLoan] = useState(null);
   const [showLedgerModal, setShowLedgerModal] = useState(false);
+  const [loanToDelete, setLoanToDelete] = useState(null);
 
   const fetchLoans = async () => {
     try {
@@ -148,12 +149,13 @@ export function LoansPage() {
     }
   };
 
-  const handleDeleteLoan = async (id) => {
-    if (!window.confirm('तुम्हाला ही उधारी नोंद खरोखर हटवायची आहे का?')) return;
+  const handleConfirmDeleteLoan = async () => {
+    if (!loanToDelete) return;
     try {
-      const res = await api.delete(`/loans/${id}`);
+      const res = await api.delete(`/loans/${loanToDelete.id}`);
       if (res.success) {
         showToast('उधारी नोंद हटवली.', 'info');
+        setLoanToDelete(null);
         fetchLoans();
       }
     } catch {
@@ -387,7 +389,7 @@ Remaining *बाकी रक्कम:* ₹${remaining}
 
                           {/* Delete Button */}
                           <button
-                            onClick={() => handleDeleteLoan(loan.id)}
+                            onClick={() => setLoanToDelete(loan)}
                             className="p-1.5 text-rose-400 hover:text-rose-300 bg-rose-950/40 rounded-lg hover:bg-rose-900/60 transition"
                             title="हटवा"
                           >
@@ -651,6 +653,56 @@ Remaining *बाकी रक्कम:* ₹${remaining}
             </div>
           </div>
         </Modal>
+      )}
+
+      {/* Delete Loan In-App Confirmation Modal */}
+      {loanToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-rose-500/40 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4">
+            <div className="flex items-center space-x-3 text-rose-400">
+              <div className="p-3 bg-rose-500/10 rounded-2xl border border-rose-500/20">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-white">उधारी नोंद हटवायची आहे का?</h3>
+                <p className="text-xs text-slate-400">ही नोंद खात्यातून काढून टाकली जाईल.</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2.5 text-xs">
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-400">व्यक्तीचे नाव:</span>
+                <span className="font-bold text-white text-right">{loanToDelete.person_name}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-400">रक्कम:</span>
+                <span className="font-extrabold text-rose-400 text-sm">₹{Number(loanToDelete.amount || 0).toLocaleString('en-IN')}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-400">प्रकार:</span>
+                <span className="text-amber-400 font-bold">{loanToDelete.type === 'borrowed' ? 'घेतलेली उधारी (देणे)' : 'दिलेली उधारी (येणे)'}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setLoanToDelete(null)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition"
+              >
+                रद्द करा (Cancel)
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteLoan}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs transition flex items-center justify-center space-x-1.5 shadow-lg shadow-rose-900/30"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>होय, हटवा</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

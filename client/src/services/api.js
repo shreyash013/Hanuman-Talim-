@@ -272,6 +272,22 @@ export function autoHealAndRenumberReceipts() {
 
 export const DATA_CLEAN_VERSION = '2026-09-23-v-wipe-clean-final-reset-0';
 
+export function createDeletedExpenseSet(delList) {
+  const set = new Set();
+  if (!Array.isArray(delList)) return set;
+  for (const d of delList) {
+    if (!d) continue;
+    if (typeof d === 'string' || typeof d === 'number') {
+      set.add(String(d));
+    } else if (typeof d === 'object') {
+      if (d.id != null) set.add(String(d.id));
+      if (d.expense_id) set.add(String(d.expense_id));
+      if (d.sid) set.add(String(d.sid));
+    }
+  }
+  return set;
+}
+
 let isRecovering = false;
 // Data recovery to ensure clean slate for donors and valid baseline mandal settings
 export function ensureDataRecovery() {
@@ -313,7 +329,7 @@ export function ensureDataRecovery() {
           // 2. Remove any previously deleted expenses
           const rawDel = localStorage.getItem('shirol_deleted_expenses');
           const delList = rawDel ? JSON.parse(rawDel) : [];
-          const delSet = new Set(delList.map(d => String(d.expense_id || d.id || d)).filter(Boolean));
+          const delSet = createDeletedExpenseSet(delList);
           const finalExpenses = nonLoanExpenses.filter(exp =>
             !delSet.has(String(exp.id)) && !delSet.has(String(exp.expense_id))
           );
@@ -646,15 +662,27 @@ export async function autoSyncFromServer() {
           !(e.description && (e.description.includes('कर्ज / उधारी परतफेड') || e.description.includes('EXP-LOAN')))
         );
 
-        // 2. Exclude locally deleted expenses so they NEVER resurrect on sync
+        // 2. Ingest cloud deleted expenses and exclude them so they NEVER resurrect on sync
+        if (Array.isArray(json.data.deleted_expenses) && json.data.deleted_expenses.length > 0) {
+          const rawDel = localStorage.getItem('shirol_deleted_expenses');
+          const currentDel = rawDel ? JSON.parse(rawDel) : [];
+          const currentSet = createDeletedExpenseSet(currentDel);
+          for (const d of json.data.deleted_expenses) {
+            if (d && (d.id || d.expense_id)) {
+              if (!currentSet.has(String(d.id)) && !currentSet.has(String(d.expense_id))) {
+                currentDel.push(d);
+              }
+            }
+          }
+          localStorage.setItem('shirol_deleted_expenses', JSON.stringify(currentDel));
+        }
+
         const rawDelExp = localStorage.getItem('shirol_deleted_expenses');
         const delExpList = rawDelExp ? JSON.parse(rawDelExp) : [];
-        if (Array.isArray(delExpList) && delExpList.length > 0) {
-          const delExpSet = new Set(delExpList.map(d => String(d.expense_id || d.id || d)).filter(Boolean));
-          serverExpenses = serverExpenses.filter(e =>
-            !delExpSet.has(String(e.id)) && !delExpSet.has(String(e.expense_id))
-          );
-        }
+        const delExpSet = createDeletedExpenseSet(delExpList);
+        serverExpenses = serverExpenses.filter(e =>
+          !delExpSet.has(String(e.id)) && !delExpSet.has(String(e.expense_id))
+        );
 
         // 3. Sanitize expenses
         const sanitizedExpenses = serverExpenses.map(exp => ({
@@ -774,7 +802,7 @@ function getLocalStore(key, defaultValue = []) {
       const rawDel = localStorage.getItem('shirol_deleted_expenses');
       const delList = rawDel ? JSON.parse(rawDel) : [];
       if (Array.isArray(delList) && delList.length > 0) {
-        const delSet = new Set(delList.map(d => String(d.expense_id || d.id || d)).filter(Boolean));
+        const delSet = createDeletedExpenseSet(delList);
         data = data.filter(exp => !delSet.has(String(exp.id)) && !delSet.has(String(exp.expense_id)));
       }
       data = data.map(exp => ({
@@ -1856,23 +1884,37 @@ export async function request(endpoint, options = {}) {
 
       // Record tombstone in shirol_deleted_expenses so sync NEVER brings it back
       const deletedExpenses = getLocalStore('deleted_expenses', []);
-      deletedExpenses.push({
-        id: targetId,
-        expense_id: targetExpId,
-        description: targetExp?.description || '',
-        timestamp: Date.now()
-      });
+      const currentDelSet = createDeletedExpenseSet(deletedExpenses);
+      if (targetId && !currentDelSet.has(String(targetId))) {
+        deletedExpenses.push({
+          id: targetId,
+          expense_id: targetExpId,
+          description: targetExp?.description || '',
+          timestamp: Date.now()
+        });
+      } else if (targetExpId && !currentDelSet.has(String(targetExpId))) {
+        deletedExpenses.push({
+          id: targetId,
+          expense_id: targetExpId,
+          description: targetExp?.description || '',
+          timestamp: Date.now()
+        });
+      }
       localStorage.setItem('shirol_deleted_expenses', JSON.stringify(deletedExpenses));
 
-      // Asynchronously trigger server deletion call immediately
-      fetch('https://hanuman-talim-api.onrender.com/api/sync/delete-expense', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: targetId, expense_id: targetExpId })
-      }).catch(err => console.warn('Cloud expense delete note:', err.message));
+      // Asynchronously trigger server deletion call and wait for it
+      try {
+        await fetch('https://hanuman-talim-api.onrender.com/api/sync/delete-expense', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: targetId, expense_id: targetExpId })
+        });
+      } catch (err) {
+        console.warn('Cloud expense delete note:', err.message);
+      }
 
-      // Trigger background sync to propagate tombstone to server
-      triggerAutoSync();
+      // Flush tombstones to cloud immediately
+      autoSyncAllToServer().catch(() => {});
 
       return { success: true, message: 'खर्च यशस्वीरित्या हटवला.' };
     }

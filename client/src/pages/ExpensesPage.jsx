@@ -52,6 +52,8 @@ export function ExpensesPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditBudgetModal, setShowEditBudgetModal] = useState(false);
   const [previewAttachment, setPreviewAttachment] = useState(null); // { url, type, title }
+  const [expenseToDelete, setExpenseToDelete] = useState(null);
+  const [isDeletingExpense, setIsDeletingExpense] = useState(false);
 
   // Show / Hide Budget Cards State
   const [showBudgetCards, setShowBudgetCards] = useState(() => {
@@ -198,17 +200,22 @@ export function ExpensesPage() {
     return { ...b, used };
   });
 
-  const handleDeleteExpense = async (id, expDesc, expId) => {
-    if (!window.confirm(`तुम्हाला नक्की "${expDesc || 'हा खर्च'}" हटवायचा आहे का?`)) {
-      return;
-    }
+  const handleConfirmDeleteExpense = async () => {
+    if (!expenseToDelete) return;
+    const target = expenseToDelete;
+    setIsDeletingExpense(true);
     try {
       // Optimistically remove from state immediately
-      setExpenses(prev => prev.filter(e => String(e.id) !== String(id) && (!expId || String(e.expense_id) !== String(expId))));
-      const deleteUrl = `/expenses/${encodeURIComponent(id || expId)}${expId ? `?expense_id=${encodeURIComponent(expId)}` : ''}`;
+      setExpenses(prev => prev.filter(e =>
+        String(e.id) !== String(target.id) &&
+        (!target.expense_id || String(e.expense_id) !== String(target.expense_id))
+      ));
+
+      const deleteUrl = `/expenses/${encodeURIComponent(target.id || target.expense_id)}${target.expense_id ? `?expense_id=${encodeURIComponent(target.expense_id)}` : ''}`;
       const res = await api.delete(deleteUrl);
       if (res.success) {
-        showToast('खर्च यशस्वीरित्या हटवला.', 'success');
+        showToast(`खर्च "${target.description || ''}" यशस्वीरित्या हटवला. 🗑️`, 'success');
+        setExpenseToDelete(null);
         fetchExpenses(true);
       } else {
         showToast(res.message || 'खर्च हटवताना त्रुटी.', 'error');
@@ -217,6 +224,8 @@ export function ExpensesPage() {
     } catch (err) {
       showToast(err.message || 'खर्च हटवताना त्रुटी.', 'error');
       fetchExpenses();
+    } finally {
+      setIsDeletingExpense(false);
     }
   };
 
@@ -692,7 +701,7 @@ export function ExpensesPage() {
                               मंजूर
                             </span>
                             <button
-                              onClick={() => handleDeleteExpense(e.id, e.description, e.expense_id)}
+                              onClick={() => setExpenseToDelete(e)}
                               title="खर्च हटवा (Delete Expense)"
                               className="p-1.5 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 rounded-lg transition"
                             >
@@ -727,7 +736,7 @@ export function ExpensesPage() {
                               </div>
                             )}
                             <button
-                              onClick={() => handleDeleteExpense(e.id, e.description, e.expense_id)}
+                              onClick={() => setExpenseToDelete(e)}
                               title="खर्च हटवा (Delete Expense)"
                               className="p-1.5 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 rounded-lg transition ml-1"
                             >
@@ -1130,6 +1139,81 @@ export function ExpensesPage() {
           </div>
         </form>
       </Modal>
+
+      {/* Delete Expense In-App Confirmation Modal */}
+      {expenseToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-rose-500/40 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4">
+            <div className="flex items-center space-x-3 text-rose-400">
+              <div className="p-3 bg-rose-500/10 rounded-2xl border border-rose-500/20">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-white">खर्च कायमचा हटवायचा आहे का?</h3>
+                <p className="text-xs text-slate-400">हा खर्च मुख्य यादी व सर्व्हरवरून पूर्णपणे काढून टाकला जाईल.</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2.5 text-xs">
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-400">खर्च तपशील:</span>
+                <span className="font-bold text-white text-right max-w-[200px] truncate">{expenseToDelete.description}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-400">रक्कम:</span>
+                <span className="font-extrabold text-rose-400 text-sm">₹{Number(expenseToDelete.amount || 0).toLocaleString('en-IN')}</span>
+              </div>
+              {expenseToDelete.paid_to && (
+                <div className="flex justify-between items-center text-slate-300">
+                  <span className="text-slate-400">कोणाला दिले:</span>
+                  <span className="text-slate-200">{expenseToDelete.paid_to}</span>
+                </div>
+              )}
+              {expenseToDelete.category && (
+                <div className="flex justify-between items-center text-slate-300">
+                  <span className="text-slate-400">वर्गवारी:</span>
+                  <span className="text-amber-400 font-medium capitalize">{expenseToDelete.category}</span>
+                </div>
+              )}
+              {expenseToDelete.expense_id && (
+                <div className="flex justify-between items-center text-slate-300">
+                  <span className="text-slate-400">क्रमांक:</span>
+                  <span className="font-mono text-[11px] text-slate-400">{expenseToDelete.expense_id}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center space-x-3 pt-2">
+              <button
+                type="button"
+                disabled={isDeletingExpense}
+                onClick={() => setExpenseToDelete(null)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition"
+              >
+                रद्द करा (Cancel)
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingExpense}
+                onClick={handleConfirmDeleteExpense}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs transition flex items-center justify-center space-x-1.5 shadow-lg shadow-rose-900/30 disabled:opacity-50"
+              >
+                {isDeletingExpense ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>हटवत आहे...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>होय, कायमचा हटवा</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
