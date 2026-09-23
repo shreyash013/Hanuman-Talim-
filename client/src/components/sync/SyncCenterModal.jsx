@@ -279,7 +279,7 @@ export function SyncCenterModal({ isOpen, onClose }) {
             className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-black shadow-md active:scale-98 transition-all"
           >
             <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>{isSyncing ? 'सर्व्हरवर डेटा हलवत आहे...' : '🔄 सर्व डेटा थेट क्लाउड सर्व्हरवर हलवा (Live Cloud Sync)'}</span>
+            <span>{isSyncing ? 'सिंक चालू आहे...' : '🔄 सर्व डेटा थेट क्लाउड सर्व्हरवर सिंक करा (Live Cloud Sync)'}</span>
           </button>
         </div>
 

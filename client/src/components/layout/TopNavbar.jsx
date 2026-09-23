@@ -129,7 +129,7 @@ export function TopNavbar({ onOpenMobileMenu }) {
           />
           <span className="font-extrabold">
             {isSyncing
-              ? 'हलवत आहे...'
+              ? 'सिंक चालू...'
               : syncInfo.hasUnsynced
               ? 'थेट सिंक करा'
               : 'थेट सिंक'}

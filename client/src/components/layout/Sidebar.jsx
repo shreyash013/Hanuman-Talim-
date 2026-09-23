@@ -187,7 +187,7 @@ export function Sidebar({ onCloseMobile }) {
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
           <span>
-            {isSyncing ? 'सिंक होत आहे...' : syncInfo.hasUnsynced ? 'थेट सिंक करा (Live Sync)' : 'थेट सिंक करा (Live)'}
+            {isSyncing ? 'सिंक चालू आहे...' : syncInfo.hasUnsynced ? 'थेट सिंक करा (Live Sync)' : 'थेट सिंक करा (Live)'}
           </span>
         </button>
       </div>
