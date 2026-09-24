@@ -350,7 +350,7 @@ export function ExpensesPage() {
       formData.append('paid_to', paidTo.trim());
       formData.append('bill_number', billNumber.trim());
       formData.append('notes', notes.trim());
-      formData.append('status', 'approved');
+      formData.append('status', 'pending');
 
       if (fileAttachment) {
         formData.append('bill_attachment', fileAttachment);
@@ -362,8 +362,8 @@ export function ExpensesPage() {
       const res = await api.post('/expenses', formData);
 
       if (res.success) {
-        showToast('नवीन खर्च मुख्य यादीत यशस्वीरित्या जोडला गेला! 💰', 'success');
-        setActiveTab('approved');
+        showToast('नवीन खर्च मंजुरीच्या रांगेत यशस्वीरित्या जोडला गेला! (Pending Approval) ⏳', 'success');
+        setActiveTab('pending');
         setShowAddModal(false);
         resetForm();
         await fetchExpenses(true);
@@ -387,7 +387,7 @@ export function ExpensesPage() {
     setFileAttachment(null);
     setFilePreviewUrl('');
     setFileType(null);
-    setRequestedStatus('approved');
+    setRequestedStatus('pending');
     setDuplicateBillWarning(null);
   };
 

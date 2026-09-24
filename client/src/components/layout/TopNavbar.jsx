@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { NavLink } from 'react-router-dom';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -10,12 +11,14 @@ import {
   Moon,
   ChevronDown,
   RefreshCw,
+  HardDrive,
+  Settings,
   CheckCircle2,
   Cloud,
   CloudUpload
 } from 'lucide-react';
 import { GanpatiLogo } from '../common/GanpatiLogo';
-import { performFullLiveSync, getSyncStatus } from '../../services/api';
+import { performLocalStorageSync, getSyncStatus } from '../../services/api';
 
 export function TopNavbar({ onOpenMobileMenu }) {
   const { lang, setLang, t } = useLanguage();
@@ -44,27 +47,24 @@ export function TopNavbar({ onOpenMobileMenu }) {
     };
   }, []);
 
-  const handleManualSync = async () => {
+  const handleLocalStorageSync = async () => {
     if (isSyncing) return;
     setIsSyncing(true);
     try {
-      const res = await performFullLiveSync();
+      const res = await performLocalStorageSync();
       if (res && res.success) {
         setSyncInfo(getSyncStatus());
         showToast(
-          res.message || 'सर्व डेटा थेट लाईव्ह सर्व्हरवर सेव्ह झाला आणि इतर सर्व डिव्हाइसेसवर उपलब्ध झाला आहे!',
+          res.message || 'स्थानिक स्टोरेज डेटा (Local Storage) यशस्वीरित्या सिंक झाला!',
           'success'
         );
       } else {
-        showToast(
-          res.message || 'सर्व्हरशी संपर्क होऊ शकला नाही. डेटा स्थानिकरित्या (Local Storage) सुरक्षित आहे.',
-          'warning'
-        );
+        showToast('स्थानिक सिंक करताना अडचण आली.', 'warning');
       }
     } catch (err) {
-      showToast('सिंक करताना अडचण आली. डेटा स्थानिकरित्या सुरक्षित आहे.', 'error');
+      showToast('स्थानिक सिंक करताना अडचण आली.', 'error');
     } finally {
-      setTimeout(() => setIsSyncing(false), 600);
+      setTimeout(() => setIsSyncing(false), 500);
     }
   };
 
@@ -103,47 +103,34 @@ export function TopNavbar({ onOpenMobileMenu }) {
 
       {/* Right Controls */}
       <div className="flex items-center gap-1.5 sm:gap-2.5 flex-shrink-0">
-        {/* Dedicated Live Cloud Sync Button (Local Storage -> Live Supabase Server) */}
+        {/* Navigation Option to change Mandal Settings */}
+        <NavLink
+          to="/settings"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-amber-600 dark:hover:text-amber-400 hover:border-amber-500/30 text-xs font-bold transition-all active:scale-95"
+          title="मंडळ सेटिंग्ज बदला (Mandal Settings)"
+        >
+          <Settings className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+          <span className="hidden md:inline font-bold">मंडळ सेटिंग्ज</span>
+        </NavLink>
+
+        {/* Dedicated Local Storage Sync Button (Topnav) */}
         <button
-          onClick={handleManualSync}
+          onClick={handleLocalStorageSync}
           disabled={isSyncing}
           className={`flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-xl border text-[11px] sm:text-xs font-black select-none shadow-xs active:scale-95 transition-all duration-200 ${
             isSyncing
               ? 'bg-amber-500/15 border-amber-500/40 text-amber-700 dark:text-amber-300 cursor-wait'
-              : syncInfo.hasUnsynced
-              ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black shadow-glow-amber border-amber-400 ring-2 ring-amber-400/40 animate-pulse'
-              : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
+              : 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50'
           }`}
-          title={
-            syncInfo.hasUnsynced
-              ? 'स्थानिक डेटा साठवला आहे - सर्व्हरवर हलवण्यासाठी व इतर डिव्हाइसेसवर उपलब्ध करण्यासाठी क्लिक करा'
-              : syncInfo.lastSyncedAt
-              ? `शेवटचा सिंक: ${new Date(syncInfo.lastSyncedAt).toLocaleTimeString('mr-IN')} (डेटा सर्व उपकरणांवर उपलब्ध आहे)`
-              : 'सर्व डेटा थेट क्लाउड डेटाबेसवर सेव्ह करा (Live Sync)'
-          }
+          title="स्थानिक डेटा (Local Storage) सिंक व सुरक्षित करा"
         >
-          <RefreshCw
+          <HardDrive
             className={`w-3.5 h-3.5 flex-shrink-0 transition-transform ${
-              isSyncing ? 'animate-spin text-amber-600 dark:text-amber-400' : syncInfo.hasUnsynced ? 'text-slate-950' : 'text-emerald-600 dark:text-emerald-400'
+              isSyncing ? 'animate-spin text-amber-600' : 'text-amber-600 dark:text-amber-400'
             }`}
           />
           <span className="font-extrabold">
-            {isSyncing
-              ? 'सिंक चालू...'
-              : syncInfo.hasUnsynced
-              ? 'थेट सिंक करा'
-              : 'थेट सिंक'}
-          </span>
-          {/* Status Dot */}
-          <span className="relative flex h-2 w-2 ml-0.5">
-            {syncInfo.hasUnsynced ? (
-              <>
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-950 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-950"></span>
-              </>
-            ) : (
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            )}
+            {isSyncing ? 'स्थानिक सिंक...' : 'स्थानिक सिंक'}
           </span>
         </button>
 

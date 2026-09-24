@@ -341,7 +341,10 @@ export function autoHealAndRenumberReceipts() {
     localStorage.setItem('shirol_income', JSON.stringify(finalIncome));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('shirol_data_updated', { detail: { type: 'income_renumbered' } }));
+      window.dispatchEvent(new Event('storage'));
+      broadcastDataChange();
     }
+    triggerAutoSync();
   } catch (err) {
     console.warn('autoHealAndRenumberReceipts note:', err);
   } finally {
@@ -349,7 +352,7 @@ export function autoHealAndRenumberReceipts() {
   }
 }
 
-export const DATA_CLEAN_VERSION = '2026-09-23-v-wipe-clean-final-reset-0';
+export const DATA_CLEAN_VERSION = '2026-09-24-v-zero-all-clean-fresh-start-1';
 
 export function createDeletedExpenseSet(delList) {
   const set = new Set();
@@ -460,13 +463,17 @@ export function ensureDataRecovery() {
 
     const currentVer = localStorage.getItem('shirol_clean_version');
 
-    // Clean slate: erase all donors, income, loans and receipts when version changes
+    // Clean slate: erase all donors, income, expenses, loans, receipts and cash history when version changes
     if (currentVer !== DATA_CLEAN_VERSION) {
       localStorage.setItem('shirol_income', JSON.stringify([]));
       localStorage.setItem('shirol_donors', JSON.stringify([]));
+      localStorage.setItem('shirol_expenses', JSON.stringify([]));
       localStorage.setItem('shirol_loans', JSON.stringify([]));
+      localStorage.setItem('shirol_cash_history', JSON.stringify([]));
       localStorage.removeItem('shirol_receipts');
       localStorage.removeItem('shirol_deleted_donors');
+      localStorage.removeItem('shirol_deleted_expenses');
+      localStorage.removeItem('shirol_deleted_income');
       localStorage.removeItem('shirol_receipt_legacy_map');
       localStorage.setItem('shirol_has_unsynced_changes', 'false');
       localStorage.setItem('shirol_clean_version', DATA_CLEAN_VERSION);
@@ -917,6 +924,7 @@ export async function autoSyncFromServer() {
           if (serverExpKeys.has(String(e.expense_id)) || (e.id && serverExpKeys.has(String(e.id)))) return false;
           return true;
         });
+        const mergedExpenses = [...pendingLocalExps, ...sanitizedExpenses];
 
         // 5. Ingest cloud deleted income and donors if available
         if (Array.isArray(json.data.deleted_income) && json.data.deleted_income.length > 0) {
@@ -1031,9 +1039,7 @@ export async function autoSyncFromServer() {
         localStorage.setItem('shirol_donors', JSON.stringify(mergedDonors));
         localStorage.setItem('shirol_receipts', JSON.stringify(serverReceipts));
         localStorage.setItem('shirol_expenses', JSON.stringify(mergedExpenses));
-        if (serverLoans.length > 0) {
-          localStorage.setItem('shirol_loans', JSON.stringify(serverLoans));
-        }
+        localStorage.setItem('shirol_loans', JSON.stringify(serverLoans));
         if (serverMembers.length > 0) {
           localStorage.setItem('shirol_members', JSON.stringify(serverMembers));
         }
@@ -1068,8 +1074,31 @@ export async function autoSyncFromServer() {
   return { success: false, mode: 'local' };
 }
 
-// Full Two-Way Live Sync Trigger
-export async function performFullLiveSync() {
+// Local Storage Sync: Reconcile, renumber, and save client local data
+export async function performLocalStorageSync() {
+  if (typeof window === 'undefined') return { success: true };
+  try {
+    reconcileDonorsAndIncome();
+    autoHealAndRenumberReceipts();
+    localStorage.setItem('shirol_last_local_synced_at', new Date().toISOString());
+    window.dispatchEvent(new Event('shirol_data_updated'));
+    window.dispatchEvent(new Event('storage'));
+    broadcastDataChange();
+    return {
+      success: true,
+      message: 'स्थानिक मेमरी (Local Storage) डेटा यशस्वीरित्या सिंक व सुरक्षित केला!'
+    };
+  } catch (err) {
+    console.error('performLocalStorageSync error:', err);
+    return {
+      success: false,
+      message: 'स्थानिक सिंक करताना त्रुटी आली.'
+    };
+  }
+}
+
+// Full Two-Way Cloud Sync Trigger (Render & Supabase Live Database)
+export async function performCloudSync() {
   if (typeof window === 'undefined') return { success: true, mode: 'local' };
   try {
     // 1. Move all local data to live database server
@@ -1081,24 +1110,26 @@ export async function performFullLiveSync() {
     if (pullResult && pullResult.success) {
       return {
         success: true,
-        message: 'सर्व स्थानिक डेटा थेट लाईव्ह सर्व्हरवर सेव्ह झाला आणि इतर सर्व उपकरणांवर उपलब्ध झाला आहे!',
+        message: 'सर्व डेटा थेट लाईव्ह क्लाउड सर्व्हरवर (Render / Supabase) यशस्वीरित्या सिंक झाला!',
         counts: pullResult.counts
       };
     }
 
     return {
       success: true,
-      message: 'डेटा स्थानिकरित्या सुरक्षित आहे आणि सिंक झाला.',
-      mode: 'local'
+      message: 'डेटा क्लाउडवर सुरक्षित सिंक झाला.',
+      mode: 'cloud'
     };
   } catch (err) {
-    console.error('performFullLiveSync error:', err);
+    console.error('performCloudSync error:', err);
     return {
       success: false,
-      message: 'सर्व्हरशी संपर्क होऊ शकला नाही. डेटा स्थानिकरित्या (Local Storage) सुरक्षित आहे.'
+      message: 'क्लाउड सर्व्हरशी संपर्क होऊ शकला नाही. डेटा स्थानिकरित्या (Local Storage) सुरक्षित आहे.'
     };
   }
 }
+
+export const performFullLiveSync = performCloudSync;
 
 // Manual refresh trigger for UI buttons
 export async function forceSyncNow() {
@@ -2121,8 +2152,12 @@ export async function request(endpoint, options = {}) {
       filtered = filtered.filter(item => (item.payment_method || 'cash') === params.payment_method);
     }
 
-    // Enforce strict descending sort (Newest First)
+    // Enforce strict date-wise descending sequence (e.g. 24/09/2026 is first, 14/09/2026 is last)
     filtered.sort((a, b) => {
+      const timeA = new Date(a.created_at || a.date || 0).getTime();
+      const timeB = new Date(b.created_at || b.date || 0).getTime();
+      if (timeA !== timeB) return timeB - timeA;
+
       const getNum = (item) => {
         if (!item) return 0;
         const m = (item.receipt_number || item.transaction_id || '').match(/(\d+)$/);
@@ -2131,9 +2166,7 @@ export async function request(endpoint, options = {}) {
       const numA = getNum(a);
       const numB = getNum(b);
       if (numA !== numB) return numB - numA;
-      const timeA = new Date(a.created_at || 0).getTime() || (Number(a.id) || 0);
-      const timeB = new Date(b.created_at || 0).getTime() || (Number(b.id) || 0);
-      return timeB - timeA;
+      return (Number(b.id) || 0) - (Number(a.id) || 0);
     });
 
     const totalAmount = filtered.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
@@ -2170,8 +2203,8 @@ export async function request(endpoint, options = {}) {
         bodyData = JSON.parse(options.body || '{}');
       }
 
-      // Default to approved so it is visible immediately in the main approved expenses list
-      const status = bodyData.status || 'approved';
+      // Default to pending so new expenses wait for approval in the approval queue
+      const status = bodyData.status || 'pending';
       const expenseId = bodyData.expense_id || generateNextExpenseId(expensesList);
 
       const newExpense = {
@@ -2201,7 +2234,9 @@ export async function request(endpoint, options = {}) {
 
       return {
         success: true,
-        message: 'खर्च यशस्वीरित्या नोंदवला गेला!',
+        message: status === 'pending'
+          ? 'खर्च यशस्वीरित्या नोंदवला व मंजुरीसाठी पाठवला आहे.'
+          : 'खर्च यशस्वीरित्या नोंदवला व मंजूर झाला.',
         data: newExpense
       };
     }
@@ -2775,6 +2810,12 @@ export async function request(endpoint, options = {}) {
       }
     });
     const uniqueProcessedDonors = Array.from(finalDonorsMap.values());
+    uniqueProcessedDonors.sort((a, b) => {
+      const amtA = Number(a.paid_amount || a.total_donated || a.target_amount || 0);
+      const amtB = Number(b.paid_amount || b.total_donated || b.target_amount || 0);
+      if (amtB !== amtA) return amtB - amtA;
+      return (a.name || '').localeCompare(b.name || '');
+    });
 
     // Summary: accurately calculate from processed donors and live income
     const totalTarget = uniqueProcessedDonors.reduce((sum, d) => sum + (Number(d.target_amount) || 0), 0);

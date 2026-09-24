@@ -299,64 +299,6 @@ export async function ensureInitialSetup() {
     );
   }
 
-  // ----------------------------------------
-  // Ensure Prithviraj Gavade & Vargani Alignment
-  // ----------------------------------------
-  try {
-    const { data: pDonors } = await db
-      .from('donors')
-      .select('id, name, mobile, target_amount, paid_amount')
-      .or('name.ilike.%Prithviraj%,name.ilike.%पृथ्वीराज%');
-
-    if (pDonors && pDonors.length > 0) {
-      const pDonor = pDonors[0];
-      const normalizedName = 'Prithviraj Gavade (पृथ्वीराज गवडे)';
-      const normalizedMobile = '+91 70585 64265';
-      const normalizedAddress = 'नदीवेस, शिरोळ';
-
-      await db.from('donors').update({
-        name: normalizedName,
-        mobile: normalizedMobile,
-        address: normalizedAddress,
-        area: 'नदीवेस शिरोळ',
-        target_amount: 5000,
-        paid_amount: 2500,
-        total_donated: 2500,
-        donations_count: 1,
-        status: 'partial'
-      }).eq('id', pDonor.id);
-
-      await db.from('income_transactions').update({
-        donor_name: normalizedName,
-        mobile: normalizedMobile,
-        address: normalizedAddress,
-        category: 'vargani',
-        purpose: 'श्री गणेशोत्सव वर्गणी'
-      }).or(`donor_id.eq.${pDonor.id},donor_name.ilike.%Prithviraj%,donor_name.ilike.%पृथ्वीराज%`);
-
-      await db.from('receipts').update({
-        donor_name: normalizedName,
-        mobile: normalizedMobile,
-        address: normalizedAddress,
-        category: 'vargani',
-        purpose: 'श्री गणेशोत्सव वर्गणी'
-      }).or(`donor_name.ilike.%Prithviraj%,donor_name.ilike.%पृथ्वीराज%,receipt_number.eq.HANUMAN-2026-000017`);
-
-      console.log('✅ Prithviraj Gavade database entry aligned to Vargani.');
-    }
-  } catch (alignErr) {
-    console.warn('Prithviraj alignment note:', alignErr.message);
-  }
-
-  // ----------------------------------------
-  // Ensure Receipt Anomalies Fixed (e.g. Jagdish Gavade 000043, Deduplication)
-  // ----------------------------------------
-  try {
-    const { fixReceiptAnomalies } = await import('../controllers/incomeController.js');
-    await fixReceiptAnomalies();
-  } catch (fixErr) {
-    console.warn('fixReceiptAnomalies setup note:', fixErr.message);
-  }
 }
 
 export default db;

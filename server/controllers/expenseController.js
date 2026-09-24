@@ -10,6 +10,7 @@ function applyExpenseFilters(query, filters) {
     query = query.or(`description.ilike.%${s}%,paid_to.ilike.%${s}%,bill_number.ilike.%${s}%,expense_id.ilike.%${s}%`);
   }
   if (category) query = query.eq('category', category);
+  query = query.neq('category', 'loan_repayment');
   if (status) {
     if (status.includes(',')) {
       const statuses = status.split(',').map(s => s.trim()).filter(Boolean);

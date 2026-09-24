@@ -4,7 +4,7 @@ import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import { useMandal } from '../../context/MandalContext';
 import { useNotification } from '../../context/NotificationContext';
-import { performFullLiveSync, getSyncStatus } from '../../services/api';
+import { performCloudSync, getSyncStatus } from '../../services/api';
 import { GanpatiLogo } from '../common/GanpatiLogo';
 import {
   LayoutDashboard,
@@ -26,7 +26,8 @@ import {
   HeartHandshake,
   Award,
   Landmark,
-  RefreshCw
+  RefreshCw,
+  CloudUpload
 } from 'lucide-react';
 
 export function Sidebar({ onCloseMobile }) {
@@ -56,15 +57,15 @@ export function Sidebar({ onCloseMobile }) {
     if (isSyncing) return;
     setIsSyncing(true);
     try {
-      const res = await performFullLiveSync();
+      const res = await performCloudSync();
       if (res && res.success) {
         setSyncInfo(getSyncStatus());
-        showToast(res.message || 'सर्व डेटा लाईव्ह सर्व्हरवर सेव्ह झाला आणि सर्व डिव्हाइसेसवर उपलब्ध झाला!', 'success');
+        showToast(res.message || 'सर्व डेटा थेट क्लाउड सर्व्हरशी (Supabase & Render) यशस्वीरित्या सिंक झाला!', 'success');
       } else {
-        showToast(res.message || 'डेटा स्थानिकरित्या सुरक्षित आहे.', 'warning');
+        showToast(res.message || 'क्लाउड सिंक करताना अडचण आली.', 'warning');
       }
     } catch {
-      showToast('सिंक करताना अडचण आली. डेटा सुरक्षित आहे.', 'error');
+      showToast('क्लाउड सिंक करताना अडचण आली. इंटरनेट तपासा.', 'error');
     } finally {
       setTimeout(() => setIsSyncing(false), 600);
     }
@@ -166,11 +167,11 @@ export function Sidebar({ onCloseMobile }) {
           <div className="flex items-center gap-1.5">
             <span className={`w-2 h-2 rounded-full ${syncInfo.hasUnsynced ? 'bg-amber-500 animate-ping' : 'bg-emerald-500'}`} />
             <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-              {syncInfo.hasUnsynced ? 'स्थानिक बदल' : 'क्लाउड सिंक'}
+              {syncInfo.hasUnsynced ? 'क्लाउड बदल प्रलंबित' : 'क्लाउड सिंक'}
             </span>
           </div>
           <span className="text-[9px] font-extrabold text-emerald-600 dark:text-emerald-400">
-            {syncInfo.lastSyncedAt ? 'डेटा सुरक्षित ✓' : 'Supabase Live'}
+            {syncInfo.lastSyncedAt ? 'क्लाउड सुरक्षित ✓' : 'Render Live'}
           </span>
         </div>
         <button
@@ -183,11 +184,11 @@ export function Sidebar({ onCloseMobile }) {
               ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black shadow-glow-amber'
               : 'bg-emerald-600 hover:bg-emerald-700 text-white font-bold'
           }`}
-          title="सर्व स्थानिक डेटा थेट लाईव्ह सर्व्हरवर पाठवून इतर उपकरणांशी सिंक करा"
+          title="सर्व स्थानिक डेटा थेट क्लाउड डेटाबेसवर (Render/Supabase) पाठवून इतर उपकरणांशी सिंक करा"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+          <CloudUpload className={`w-3.5 h-3.5 ${isSyncing ? 'animate-bounce' : ''}`} />
           <span>
-            {isSyncing ? 'सिंक चालू आहे...' : syncInfo.hasUnsynced ? 'थेट सिंक करा (Live Sync)' : 'थेट सिंक करा (Live)'}
+            {isSyncing ? 'क्लाउड सिंक चालू आहे...' : syncInfo.hasUnsynced ? 'क्लाउडवर सिंक करा' : 'क्लाउड सिंक (Cloud Sync)'}
           </span>
         </button>
       </div>

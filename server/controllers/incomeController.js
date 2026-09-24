@@ -435,7 +435,7 @@ export async function updateIncome(req, res) {
   }
 }
 
-export async function renumberReceipts(req, res) {
+export async function renumberReceipts(req = null, res = null) {
   try {
     const { data: transactions, error } = await db.from('income_transactions')
       .select('*')
@@ -446,38 +446,47 @@ export async function renumberReceipts(req, res) {
 
     const results = [];
     let idx = 1;
-    for (const tx of transactions) {
+    for (const tx of (transactions || [])) {
       const formattedNum = String(idx).padStart(6, '0');
       const newReceiptNumber = `HANUMAN-2026-${formattedNum}`;
       const newTxnId = `TXN-2026-${formattedNum}`;
 
-      await db.from('income_transactions').update({
-        receipt_number: newReceiptNumber,
-        transaction_id: newTxnId
-      }).eq('id', tx.id);
+      if (tx.receipt_number !== newReceiptNumber || tx.transaction_id !== newTxnId) {
+        await db.from('income_transactions').update({
+          receipt_number: newReceiptNumber,
+          transaction_id: newTxnId
+        }).eq('id', tx.id);
 
-      if (tx.receipt_id) {
-        await db.from('receipts').update({
-          receipt_number: newReceiptNumber
-        }).eq('id', tx.receipt_id);
-      } else if (tx.receipt_number) {
-        await db.from('receipts').update({
-          receipt_number: newReceiptNumber
-        }).eq('receipt_number', tx.receipt_number);
+        if (tx.receipt_id) {
+          await db.from('receipts').update({
+            receipt_number: newReceiptNumber
+          }).eq('id', tx.receipt_id);
+        } else if (tx.receipt_number) {
+          await db.from('receipts').update({
+            receipt_number: newReceiptNumber
+          }).eq('receipt_number', tx.receipt_number);
+        }
       }
 
       results.push({ id: tx.id, donor: tx.donor_name, receiptNumber: newReceiptNumber, txnId: newTxnId });
       idx++;
     }
 
-    return res.json({
+    const payload = {
       success: true,
       message: `${results.length} पावत्यांचे क्रमांक अखंड क्रमाने (Continuous 1 to ${results.length}) यशस्वीरित्या अद्ययावत केले!`,
       data: results
-    });
+    };
+    if (res && typeof res.json === 'function') {
+      return res.json(payload);
+    }
+    return payload;
   } catch (err) {
     console.error('renumberReceipts error:', err);
-    return res.status(500).json({ success: false, message: 'पावती क्रमांक अद्ययावत करताना त्रुटी.' });
+    if (res && typeof res.status === 'function') {
+      return res.status(500).json({ success: false, message: 'पावती क्रमांक अद्ययावत करताना त्रुटी.' });
+    }
+    return { success: false, message: err.message };
   }
 }
 
@@ -582,53 +591,14 @@ export async function fixReceiptAnomalies(req = null, res = null) {
       report.normalizedOld999.push('Rushikesh Deshmukh -> 000022');
     } catch (e) {}
 
-    // 6. Ensure today's donors and amounts in donors table
-    const todayDonorsToSync = [
-      { name: 'Dadaso Ingale', amount: 2100, mobile: '' },
-      { name: 'Ruturaj Gavade', amount: 1500, mobile: '' },
-      { name: 'Kakaso Gavade', amount: 1000, mobile: '' },
-      { name: 'Sachin More', amount: 1500, mobile: '' },
-      { name: 'Sachin Gavade', amount: 1000, mobile: '' },
-      { name: 'Vijay Gavade', amount: 1500, mobile: '' },
-      { name: 'Jagdish Gavade', amount: 2500, mobile: '8379810543' }
-    ];
 
-    for (const td of todayDonorsToSync) {
-      try {
-        const { data: dRows } = await db.from('donors').select('id, name, target_amount, paid_amount').ilike('name', td.name);
-        if (dRows && dRows.length > 0) {
-          const dId = dRows[0].id;
-          const currentTarget = Math.max(Number(dRows[0].target_amount) || 0, td.amount);
-          await db.from('donors').update({
-            target_amount: currentTarget,
-            paid_amount: td.amount,
-            total_donated: td.amount,
-            status: 'paid',
-            donations_count: 1
-          }).eq('id', dId);
-          await db.from('income_transactions').update({ donor_id: dId }).ilike('donor_name', td.name);
-          report.ensuredTodayDonors.push(`${td.name} (ID: ${dId}) updated`);
-        } else {
-          const { data: insD } = await db.from('donors').insert({
-            name: td.name,
-            mobile: td.mobile,
-            address: 'नदीवेस शिरोळ',
-            area: 'नदीवेस शिरोळ',
-            target_amount: td.amount,
-            paid_amount: td.amount,
-            total_donated: td.amount,
-            donations_count: 1,
-            status: 'paid',
-            notes: 'वर्गणी नोंदणी'
-          }).select('id').single();
-          if (insD) {
-            await db.from('income_transactions').update({ donor_id: insD.id }).ilike('donor_name', td.name);
-            report.ensuredTodayDonors.push(`${td.name} (New ID: ${insD.id}) inserted`);
-          }
-        }
-      } catch (errD) {
-        console.warn('sync today donor note:', errD.message);
-      }
+
+    // 7. Ensure continuous sequential receipt numbering 1 to N
+    try {
+      const renResult = await renumberReceipts();
+      report.renumberResult = renResult;
+    } catch (rErr) {
+      console.warn('fixReceiptAnomalies renumber note:', rErr.message);
     }
 
     console.log('✅ fixReceiptAnomalies report:', report);

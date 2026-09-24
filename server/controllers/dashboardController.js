@@ -20,7 +20,7 @@ export async function getDashboardStats(req, res) {
     throwIfError(donorsResult.error);
 
     const incomes = incomeResult.data || [];
-    const expenses = expenseResult.data || [];
+    const expenses = (expenseResult.data || []).filter(e => e && e.category !== 'loan_repayment');
     const approvedExpenses = expenses.filter(e => ['approved', 'paid'].includes(e.status));
     const pendingExpenses = expenses.filter(e => e.status === 'pending');
     const today = istDateKey();

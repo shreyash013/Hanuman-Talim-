@@ -66,6 +66,7 @@ export async function resetDatabase(req, res) {
     await db.from('expense_transactions').delete().neq('id', 0);
     await db.from('cash_reconciliation').delete().neq('id', 0);
     await db.from('donors').delete().neq('id', 0);
+    await db.from('loans').delete().neq('id', 0);
     await db.from('events').delete().neq('id', 0);
     await db.from('committee_members').delete().neq('id', 0);
     await db.from('notifications').delete().neq('id', 0);

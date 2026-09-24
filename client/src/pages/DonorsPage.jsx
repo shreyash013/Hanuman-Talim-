@@ -204,6 +204,14 @@ export function DonorsPage() {
           return true;
         });
 
+        // Enforce highest amount first
+        donorsList.sort((a, b) => {
+          const amtA = Number(a.paid_amount || a.total_donated || a.target_amount || 0);
+          const amtB = Number(b.paid_amount || b.total_donated || b.target_amount || 0);
+          if (amtB !== amtA) return amtB - amtA;
+          return (a.name || '').localeCompare(b.name || '');
+        });
+
         setDonors(donorsList);
 
         const totalTarget = donorsList.reduce((acc, d) => acc + (Number(d.target_amount) || 0), 0);
@@ -554,6 +562,12 @@ export function DonorsPage() {
       if (!matchesAllWords && !matchesPhone) return false;
     }
     return true;
+  }).sort((a, b) => {
+    // Amount-wise sorting: Highest amount first, then accordingly all donors
+    const amtA = Number(a.paid_amount || a.total_donated || a.target_amount || 0);
+    const amtB = Number(b.paid_amount || b.total_donated || b.target_amount || 0);
+    if (amtB !== amtA) return amtB - amtA;
+    return (a.name || '').localeCompare(b.name || '');
   });
 
 

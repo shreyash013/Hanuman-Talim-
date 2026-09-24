@@ -153,8 +153,12 @@ export function IncomePage() {
         payment_method: paymentMethod
       });
       if (res.success) {
-        // Enforce strict newest-first sequence (highest receipt number, latest timestamp)
+        // Enforce strict date-wise descending sequence (e.g. 24/09/2026 is first, 14/09/2026 is last)
         const sortedData = (res.data || []).slice().sort((a, b) => {
+          const timeA = new Date(a.created_at || a.date || 0).getTime();
+          const timeB = new Date(b.created_at || b.date || 0).getTime();
+          if (timeA !== timeB) return timeB - timeA;
+
           const getNum = (item) => {
             if (!item) return 0;
             const m = (item.receipt_number || item.transaction_id || '').match(/(\d+)$/);
@@ -163,9 +167,7 @@ export function IncomePage() {
           const numA = getNum(a);
           const numB = getNum(b);
           if (numA !== numB) return numB - numA;
-          const timeA = new Date(a.created_at || 0).getTime() || (Number(a.id) || 0);
-          const timeB = new Date(b.created_at || 0).getTime() || (Number(b.id) || 0);
-          return timeB - timeA;
+          return (Number(b.id) || 0) - (Number(a.id) || 0);
         });
         setIncomeList(sortedData);
         setPagination(res.pagination || { total: 0, totalPages: 1, totalAmount: 0 });

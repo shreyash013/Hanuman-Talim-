@@ -396,6 +396,14 @@ export async function autoSyncAll(req, res) {
       }));
     }
 
+    // Ensure all active transactions remain strictly and consecutively numbered in Supabase
+    try {
+      const { renumberReceipts } = await import('./incomeController.js');
+      await renumberReceipts();
+    } catch (rErr) {
+      console.warn('Sync renumber receipts note:', rErr.message);
+    }
+
     // 4. Sync Expense Transactions (Diff-checked & Batch Inserted)
     const { data: existingExpenses } = await db.from('expense_transactions').select('id, expense_id, description, amount, status, is_deleted');
     const existingExpMap = new Map((existingExpenses || []).map(e => [e.expense_id, e]));
@@ -710,14 +718,73 @@ export async function getCloudFullData(req, res) {
       approved_by_name: (exp.approved_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गावडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गावडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गावडे (खजिनदार)').replace(/श्रेयश गवडे/g, 'श्रेयश गावडे')
     }));
 
+    let cleanIncome = incomeRes.data || [];
+    let cleanReceipts = receiptsRes.data || [];
+
+    // Chronologically sort active income to verify continuous 1 to N sequence
+    const chronological = [...cleanIncome].sort((a, b) => {
+      const getNum = (item) => {
+        if (!item) return 0;
+        const m = (item.receipt_number || item.transaction_id || '').match(/(\d+)$/);
+        return m ? parseInt(m[1], 10) : 0;
+      };
+      const numA = getNum(a);
+      const numB = getNum(b);
+      if (numA > 0 && numB > 0 && numA !== numB) return numA - numB;
+      const timeA = new Date(a.created_at || a.date || 0).getTime() || (Number(a.id) || 0);
+      const timeB = new Date(b.created_at || b.date || 0).getTime() || (Number(b.id) || 0);
+      return timeA - timeB;
+    });
+
+    let renumberRequired = false;
+    const legacyNumberMap = {};
+    chronological.forEach((inc, index) => {
+      const seq = index + 1;
+      const expectedReceipt = `HANUMAN-2026-${String(seq).padStart(6, '0')}`;
+      const expectedTxnId = `TXN-2026-${String(seq).padStart(6, '0')}`;
+      if (inc.receipt_number !== expectedReceipt || inc.transaction_id !== expectedTxnId) {
+        renumberRequired = true;
+        if (inc.receipt_number) legacyNumberMap[inc.receipt_number] = expectedReceipt;
+        inc.receipt_number = expectedReceipt;
+        inc.transaction_id = expectedTxnId;
+      }
+    });
+
+    if (renumberRequired) {
+      cleanReceipts = cleanReceipts.map(r => {
+        if (r && legacyNumberMap[r.receipt_number]) {
+          return {
+            ...r,
+            receipt_number: legacyNumberMap[r.receipt_number],
+            transaction_id: legacyNumberMap[r.receipt_number].replace('HANUMAN-', 'TXN-')
+          };
+        }
+        return r;
+      });
+      // Fire persistent DB reconciliation in Supabase
+      import('./incomeController.js').then(({ renumberReceipts }) => {
+        renumberReceipts().catch(() => {});
+      }).catch(() => {});
+    }
+
+    // Sort cleanIncome newest-first (descending receipt number)
+    cleanIncome.sort((a, b) => {
+      const getNum = (item) => {
+        if (!item) return 0;
+        const m = (item.receipt_number || item.transaction_id || '').match(/(\d+)$/);
+        return m ? parseInt(m[1], 10) : 0;
+      };
+      return getNum(b) - getNum(a);
+    });
+
     return res.json({
       success: true,
       data: {
-        income: incomeRes.data || [],
+        income: cleanIncome,
         expenses: sanitizedExpenses,
         donors: donorsRes.data || [],
         loans: loansRes.data || [],
-        receipts: receiptsRes.data || [],
+        receipts: cleanReceipts,
         settings: settingsRes.data || null,
         members: membersRes.data || [],
         deleted_expenses: (deletedExpensesRes?.data || [])
