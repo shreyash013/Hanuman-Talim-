@@ -352,7 +352,7 @@ export function autoHealAndRenumberReceipts() {
   }
 }
 
-export const DATA_CLEAN_VERSION = '2026-09-24-v-zero-all-clean-fresh-start-1';
+export const DATA_CLEAN_VERSION = '2026-09-24-v-zero-all-clean-fresh-start-2';
 
 export function createDeletedExpenseSet(delList) {
   const set = new Set();
@@ -430,7 +430,7 @@ export function createDeletedDonorSet(delList) {
 }
 
 export function generateNextExpenseId(expensesList = []) {
-  let maxNum = 25; // Historical records baseline was up to 21
+  let maxNum = 0; // Fresh start - will auto-increment from 1
   const rawDel = typeof localStorage !== 'undefined' ? localStorage.getItem('shirol_deleted_expenses') : null;
   const delList = rawDel ? JSON.parse(rawDel) : [];
   const scanList = [...(Array.isArray(expensesList) ? expensesList : []), ...(Array.isArray(delList) ? delList : [])];
