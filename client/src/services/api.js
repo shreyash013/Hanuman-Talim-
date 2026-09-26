@@ -826,9 +826,12 @@ export async function autoSyncAllToServer() {
       }
     }
 
+    const syncController = new AbortController();
+    const syncTimeout = setTimeout(() => syncController.abort(), 8000);
     const res = await fetch('https://hanuman-talim-api.onrender.com/api/sync/auto-sync-all', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: syncController.signal,
       body: JSON.stringify({
         donors,
         income,
@@ -842,6 +845,7 @@ export async function autoSyncAllToServer() {
         deleted_income
       })
     });
+    clearTimeout(syncTimeout);
     if (res.ok) {
       const data = await res.json();
       return { success: true, data };
@@ -861,7 +865,10 @@ export async function autoSyncFromServer() {
       await autoSyncAllToServer().catch(() => {});
     }
 
-    const res = await fetch('https://hanuman-talim-api.onrender.com/api/sync/full-data');
+    const pullController = new AbortController();
+    const pullTimeout = setTimeout(() => pullController.abort(), 8000);
+    const res = await fetch('https://hanuman-talim-api.onrender.com/api/sync/full-data', { signal: pullController.signal });
+    clearTimeout(pullTimeout);
     if (res.ok) {
       const json = await res.json();
       if (json && json.data) {
@@ -2229,8 +2236,8 @@ export async function request(endpoint, options = {}) {
       const updated = [newExpense, ...expensesList];
       setLocalStore('expenses', updated);
 
-      // Push to cloud server in background (non-blocking)
-      autoSyncAllToServer().catch(() => {});
+      // Push to cloud server in background (truly deferred — never blocks the response)
+      setTimeout(() => autoSyncAllToServer().catch(() => {}), 0);
 
       return {
         success: true,
