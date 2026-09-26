@@ -179,10 +179,15 @@ export function ExpensesPage() {
 
   useEffect(() => {
     fetchExpenses();
-    const handleSilentUpdate = () => fetchExpenses(true);
+    let debounceTimer = null;
+    const handleSilentUpdate = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => fetchExpenses(true), 600);
+    };
     window.addEventListener('shirol_data_updated', handleSilentUpdate);
     window.addEventListener('storage', handleSilentUpdate);
     return () => {
+      clearTimeout(debounceTimer);
       window.removeEventListener('shirol_data_updated', handleSilentUpdate);
       window.removeEventListener('storage', handleSilentUpdate);
     };
@@ -388,8 +393,6 @@ export function ExpensesPage() {
             exp.id === tempId ? { ...optimisticExpense, ...res.data } : exp
           ));
         }
-        fetchExpenses(true);
-        window.dispatchEvent(new Event('shirol_data_updated'));
       })
       .catch(err => {
         // Rollback: remove optimistic entry on failure
