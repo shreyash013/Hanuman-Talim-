@@ -2229,8 +2229,8 @@ export async function request(endpoint, options = {}) {
       const updated = [newExpense, ...expensesList];
       setLocalStore('expenses', updated);
 
-      // Immediately push to cloud server
-      await autoSyncAllToServer().catch(() => {});
+      // Push to cloud server in background (non-blocking)
+      autoSyncAllToServer().catch(() => {});
 
       return {
         success: true,
@@ -2330,8 +2330,8 @@ export async function request(endpoint, options = {}) {
         console.warn('Cloud expense delete note:', err.message);
       }
 
-      // 4. Await cloud synchronization of tombstones
-      await autoSyncAllToServer().catch(() => {});
+      // 4. Push tombstone to cloud in background (non-blocking)
+      autoSyncAllToServer().catch(() => {});
 
       return { success: true, message: 'खर्च यशस्वीरित्या हटवला.' };
     }
