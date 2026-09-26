@@ -37,7 +37,7 @@ import {
 
 export function ExpensesPage() {
   const { t, lang } = useLanguage();
-  const { isAdmin, isTreasurer } = useAuth();
+  const { user, isAdmin, isTreasurer } = useAuth();
   const { showToast } = useNotification();
 
   const [expenses, setExpenses] = useState([]);
@@ -327,7 +327,7 @@ export function ExpensesPage() {
     reader.readAsDataURL(file);
   };
 
-  const handleAddExpense = async (e) => {
+  const handleAddExpense = (e) => {
     e.preventDefault();
     if (!description.trim() || !paidTo.trim() || !amount || Number(amount) <= 0) {
       showToast('कृपया आवश्यक माहिती (वर्णन, कोणाला दिले, वैध रक्कम) भरा.', 'warning');
@@ -339,41 +339,63 @@ export function ExpensesPage() {
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      const finalCategory = expenseCategory === 'custom' ? (customCategoryName.trim() || 'इतर सानुकूल खर्च') : expenseCategory;
-      const formData = new FormData();
-      formData.append('description', description.trim());
-      formData.append('amount', Number(amount));
-      formData.append('category', finalCategory);
-      formData.append('payment_method', paymentMethod);
-      formData.append('paid_to', paidTo.trim());
-      formData.append('bill_number', billNumber.trim());
-      formData.append('notes', notes.trim());
-      formData.append('status', 'pending');
+    const finalCategory = expenseCategory === 'custom' ? (customCategoryName.trim() || 'इतर सानुकूल खर्च') : expenseCategory;
+    const now = new Date().toISOString();
+    const tempId = Date.now();
 
-      if (fileAttachment) {
-        formData.append('bill_attachment', fileAttachment);
-      }
-      if (filePreviewUrl) {
-        formData.append('bill_attachment_url', filePreviewUrl);
-      }
+    // --- OPTIMISTIC UPDATE: add to UI state instantly (0 second delay) ---
+    const optimisticExpense = {
+      id: tempId,
+      expense_id: `EXP-2026-TEMP-${tempId}`,
+      description: description.trim(),
+      amount: Number(amount),
+      category: finalCategory,
+      payment_method: paymentMethod,
+      paid_to: paidTo.trim(),
+      bill_number: billNumber.trim(),
+      bill_attachment_url: filePreviewUrl || '',
+      status: 'pending',
+      requested_by_name: user?.name || 'श्रेयश गावडे (खजिनदार)',
+      approved_by_name: null,
+      notes: notes.trim(),
+      created_at: now,
+    };
 
-      const res = await api.post('/expenses', formData);
+    setExpenses(prev => [optimisticExpense, ...prev]);
+    setActiveTab('pending');
+    setShowAddModal(false);
+    showToast('नवीन खर्च मंजुरीच्या रांगेत यशस्वीरित्या जोडला गेला! (Pending Approval) ⏳', 'success');
+    resetForm();
 
-      if (res.success) {
-        showToast('नवीन खर्च मंजुरीच्या रांगेत यशस्वीरित्या जोडला गेला! (Pending Approval) ⏳', 'success');
-        setActiveTab('pending');
-        setShowAddModal(false);
-        resetForm();
-        await fetchExpenses(true);
+    // --- BACKGROUND: persist to localStorage + cloud (non-blocking) ---
+    const formData = new FormData();
+    formData.append('description', optimisticExpense.description);
+    formData.append('amount', optimisticExpense.amount);
+    formData.append('category', finalCategory);
+    formData.append('payment_method', paymentMethod);
+    formData.append('paid_to', optimisticExpense.paid_to);
+    formData.append('bill_number', optimisticExpense.bill_number);
+    formData.append('notes', optimisticExpense.notes);
+    formData.append('status', 'pending');
+    if (fileAttachment) formData.append('bill_attachment', fileAttachment);
+    if (filePreviewUrl) formData.append('bill_attachment_url', filePreviewUrl);
+
+    api.post('/expenses', formData)
+      .then(res => {
+        if (res.success && res.data) {
+          // Replace temp optimistic entry with the real saved record
+          setExpenses(prev => prev.map(exp =>
+            exp.id === tempId ? { ...optimisticExpense, ...res.data } : exp
+          ));
+        }
+        fetchExpenses(true);
         window.dispatchEvent(new Event('shirol_data_updated'));
-      }
-    } catch (err) {
-      showToast(err.message || 'खर्च नोंदवताना त्रुटी.', 'error');
-    } finally {
-      setIsSubmitting(false);
-    }
+      })
+      .catch(err => {
+        // Rollback: remove optimistic entry on failure
+        setExpenses(prev => prev.filter(exp => exp.id !== tempId));
+        showToast(err.message || 'खर्च नोंदवताना त्रुटी. कृपया पुन्हा प्रयत्न करा.', 'error');
+      });
   };
 
   const resetForm = () => {
