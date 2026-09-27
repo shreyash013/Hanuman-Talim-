@@ -128,10 +128,11 @@ export function IncomePage() {
 
       const res = await api.put(`/income/${editingIncome.id}`, payload);
       if (res && res.success !== false) {
+        setIncomeList(prev => prev.map(item => String(item.id) === String(editingIncome.id) ? { ...item, ...payload, amount: parsedAmount } : item));
         showToast('जमा व्यवहार यशस्वीरित्या अद्ययावत केला!', 'success');
         setShowEditModal(false);
         setEditingIncome(null);
-        fetchIncome();
+        fetchIncome(true);
       } else {
         showToast(res?.message || 'व्यवहार अद्ययावत करताना त्रुटी.', 'error');
       }

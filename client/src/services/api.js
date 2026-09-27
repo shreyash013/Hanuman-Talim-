@@ -202,7 +202,21 @@ export function reconcileDonorsAndIncome() {
     });
     incomeList = cleanedIncome;
 
-    // 1. Link donor_id between existing donors and income transactions (NEVER generate fake records)
+    // 1. Link donor_id between existing donors and income transactions, and synchronize verified paid_amount
+    let maxReceiptNum = 0;
+    incomeList.forEach(inc => {
+      if (inc && inc.receipt_number && !inc.is_deleted) {
+        const m = inc.receipt_number.match(/(\d+)$/);
+        if (m) {
+          const num = parseInt(m[1], 10);
+          if (!isNaN(num) && num > maxReceiptNum && num < 500000) maxReceiptNum = num;
+        }
+      }
+    });
+
+    const settings = getLocalStore('mandal_settings_custom', SHIROL_MANDAL_SETTINGS);
+    const prefix = settings.receipt_prefix || 'HANUMAN-2026-';
+
     donorsList.forEach((donor) => {
       if (!donor) return;
       const matching = incomeList.filter(inc => isExactDonorMatch(donor, inc));
@@ -213,6 +227,56 @@ export function reconcileDonorsAndIncome() {
             incomeModified = true;
           }
         });
+        const verifiedPaid = matching.reduce((s, inc) => s + (Number(inc.amount) || 0), 0);
+        if (Number(donor.paid_amount) !== verifiedPaid || Number(donor.total_donated) !== verifiedPaid) {
+          donor.paid_amount = verifiedPaid;
+          donor.total_donated = verifiedPaid;
+          donor.donations_count = matching.length;
+          donor.pending_amount = Math.max(0, (Number(donor.target_amount) || 0) - verifiedPaid);
+          donor.status = verifiedPaid >= (Number(donor.target_amount) || 0) && Number(donor.target_amount) > 0 ? 'paid' : (verifiedPaid > 0 ? 'partial' : 'unpaid');
+          donorsModified = true;
+        }
+      } else {
+        // Donor has recorded paid_amount > 0, but no matching income transaction exists yet
+        const paid = Number(donor.paid_amount || donor.total_donated || 0);
+        if (paid > 0) {
+          maxReceiptNum += 1;
+          const formattedNum = String(maxReceiptNum).padStart(6, '0');
+          const receiptNo = `${prefix}${formattedNum}`;
+          const newTx = {
+            id: Date.now() + Math.floor(Math.random() * 1000),
+            transaction_id: `TXN-2026-${formattedNum}`,
+            receipt_number: receiptNo,
+            donor_name: donor.name,
+            donor_id: donor.id,
+            mobile: donor.mobile || '',
+            address: donor.address || donor.area || 'शिरोळ',
+            amount: paid,
+            payment_method: donor.payment_method || 'cash',
+            category: 'vargani',
+            purpose: 'श्री गणेशोत्सव वर्गणी',
+            collector_name: 'अध्यक्ष (Admin)',
+            amount_in_words_mr: numberToWordsMarathi(paid),
+            amount_in_words_en: numberToWordsEnglish(paid),
+            status: 'completed',
+            is_deleted: false,
+            created_at: donor.last_donated_at || donor.created_at || new Date().toISOString()
+          };
+          incomeList.push(newTx);
+          incomeModified = true;
+
+          // Also add to receipts store
+          const receiptsList = getLocalStore('receipts', []);
+          receiptsList.unshift(newTx);
+          localStorage.setItem('shirol_receipts', JSON.stringify(receiptsList));
+
+          donor.paid_amount = paid;
+          donor.total_donated = paid;
+          donor.donations_count = 1;
+          donor.pending_amount = Math.max(0, (Number(donor.target_amount) || 0) - paid);
+          donor.status = paid >= (Number(donor.target_amount) || 0) && Number(donor.target_amount) > 0 ? 'paid' : 'partial';
+          donorsModified = true;
+        }
       }
     });
 
@@ -915,23 +979,36 @@ export async function autoSyncFromServer() {
           approved_by_name: (exp.approved_by_name || '').replace(/मयुर बागल \(खजिनदार\)/g, 'श्रेयश गावडे (खजिनदार)').replace(/मयुर बागल/g, 'श्रेयश गावडे (खजिनदार)').replace(/Mayur Bagal/gi, 'श्रेयश गावडे (खजिनदार)').replace(/श्रेयश गवडे/g, 'श्रेयश गावडे')
         }));
 
-        // 4. Merge any local expenses that are not yet on the server and not deleted
+        // 4. Merge local expenses with server expenses (preserving recent local edits)
         const rawLocalExpenses = localStorage.getItem('shirol_expenses');
         let localExpenses = [];
         try { localExpenses = rawLocalExpenses ? JSON.parse(rawLocalExpenses) : []; } catch {}
-        const serverExpKeys = new Set();
+        const serverExpMap = new Map();
         sanitizedExpenses.forEach(e => {
-          if (e.id) serverExpKeys.add(String(e.id));
-          if (e.expense_id) serverExpKeys.add(String(e.expense_id));
+          if (e.expense_id) serverExpMap.set(String(e.expense_id), e);
+          if (e.id) serverExpMap.set(String(e.id), e);
         });
-
-        const pendingLocalExps = (Array.isArray(localExpenses) ? localExpenses : []).filter(e => {
-          if (!e || e.is_deleted) return false;
-          if (delExpSet.has(String(e.id)) || delExpSet.has(String(e.expense_id))) return false;
-          if (serverExpKeys.has(String(e.expense_id)) || (e.id && serverExpKeys.has(String(e.id)))) return false;
-          return true;
+        const mergedExpMap = new Map();
+        sanitizedExpenses.forEach(e => {
+          const key = String(e.expense_id || e.id);
+          mergedExpMap.set(key, e);
         });
-        const mergedExpenses = [...pendingLocalExps, ...sanitizedExpenses];
+        (Array.isArray(localExpenses) ? localExpenses : []).forEach(lExp => {
+          if (!lExp || lExp.is_deleted) return;
+          if (delExpSet.has(String(lExp.id)) || delExpSet.has(String(lExp.expense_id))) return;
+          const key = String(lExp.expense_id || lExp.id);
+          const sExp = serverExpMap.get(String(lExp.expense_id)) || (lExp.id ? serverExpMap.get(String(lExp.id)) : null);
+          if (!sExp) {
+            mergedExpMap.set(key, lExp);
+          } else {
+            const localTime = new Date(lExp.updated_at || lExp.created_at || 0).getTime();
+            const serverTime = new Date(sExp.updated_at || sExp.created_at || 0).getTime();
+            if (localTime > serverTime) {
+              mergedExpMap.set(key, { ...sExp, ...lExp });
+            }
+          }
+        });
+        const mergedExpenses = Array.from(mergedExpMap.values());
 
         // 5. Ingest cloud deleted income and donors if available
         if (Array.isArray(json.data.deleted_income) && json.data.deleted_income.length > 0) {
@@ -962,7 +1039,7 @@ export async function autoSyncFromServer() {
           localStorage.setItem('shirol_deleted_donors', JSON.stringify(currentDelDon));
         }
 
-        // 6. Filter serverDonors against tombstones & merge pending local donors
+        // 6. Filter serverDonors against tombstones & smart-merge pending local donors
         const rawDelDon = localStorage.getItem('shirol_deleted_donors');
         const delDonList = rawDelDon ? JSON.parse(rawDelDon) : [];
         const delDonorSet = createDeletedDonorSet(delDonList);
@@ -983,22 +1060,36 @@ export async function autoSyncFromServer() {
         const rawLocalDonors = localStorage.getItem('shirol_donors');
         let localDonors = [];
         try { localDonors = rawLocalDonors ? JSON.parse(rawLocalDonors) : []; } catch {}
-        const serverDonorKeys = new Set();
+        const serverDonorMap = new Map();
         serverDonors.forEach(d => {
-          if (d.id) serverDonorKeys.add(String(d.id));
-          if (d.name) serverDonorKeys.add(normalizeText(d.name));
+          if (d.id) serverDonorMap.set(String(d.id), d);
+          if (d.name) serverDonorMap.set(normalizeText(d.name), d);
         });
-        const pendingLocalDonors = (Array.isArray(localDonors) ? localDonors : []).filter(d => {
-          if (!d || !d.name) return false;
-          if (delDonorSet.ids.has(String(d.id)) || delDonorSet.names.has(normalizeText(d.name))) return false;
-          const mob = (d.mobile || '').replace(/\D/g, '').slice(-10);
-          if (mob.length === 10 && delDonorSet.mobiles.has(mob)) return false;
-          if (serverDonorKeys.has(String(d.id)) || serverDonorKeys.has(normalizeText(d.name))) return false;
-          return true;
+        const mergedDonorMap = new Map();
+        serverDonors.forEach(d => {
+          const key = normalizeText(d.name) || String(d.id);
+          mergedDonorMap.set(key, d);
         });
-        const mergedDonors = [...pendingLocalDonors, ...serverDonors];
+        (Array.isArray(localDonors) ? localDonors : []).forEach(lDon => {
+          if (!lDon || !lDon.name) return;
+          if (delDonorSet.ids.has(String(lDon.id)) || delDonorSet.names.has(normalizeText(lDon.name))) return;
+          const mob = (lDon.mobile || '').replace(/\D/g, '').slice(-10);
+          if (mob.length === 10 && delDonorSet.mobiles.has(mob)) return;
+          const key = normalizeText(lDon.name) || String(lDon.id);
+          const sDon = serverDonorMap.get(String(lDon.id)) || serverDonorMap.get(normalizeText(lDon.name));
+          if (!sDon) {
+            mergedDonorMap.set(key, lDon);
+          } else {
+            const localTime = new Date(lDon.updated_at || lDon.created_at || 0).getTime();
+            const serverTime = new Date(sDon.updated_at || sDon.created_at || 0).getTime();
+            if (localTime > serverTime) {
+              mergedDonorMap.set(key, { ...sDon, ...lDon });
+            }
+          }
+        });
+        const mergedDonors = Array.from(mergedDonorMap.values());
 
-        // 7. Filter serverIncome against tombstones & merge pending local income
+        // 7. Filter serverIncome against tombstones & smart-merge local income
         serverIncome = serverIncome.filter(inc => {
           if (!inc || inc.is_deleted) return false;
           if (delIncSet.ids.has(String(inc.id))) return false;
@@ -1014,23 +1105,43 @@ export async function autoSyncFromServer() {
         const rawLocalIncome = localStorage.getItem('shirol_income');
         let localIncome = [];
         try { localIncome = rawLocalIncome ? JSON.parse(rawLocalIncome) : []; } catch {}
-        const serverIncomeKeys = new Set();
+        const serverIncomeMap = new Map();
         serverIncome.forEach(inc => {
-          if (inc.id) serverIncomeKeys.add(String(inc.id));
-          if (inc.transaction_id) serverIncomeKeys.add(String(inc.transaction_id));
-          if (inc.receipt_number) serverIncomeKeys.add(String(inc.receipt_number));
+          if (inc.id) serverIncomeMap.set(String(inc.id), inc);
+          if (inc.transaction_id) serverIncomeMap.set(String(inc.transaction_id), inc);
+          if (inc.receipt_number) serverIncomeMap.set(String(inc.receipt_number), inc);
         });
-        const pendingLocalIncome = (Array.isArray(localIncome) ? localIncome : []).filter(inc => {
-          if (!inc || inc.is_deleted) return false;
-          if (delIncSet.ids.has(String(inc.id))) return false;
-          if (inc.transaction_id && delIncSet.txns.has(String(inc.transaction_id))) return false;
-          if (inc.receipt_number && delIncSet.receipts.has(String(inc.receipt_number))) return false;
-          if (inc.donor_id && delDonorSet.ids.has(String(inc.donor_id))) return false;
-          if (inc.donor_name && delDonorSet.names.has(normalizeText(inc.donor_name))) return false;
-          if (serverIncomeKeys.has(String(inc.id)) || (inc.transaction_id && serverIncomeKeys.has(String(inc.transaction_id))) || (inc.receipt_number && serverIncomeKeys.has(String(inc.receipt_number)))) return false;
-          return true;
+
+        const mergedIncomeMap = new Map();
+        serverIncome.forEach(sInc => {
+          const key = sInc.receipt_number || sInc.transaction_id || String(sInc.id);
+          mergedIncomeMap.set(key, sInc);
         });
-        const mergedIncome = [...pendingLocalIncome, ...serverIncome];
+
+        (Array.isArray(localIncome) ? localIncome : []).forEach(lInc => {
+          if (!lInc || lInc.is_deleted) return;
+          if (delIncSet.ids.has(String(lInc.id))) return;
+          if (lInc.transaction_id && delIncSet.txns.has(String(lInc.transaction_id))) return;
+          if (lInc.receipt_number && delIncSet.receipts.has(String(lInc.receipt_number))) return;
+          if (lInc.donor_id && delDonorSet.ids.has(String(lInc.donor_id))) return;
+          if (lInc.donor_name && delDonorSet.names.has(normalizeText(lInc.donor_name))) return;
+
+          const key = lInc.receipt_number || lInc.transaction_id || String(lInc.id);
+          const sInc = serverIncomeMap.get(String(lInc.id)) ||
+                       (lInc.transaction_id ? serverIncomeMap.get(String(lInc.transaction_id)) : null) ||
+                       (lInc.receipt_number ? serverIncomeMap.get(String(lInc.receipt_number)) : null);
+
+          if (!sInc) {
+            mergedIncomeMap.set(key, lInc);
+          } else {
+            const localTime = new Date(lInc.updated_at || lInc.created_at || 0).getTime();
+            const serverTime = new Date(sInc.updated_at || sInc.created_at || 0).getTime();
+            if (localTime > serverTime) {
+              mergedIncomeMap.set(key, { ...sInc, ...lInc });
+            }
+          }
+        });
+        const mergedIncome = Array.from(mergedIncomeMap.values());
 
         // 8. Filter serverReceipts against tombstones
         serverReceipts = serverReceipts.filter(r => {
@@ -1464,6 +1575,7 @@ export async function request(endpoint, options = {}) {
 
   // Handle Dashboard Stats endpoint (Calculates live stats from clean local database)
   if (endpoint.startsWith('/dashboard/stats')) {
+    reconcileDonorsAndIncome();
     const incomeList = getLocalStore('income', []);
     const expenseList = getLocalStore('expenses', []);
     const donorsList = getLocalStore('donors', []);
@@ -1501,17 +1613,43 @@ export async function request(endpoint, options = {}) {
     const processedTopDonors = donorsList.map(d => {
       const matchingPayments = incomeList.filter(inc => {
         if (inc.is_deleted) return false;
-        const nameMatch = inc.donor_name && d.name && (inc.donor_name.trim().toLowerCase() === d.name.trim().toLowerCase());
-        const mobileMatch = d.mobile && inc.mobile && (d.mobile.replace(/\D/g, '') === inc.mobile.replace(/\D/g, '') && d.mobile.replace(/\D/g, '').length >= 10);
-        return nameMatch || mobileMatch;
+        return isExactDonorMatch(d, inc);
       });
       const paid = matchingPayments.reduce((s, inc) => s + (Number(inc.amount) || 0), 0);
       return {
         ...d,
-        total_donated: paid || Number(d.total_donated) || 0,
-        paid_amount: paid || Number(d.paid_amount) || 0
+        total_donated: paid || Number(d.paid_amount || d.total_donated) || 0,
+        paid_amount: paid || Number(d.paid_amount || d.total_donated) || 0
       };
     }).sort((a, b) => (b.total_donated || 0) - (a.total_donated || 0)).slice(0, 10);
+
+    // Daily trend data from last 14 days
+    const dailyMap = {};
+    const now = new Date();
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+      const dStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(d);
+      const label = dStr.split('-').slice(1).reverse().join('/');
+      dailyMap[dStr] = { date: label, amount: 0 };
+    }
+    incomeList.forEach(inc => {
+      if (!inc.created_at || inc.is_deleted) return;
+      const dStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(inc.created_at));
+      if (dailyMap[dStr]) {
+        dailyMap[dStr].amount += (Number(inc.amount) || 0);
+      }
+    });
+    const dailyTrend = Object.values(dailyMap);
+
+    // Expense categories breakdown
+    const expCatMap = {};
+    approvedExpenses.forEach(e => {
+      const cat = e.category || 'other';
+      if (!expCatMap[cat]) expCatMap[cat] = { category: cat, amount: 0, count: 0 };
+      expCatMap[cat].amount += (Number(e.amount) || 0);
+      expCatMap[cat].count += 1;
+    });
+    const expenseCategories = Object.values(expCatMap);
 
     return {
       success: true,
@@ -1524,7 +1662,7 @@ export async function request(endpoint, options = {}) {
           totalDonation: totalIncome - totalVargani,
           totalSponsorship: 0,
           totalDonors,
-          totalTransactions: incomeList.length + expenseList.length, // Bug 8 fix: count all expenses
+          totalTransactions: incomeList.length + expenseList.length,
           todayCollection,
           varganiTarget: targetAmount,
           todayExpense,
@@ -1534,10 +1672,16 @@ export async function request(endpoint, options = {}) {
           digitalIncome: incomeList.filter(i => (i.payment_method || 'cash') !== 'cash').reduce((s, i) => s + (Number(i.amount) || 0), 0),
           cashExpense: approvedExpenses.filter(e => (e.payment_method || 'cash') === 'cash').reduce((s, e) => s + (Number(e.amount) || 0), 0)
         },
-        paymentMethods: [],
-        expenseCategories: [],
-        incomeCategories: [],
-        dailyTrend: [],
+        paymentMethods: [
+          { method: 'cash', label: 'रोख (Cash)', amount: incomeList.filter(i => (i.payment_method || 'cash') === 'cash').reduce((s, i) => s + (Number(i.amount) || 0), 0) },
+          { method: 'upi', label: 'UPI / QR', amount: incomeList.filter(i => (i.payment_method || 'cash') !== 'cash').reduce((s, i) => s + (Number(i.amount) || 0), 0) }
+        ],
+        expenseCategories,
+        incomeCategories: [
+          { category: 'vargani', label: 'वर्गणी (Vargani)', amount: totalVargani },
+          { category: 'donation', label: 'देणगी (Donation)', amount: Math.max(0, totalIncome - totalVargani) }
+        ],
+        dailyTrend,
         topDonors: processedTopDonors,
         recentTransactions: incomeList.slice(0, 5),
         upcomingEvents: [],
@@ -2013,17 +2157,20 @@ export async function request(endpoint, options = {}) {
           const isMatch = (oldItem.donor_id && String(d.id) === String(oldItem.donor_id)) ||
             (d.name && oldItem.donor_name && d.name.trim().toLowerCase() === oldItem.donor_name.trim().toLowerCase());
           if (isMatch) {
-            const curPaid = Number(d.paid_amount || d.total_donated || 0) + amtDiff;
+            const matchingTxs = incomeList.filter(inc => !inc.is_deleted && isExactDonorMatch(d, inc));
+            const curPaid = matchingTxs.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
             const target = Number(d.target_amount || 0);
             return {
               ...d,
               name: bodyData.donor_name || d.name,
               mobile: bodyData.mobile !== undefined ? bodyData.mobile : d.mobile,
               address: bodyData.address !== undefined ? bodyData.address : d.address,
-              paid_amount: Math.max(0, curPaid),
-              total_donated: Math.max(0, curPaid),
+              paid_amount: curPaid,
+              total_donated: curPaid,
               pending_amount: Math.max(0, target - curPaid),
-              status: (curPaid >= target && target > 0) ? 'paid' : (curPaid > 0 ? 'partial' : 'unpaid')
+              status: (curPaid >= target && target > 0) ? 'paid' : (curPaid > 0 ? 'partial' : 'unpaid'),
+              donations_count: matchingTxs.length,
+              updated_at: new Date().toISOString()
             };
           }
           return d;
@@ -2035,6 +2182,7 @@ export async function request(endpoint, options = {}) {
           window.dispatchEvent(new Event('storage'));
           broadcastDataChange();
         }
+        triggerAutoSync();
 
         return {
           success: true,
@@ -2741,8 +2889,7 @@ export async function request(endpoint, options = {}) {
       const matchingPayments = incomeList.filter(inc => isExactDonorMatch(d, inc));
 
       const incomePaid = matchingPayments.reduce((sum, inc) => sum + (Number(inc.amount) || 0), 0);
-      const storedPaid = Number(d.paid_amount !== undefined ? d.paid_amount : (d.total_donated || 0));
-      const paid_amount = Math.max(storedPaid, incomePaid);
+      const paid_amount = matchingPayments.length > 0 ? incomePaid : Number(d.paid_amount !== undefined ? d.paid_amount : (d.total_donated || 0));
       const target_amount = Number(d.target_amount !== undefined ? d.target_amount : (d.total_donated || 500));
       const pending_amount = Math.max(0, target_amount - paid_amount);
       const donations_count = matchingPayments.length > 0 ? matchingPayments.length : (paid_amount > 0 ? 1 : 0);
@@ -2809,8 +2956,8 @@ export async function request(endpoint, options = {}) {
         finalDonorsMap.set(key, { ...d });
       } else {
         const exist = finalDonorsMap.get(key);
-        exist.target_amount = Number(d.target_amount !== undefined ? d.target_amount : exist.target_amount);
-        exist.paid_amount = Number(d.paid_amount !== undefined ? d.paid_amount : exist.paid_amount);
+        exist.target_amount = Math.max(Number(exist.target_amount || 0), Number(d.target_amount || 0));
+        exist.paid_amount = (Number(exist.paid_amount) || 0) + (Number(d.paid_amount) || 0);
         exist.total_donated = exist.paid_amount;
         exist.pending_amount = Math.max(0, exist.target_amount - exist.paid_amount);
         exist.status = (exist.paid_amount >= exist.target_amount && exist.target_amount > 0) ? 'paid' : (exist.paid_amount > 0 ? 'partial' : 'unpaid');
@@ -2828,7 +2975,7 @@ export async function request(endpoint, options = {}) {
     const totalTarget = uniqueProcessedDonors.reduce((sum, d) => sum + (Number(d.target_amount) || 0), 0);
     const donorPaidSum = uniqueProcessedDonors.reduce((sum, d) => sum + (Number(d.paid_amount || d.total_donated) || 0), 0);
     const incomePaidSum = incomeList.filter(i => !i.is_deleted).reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
-    const totalPaid = Math.max(donorPaidSum, incomePaidSum);
+    const totalPaid = donorPaidSum || incomePaidSum;
     const totalPending = Math.max(0, totalTarget - totalPaid);
 
     const summary = {

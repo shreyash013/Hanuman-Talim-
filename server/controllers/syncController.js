@@ -286,28 +286,132 @@ export async function autoSyncAll(req, res) {
       await Promise.allSettled(donorUpdates);
     }
 
-    // 3. Sync Income / Vargani Transactions (Parallelized)
-    const { data: existingIncome } = await db.from('income_transactions').select('id, transaction_id, receipt_number');
-    const existingTxIds = new Set((existingIncome || []).map(i => i.transaction_id).filter(Boolean));
-    const existingReceiptNos = new Set((existingIncome || []).map(i => i.receipt_number).filter(Boolean));
+    // 3. Sync Income / Vargani Transactions (Diff-checked, Updatable & Batch Inserted)
+    const { data: existingIncome } = await db.from('income_transactions').select('id, transaction_id, receipt_number, amount, donor_name, mobile, address, payment_method, category, purpose, notes, collector_name, status, is_deleted, created_at, donor_id, receipt_id');
+    const existingTxMap = new Map();
+    const existingReceiptMap = new Map();
+    const existingIncomeByIdMap = new Map();
+    let maxReceiptNum = 0;
+
+    (existingIncome || []).forEach(i => {
+      if (i.transaction_id) existingTxMap.set(i.transaction_id, i);
+      if (i.receipt_number) {
+        existingReceiptMap.set(i.receipt_number, i);
+        const m = i.receipt_number.match(/(\d+)$/);
+        if (m) {
+          const num = parseInt(m[1], 10);
+          if (!isNaN(num) && num > maxReceiptNum && num < 500000) maxReceiptNum = num;
+        }
+      }
+      if (i.id) existingIncomeByIdMap.set(String(i.id), i);
+    });
 
     const newIncomeItems = [];
+    const incomeUpdates = [];
+
     for (const inc of income) {
       if (!inc || !inc.donor_name || inc.is_deleted) continue;
-      const txId = inc.transaction_id || `TXN-LOCAL-${inc.id || Date.now()}`;
-      const rNo = inc.receipt_number || `HANUMAN-2026-${String(inc.id || counts.income + 1).padStart(6, '0')}`;
-
-      if (existingTxIds.has(txId) || existingReceiptNos.has(rNo)) {
-        continue;
-      }
-
       const cleanDonorName = inc.donor_name.trim();
       if (deletedNameSet.has(cleanDonorName.toLowerCase())) continue;
 
       const parsedAmount = Number(inc.amount) || 0;
       if (parsedAmount <= 0) continue;
 
-      newIncomeItems.push({ inc, txId, rNo, cleanDonorName, parsedAmount });
+      const txId = inc.transaction_id || `TXN-LOCAL-${inc.id || Date.now()}`;
+      const rNo = inc.receipt_number || null;
+
+      const existingTx = existingTxMap.get(txId) ||
+                         (rNo ? existingReceiptMap.get(rNo) : null) ||
+                         (inc.id ? existingIncomeByIdMap.get(String(inc.id)) : null);
+
+      if (existingTx) {
+        // Diff check: if amount or any field changed, update existing transaction!
+        const curAmt = Number(existingTx.amount || 0);
+        const curName = (existingTx.donor_name || '').trim();
+        const curMobile = (existingTx.mobile || '').trim();
+        const curCat = (existingTx.category || 'vargani').trim();
+        const curMethod = (existingTx.payment_method || 'cash').trim();
+        const curPurpose = (existingTx.purpose || '').trim();
+        const curNotes = (existingTx.notes || '').trim();
+        const curDate = existingTx.created_at ? new Date(existingTx.created_at).toISOString().split('T')[0] : '';
+        const newDate = inc.created_at ? new Date(inc.created_at).toISOString().split('T')[0] : '';
+
+        const hasChanges = (
+          curAmt !== parsedAmount ||
+          curName !== cleanDonorName ||
+          curMobile !== (inc.mobile || '').trim() ||
+          curCat !== (inc.category || 'vargani') ||
+          curMethod !== (inc.payment_method || 'cash') ||
+          curPurpose !== (inc.purpose || 'श्री गणेशोत्सव वर्गणी') ||
+          (curNotes !== (inc.notes || '') && inc.notes !== undefined) ||
+          (newDate && curDate && curDate !== newDate)
+        );
+
+        if (hasChanges) {
+          const updatePayload = {
+            amount: parsedAmount,
+            donor_name: cleanDonorName,
+            mobile: (inc.mobile || '').trim(),
+            address: (inc.address || '').trim(),
+            category: inc.category || 'vargani',
+            payment_method: inc.payment_method || 'cash',
+            purpose: inc.purpose || 'श्री गणेशोत्सव वर्गणी',
+            notes: inc.notes || '',
+            status: 'completed',
+            updated_at: new Date().toISOString()
+          };
+          if (inc.created_at) {
+            updatePayload.created_at = inc.created_at;
+          }
+
+          incomeUpdates.push(
+            db.from('income_transactions').update(updatePayload).eq('id', existingTx.id)
+          );
+
+          // Also update matching receipt
+          const rcptUpdate = {
+            amount: parsedAmount,
+            donor_name: cleanDonorName,
+            mobile: (inc.mobile || '').trim(),
+            address: (inc.address || '').trim(),
+            category: inc.category || 'vargani',
+            payment_method: inc.payment_method || 'cash',
+            purpose: inc.purpose || 'श्री गणेशोत्सव वर्गणी',
+            amount_in_words_mr: numberToWordsMarathi(parsedAmount),
+            amount_in_words_en: numberToWordsEnglish(parsedAmount),
+            updated_at: new Date().toISOString()
+          };
+          if (inc.created_at) rcptUpdate.created_at = inc.created_at;
+
+          if (existingTx.receipt_id) {
+            incomeUpdates.push(db.from('receipts').update(rcptUpdate).eq('id', existingTx.receipt_id));
+          } else if (existingTx.receipt_number) {
+            incomeUpdates.push(db.from('receipts').update(rcptUpdate).eq('receipt_number', existingTx.receipt_number));
+          }
+        }
+        continue;
+      }
+
+      // If new, ensure receipt number doesn't collide
+      let safeReceiptNo = rNo;
+      if (!safeReceiptNo || existingReceiptMap.has(safeReceiptNo)) {
+        maxReceiptNum += 1;
+        safeReceiptNo = `HANUMAN-2026-${String(maxReceiptNum).padStart(6, '0')}`;
+      } else {
+        const m = safeReceiptNo.match(/(\d+)$/);
+        if (m) {
+          const num = parseInt(m[1], 10);
+          if (!isNaN(num) && num > maxReceiptNum) maxReceiptNum = num;
+        }
+      }
+
+      newIncomeItems.push({ inc, txId, rNo: safeReceiptNo, cleanDonorName, parsedAmount });
+    }
+
+    // Execute income updates
+    if (incomeUpdates.length > 0) {
+      await Promise.allSettled(incomeUpdates);
+      counts.income += incomeUpdates.length;
     }
 
     if (newIncomeItems.length > 0) {
@@ -321,7 +425,7 @@ export async function autoSyncAll(req, res) {
             matchMobile.name.toLowerCase().split(/\s+/).some(w => w.length >= 3 && cleanDonorName.toLowerCase().includes(w))
           );
           const donorMatch = matchByName || (isMobileNameMatch ? matchMobile : null);
-          const donorId = donorMatch ? donorMatch.id : null;
+          const donorId = donorMatch ? donorMatch.id : (inc.donor_id || null);
 
           const { data: insertedTx, error: txErr } = await db.from('income_transactions').insert({
             transaction_id: txId,
@@ -342,8 +446,8 @@ export async function autoSyncAll(req, res) {
 
           if (!txErr && insertedTx) {
             counts.income++;
-            existingTxIds.add(txId);
-            existingReceiptNos.add(rNo);
+            existingTxMap.set(txId, insertedTx);
+            existingReceiptMap.set(rNo, insertedTx);
 
             const verificationCode = `V-${Math.random().toString(36).substring(2, 8).toUpperCase()}-${Date.now().toString(36).slice(-3).toUpperCase()}`;
             const { data: insertedRcpt } = await db.from('receipts').insert({
@@ -367,33 +471,52 @@ export async function autoSyncAll(req, res) {
               await db.from('income_transactions').update({ receipt_id: insertedRcpt.id }).eq('id', insertedTx.id);
               counts.receipts++;
             }
-
-            // Update matching donor's paid amount and payment status
-            if (donorId) {
-              try {
-                const { data: dRows } = await db.from('donors').select('target_amount, paid_amount, total_donated, donations_count').eq('id', donorId).limit(1);
-                const dRow = dRows?.[0] || null;
-                if (dRow) {
-                  const newPaid = (Number(dRow.paid_amount || dRow.total_donated) || 0) + parsedAmount;
-                  const targetAmt = Number(dRow.target_amount) || 500;
-                  const newStatus = (newPaid >= targetAmt && targetAmt > 0) ? 'paid' : (newPaid > 0 ? 'partial' : 'unpaid');
-                  await db.from('donors').update({
-                    paid_amount: newPaid,
-                    total_donated: newPaid,
-                    donations_count: (Number(dRow.donations_count) || 0) + 1,
-                    status: newStatus,
-                    last_donated_at: inc.created_at || new Date().toISOString()
-                  }).eq('id', donorId);
-                }
-              } catch (dErr) {
-                console.warn('Sync donor stats update note:', dErr.message);
-              }
-            }
           }
         } catch (incErr) {
           console.warn('Sync income item note:', incErr.message);
         }
       }));
+    }
+
+    // Ensure donor paid_amount is strictly synchronized with all valid income transactions
+    try {
+      const { data: allActiveTxs } = await db.from('income_transactions').select('donor_id, donor_name, mobile, amount').eq('is_deleted', false);
+      const donorTotalPaidMap = new Map();
+      (allActiveTxs || []).forEach(tx => {
+        const amt = Number(tx.amount) || 0;
+        if (tx.donor_id) {
+          const k = `id:${tx.donor_id}`;
+          donorTotalPaidMap.set(k, (donorTotalPaidMap.get(k) || 0) + amt);
+        }
+        if (tx.donor_name) {
+          const k = `name:${tx.donor_name.trim().toLowerCase()}`;
+          donorTotalPaidMap.set(k, (donorTotalPaidMap.get(k) || 0) + amt);
+        }
+      });
+
+      const { data: currentDonors } = await db.from('donors').select('id, name, target_amount, paid_amount');
+      const reconciliations = [];
+      (currentDonors || []).forEach(d => {
+        const idKey = `id:${d.id}`;
+        const nameKey = `name:${(d.name || '').trim().toLowerCase()}`;
+        const calculatedPaid = donorTotalPaidMap.get(idKey) || donorTotalPaidMap.get(nameKey);
+        if (calculatedPaid !== undefined && calculatedPaid !== Number(d.paid_amount || 0)) {
+          const target = Number(d.target_amount || 500);
+          const newStatus = (calculatedPaid >= target && target > 0) ? 'paid' : (calculatedPaid > 0 ? 'partial' : 'unpaid');
+          reconciliations.push(
+            db.from('donors').update({
+              paid_amount: calculatedPaid,
+              total_donated: calculatedPaid,
+              status: newStatus
+            }).eq('id', d.id)
+          );
+        }
+      });
+      if (reconciliations.length > 0) {
+        await Promise.allSettled(reconciliations);
+      }
+    } catch (reconcileErr) {
+      console.warn('Sync donor reconciliation note:', reconcileErr.message);
     }
 
     // Ensure all active transactions remain strictly and consecutively numbered in Supabase
@@ -405,7 +528,7 @@ export async function autoSyncAll(req, res) {
     }
 
     // 4. Sync Expense Transactions (Diff-checked & Batch Inserted)
-    const { data: existingExpenses } = await db.from('expense_transactions').select('id, expense_id, description, amount, status, is_deleted');
+    const { data: existingExpenses } = await db.from('expense_transactions').select('id, expense_id, description, amount, status, category, payment_method, paid_to, bill_number, is_deleted, created_at, notes, approved_by_name');
     const existingExpMap = new Map((existingExpenses || []).map(e => [e.expense_id, e]));
     const existingExpMapById = new Map((existingExpenses || []).map(e => [String(e.id), e]));
 
@@ -427,15 +550,40 @@ export async function autoSyncAll(req, res) {
         // If already deleted in database, NEVER resurrect it!
         if (existingExp.is_deleted) continue;
 
-        // Diff check: only update if status actually changed!
-        if (exp.status && ['approved', 'rejected', 'paid'].includes(exp.status) && existingExp.status !== exp.status) {
+        const curAmt = Number(existingExp.amount || 0);
+        const curDesc = (existingExp.description || '').trim();
+        const curPaidTo = (existingExp.paid_to || '').trim();
+        const curCat = (existingExp.category || 'other').trim();
+        const curMethod = (existingExp.payment_method || 'cash').trim();
+        const curBill = (existingExp.bill_number || '').trim();
+        const curStatus = existingExp.status || 'approved';
+        const newAmt = Number(exp.amount) || curAmt;
+
+        const expHasChanges = (
+          curAmt !== newAmt ||
+          curDesc !== (exp.description || '').trim() ||
+          curPaidTo !== (exp.paid_to || '').trim() ||
+          curCat !== (exp.category || 'other') ||
+          curMethod !== (exp.payment_method || 'cash') ||
+          curBill !== (exp.bill_number || '').trim() ||
+          (exp.status && curStatus !== exp.status)
+        );
+
+        if (expHasChanges) {
           expenseUpdates.push(
             db.from('expense_transactions').update({
-              status: exp.status,
-              approved_by_name: exp.approved_by_name || 'अध्यक्ष (Admin)',
+              amount: newAmt,
+              description: (exp.description || '').trim(),
+              paid_to: (exp.paid_to || '').trim(),
+              category: exp.category || 'other',
+              payment_method: exp.payment_method || 'cash',
+              bill_number: (exp.bill_number || '').trim(),
+              status: exp.status || curStatus,
+              approved_by_name: exp.approved_by_name || existingExp.approved_by_name || 'अध्यक्ष (Admin)',
               approved_at: exp.approved_at || new Date().toISOString(),
-              notes: exp.notes || ''
-            }).eq('expense_id', expId)
+              notes: exp.notes !== undefined ? exp.notes : existingExp.notes,
+              updated_at: new Date().toISOString()
+            }).eq('id', existingExp.id)
           );
         }
         continue;
@@ -475,6 +623,7 @@ export async function autoSyncAll(req, res) {
 
     if (expenseUpdates.length > 0) {
       await Promise.allSettled(expenseUpdates);
+      counts.expenses += expenseUpdates.length;
     }
 
     // 5. Sync Loans

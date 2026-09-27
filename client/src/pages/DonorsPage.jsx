@@ -214,12 +214,26 @@ export function DonorsPage() {
 
         setDonors(donorsList);
 
-        const totalTarget = donorsList.reduce((acc, d) => acc + (Number(d.target_amount) || 0), 0);
-        const totalPaid = donorsList.reduce((acc, d) => acc + (Number(d.paid_amount) || 0), 0);
-        const totalPending = donorsList.reduce((acc, d) => acc + (Number(d.pending_amount) || 0), 0);
+        const calculatedTarget = donorsList.reduce((acc, d) => acc + (Number(d.target_amount) || 0), 0);
+        const calculatedPaid = donorsList.reduce((acc, d) => acc + (Number(d.paid_amount) || 0), 0);
+        const calculatedPending = donorsList.reduce((acc, d) => acc + (Number(d.pending_amount) || 0), 0);
+
+        const hasFilter = Boolean(search?.trim() || (areaFilter && areaFilter !== 'all'));
+
+        const totalTarget = (!hasFilter && res.summary?.totalTarget !== undefined)
+          ? Number(res.summary.totalTarget)
+          : calculatedTarget;
+        const totalPaid = (!hasFilter && res.summary?.totalPaid !== undefined)
+          ? Number(res.summary.totalPaid)
+          : calculatedPaid;
+        const totalPending = (!hasFilter && res.summary?.totalPending !== undefined)
+          ? Number(res.summary.totalPending)
+          : calculatedPending;
 
         setSummary({
-          totalDonors: res.summary?.totalDonors || donorsList.length,
+          totalDonors: (!hasFilter && res.summary?.totalDonors !== undefined)
+            ? Number(res.summary.totalDonors)
+            : donorsList.length,
           totalTarget,
           totalPaid,
           totalPending,
