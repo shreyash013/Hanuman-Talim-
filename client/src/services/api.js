@@ -212,9 +212,9 @@ export function reconcileDonorsAndIncome() {
     });
     donorsList = Array.from(uniqueDonorsMap.values());
 
-    // Deduplicate known test duplicates & multiple duplicate pavtya
+    // Keep all valid repeated donations unless they are true duplicates by record id / receipt number.
+    // The old same-name + same-amount filter was deleting legitimate multiple payments from the same donor.
     const seenIncomeReceipts = new Set();
-    const seenDonorPayments = new Map();
     const duplicateIdsToPurge = new Set([301, 302, 305, 306, 54, 56]);
     const duplicateReceiptsToPurge = new Set([
       'HANUMAN-2026-999998',
@@ -233,28 +233,9 @@ export function reconcileDonorsAndIncome() {
         incomeModified = true;
         return;
       }
-      // Skip duplicate receipt numbers
       if (inc.receipt_number && seenIncomeReceipts.has(inc.receipt_number)) {
         incomeModified = true;
         return;
-      }
-
-      // Deduplicate identical donor name + amount generated within duplicate bursts
-      const dKey = normalizeText(inc.donor_name || '');
-      const amt = Number(inc.amount) || 0;
-      if (dKey && amt > 0) {
-        const pairKey = `${dKey}_${amt}`;
-        if (seenDonorPayments.has(pairKey)) {
-          const prev = seenDonorPayments.get(pairKey);
-          const prevNum = parseInt((prev.receipt_number || '').replace(/\D/g, '') || 0, 10);
-          const curNum = parseInt((inc.receipt_number || '').replace(/\D/g, '') || 0, 10);
-          if (Math.abs(curNum - prevNum) <= 10) {
-            incomeModified = true;
-            return;
-          }
-        } else {
-          seenDonorPayments.set(pairKey, inc);
-        }
       }
 
       if (inc.receipt_number) {
