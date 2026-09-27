@@ -285,6 +285,8 @@ export function reconcileDonorsAndIncome() {
     donorsList.forEach((donor) => {
       if (!donor) return;
       const matching = incomeList.filter(inc => isExactDonorMatch(donor, inc));
+      const serverPaid = Number(donor.paid_amount || donor.total_donated || 0);
+
       if (matching.length > 0) {
         matching.forEach(inc => {
           if (!inc.donor_id) {
@@ -301,16 +303,12 @@ export function reconcileDonorsAndIncome() {
           donor.status = verifiedPaid >= (Number(donor.target_amount) || 0) && Number(donor.target_amount) > 0 ? 'paid' : (verifiedPaid > 0 ? 'partial' : 'unpaid');
           donorsModified = true;
         }
-      } else {
-        // Donor has no matching income transactions. Do NOT auto-generate phantom receipts!
-        if (Number(donor.paid_amount || 0) > 0 || Number(donor.total_donated || 0) > 0) {
-          donor.paid_amount = 0;
-          donor.total_donated = 0;
-          donor.donations_count = 0;
-          donor.pending_amount = Number(donor.target_amount || 0);
-          donor.status = 'unpaid';
-          donorsModified = true;
-        }
+      } else if (serverPaid > 0) {
+        // Keep the real stored total if the income list has not yet synchronized to this donor.
+        donor.donations_count = Number(donor.donations_count) > 0 ? Number(donor.donations_count) : 1;
+        donor.pending_amount = Math.max(0, (Number(donor.target_amount) || 0) - serverPaid);
+        donor.status = serverPaid >= (Number(donor.target_amount) || 0) && Number(donor.target_amount) > 0 ? 'paid' : 'partial';
+        donorsModified = true;
       }
     });
 
@@ -2991,9 +2989,10 @@ export async function request(endpoint, options = {}) {
       } else {
         const exist = finalDonorsMap.get(key);
         exist.target_amount = Math.max(Number(exist.target_amount || 0), Number(d.target_amount || 0));
-        exist.paid_amount = (Number(exist.paid_amount) || 0) + (Number(d.paid_amount) || 0);
+        exist.paid_amount = Math.max(Number(exist.paid_amount || 0), Number(d.paid_amount || 0));
         exist.total_donated = exist.paid_amount;
         exist.pending_amount = Math.max(0, exist.target_amount - exist.paid_amount);
+        exist.donations_count = Math.max(Number(exist.donations_count || 0), Number(d.donations_count || 0));
         exist.status = (exist.paid_amount >= exist.target_amount && exist.target_amount > 0) ? 'paid' : (exist.paid_amount > 0 ? 'partial' : 'unpaid');
       }
     });
