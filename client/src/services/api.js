@@ -61,35 +61,72 @@ function normalizeText(str) {
     .trim();
 }
 
+// Clean name into meaningful words (minimum length 2)
+function cleanWords(name) {
+  return (name || '')
+    .toLowerCase()
+    .replace(/[^a-z\u0900-\u097F\s]/g, '')
+    .split(/\s+/)
+    .filter(w => w.length >= 2);
+}
+
 // Strict and safe matcher for donors and income transactions
 export function isExactDonorMatch(donor, inc) {
   if (!donor || !inc || inc.is_deleted) return false;
-
-  // 1. Explicit ID match
-  if (inc.donor_id && donor.id && String(inc.donor_id) === String(donor.id)) {
-    return true;
-  }
 
   const dNorm = normalizeText(donor.name || '');
   const incNorm = normalizeText(inc.donor_name || '');
   if (!dNorm || !incNorm) return false;
 
-  // 2. Exact match on normalized names
+  // 1. Exact match on normalized full names
   if (dNorm === incNorm) return true;
 
-  // 3. Marathi transliteration variants (e.g. prithviraj <-> pruthviraj)
-  const dTrans = dNorm.replace(/u/g, 'i').replace(/w/g, 'v');
-  const incTrans = incNorm.replace(/u/g, 'i').replace(/w/g, 'v');
+  // 2. Marathi transliteration variants (e.g. prithviraj <-> pruthviraj, gavade <-> gawade)
+  const dTrans = dNorm.replace(/u/g, 'i').replace(/w/g, 'v').replace(/ee/g, 'i').replace(/oo/g, 'u').replace(/aa/g, 'a');
+  const incTrans = incNorm.replace(/u/g, 'i').replace(/w/g, 'v').replace(/ee/g, 'i').replace(/oo/g, 'u').replace(/aa/g, 'a');
   if (dTrans === incTrans) return true;
 
-  // 4. Mobile match ONLY if names share at least one keyword (prevents matching Rajendra More to Prithviraj Gavade)
+  // 3. Word-by-word comparison
+  const dWords = cleanWords(donor.name);
+  const incWords = cleanWords(inc.donor_name);
+
+  // If both have 3 words (First Middle Last), ALL 3 must match!
+  // This strictly differentiates "Sandip Bajirao Gavade" from "Sandip Baburao Gavade"
+  if (dWords.length === 3 && incWords.length === 3) {
+    const w0Match = dWords[0] === incWords[0] || dWords[0].replace(/u/g, 'i') === incWords[0].replace(/u/g, 'i');
+    const w1Match = dWords[1] === incWords[1] || dWords[1].replace(/u/g, 'i') === incWords[1].replace(/u/g, 'i');
+    const w2Match = dWords[2] === incWords[2] || dWords[2].replace(/w/g, 'v') === incWords[2].replace(/w/g, 'v');
+    if (w0Match && w1Match && w2Match) return true;
+  }
+
+  // If one has 2 words (First Last) and one has 3 words (First Middle Last)
+  // Only match if First and Last match AND mobile matches
+  if ((dWords.length === 2 && incWords.length === 3) || (dWords.length === 3 && incWords.length === 2)) {
+    const twoWord = dWords.length === 2 ? dWords : incWords;
+    const threeWord = dWords.length === 3 ? dWords : incWords;
+    const firstMatch = twoWord[0] === threeWord[0];
+    const lastMatch = twoWord[1] === threeWord[2];
+    if (firstMatch && lastMatch) {
+      const dDigits = (donor.mobile || '').replace(/\D/g, '').slice(-10);
+      const incDigits = (inc.mobile || '').replace(/\D/g, '').slice(-10);
+      if (dDigits.length === 10 && incDigits.length === 10 && dDigits === incDigits) {
+        return true;
+      }
+    }
+  }
+
+  // 4. If donor_id matches, it MUST share both first and last name words to prevent foreign key offset pollution
+  if (inc.donor_id && donor.id && String(inc.donor_id) === String(donor.id)) {
+    if (dWords.length >= 2 && incWords.length >= 2 && dWords[0] === incWords[0] && dWords[dWords.length - 1] === incWords[incWords.length - 1]) {
+      return true;
+    }
+  }
+
+  // 5. Mobile match ONLY if first name matches
   const dDigits = (donor.mobile || '').replace(/\D/g, '').slice(-10);
   const incDigits = (inc.mobile || '').replace(/\D/g, '').slice(-10);
   if (dDigits.length === 10 && incDigits.length === 10 && dDigits === incDigits) {
-    const dWords = (donor.name || '').toLowerCase().replace(/[^a-z\u0900-\u097F\s]/g, '').split(/\s+/).filter(w => w.length >= 3);
-    const incWords = (inc.donor_name || '').toLowerCase().replace(/[^a-z\u0900-\u097F\s]/g, '').split(/\s+/).filter(w => w.length >= 3);
-    const hasOverlap = dWords.some(w => incWords.includes(w));
-    if (hasOverlap) return true;
+    if (dWords[0] && incWords[0] && dWords[0] === incWords[0]) return true;
   }
 
   return false;
