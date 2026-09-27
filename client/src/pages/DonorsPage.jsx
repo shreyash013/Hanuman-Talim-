@@ -430,7 +430,11 @@ export function DonorsPage() {
     if (!donor) return;
     const safeDonor = {
       ...donor,
-      id: donor.id || Date.now()
+      id: donor.id || Date.now(),
+      name: donor.name || '',
+      mobile: donor.mobile || '',
+      area: donor.area || 'नदीवेस शिरोळ',
+      address: donor.address || ''
     };
     setEditingDonor(safeDonor);
     setEditName(safeDonor.name || '');

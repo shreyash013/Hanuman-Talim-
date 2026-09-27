@@ -411,10 +411,11 @@ export function autoHealAndRenumberReceipts() {
     let receiptsList = rawReceipts ? JSON.parse(rawReceipts) : [];
     if (Array.isArray(receiptsList)) {
       receiptsList.forEach(r => {
-        if (!r) return;
-        if (legacyMap[r.receipt_number]) {
-          r.receipt_number = legacyMap[r.receipt_number];
-          r.transaction_id = legacyMap[r.receipt_number].replace('HANUMAN-', 'TXN-');
+        if (!r || !r.receipt_number) return;
+        const mappedReceipt = legacyMap[r.receipt_number];
+        if (mappedReceipt && typeof mappedReceipt === 'string') {
+          r.receipt_number = mappedReceipt;
+          r.transaction_id = mappedReceipt.replace('HANUMAN-', 'TXN-');
         }
       });
       localStorage.setItem('shirol_receipts', JSON.stringify(receiptsList));
