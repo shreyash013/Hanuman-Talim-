@@ -171,8 +171,23 @@ export function DonorsPage() {
         const rawIncome = typeof window !== 'undefined' ? localStorage.getItem('shirol_income') : null;
         const incomeList = rawIncome ? JSON.parse(rawIncome) : [];
 
+        const purgedReceiptNos = new Set([
+          'HANUMAN-2026-999998', 'HANUMAN-2026-999997',
+          'HANUMAN-2026-000106', 'HANUMAN-2026-000109', 'HANUMAN-2026-000110', 'HANUMAN-2026-000111', 'HANUMAN-2026-000114'
+        ]);
+        const purgedIds = new Set([301, 302, 305, 306, 54, 56]);
+
         donorsList = donorsList.map(d => {
-          const matchingPayments = incomeList.filter(inc => !inc.is_deleted && isExactDonorMatch(d, inc));
+          const seenKeys = new Set();
+          const matchingPayments = incomeList.filter(inc => {
+            if (!inc || inc.is_deleted) return false;
+            if (purgedIds.has(Number(inc.id)) || purgedReceiptNos.has(inc.receipt_number)) return false;
+            if (!isExactDonorMatch(d, inc)) return false;
+            const key = inc.receipt_number || inc.transaction_id || String(inc.id);
+            if (seenKeys.has(key)) return false;
+            seenKeys.add(key);
+            return true;
+          });
 
           const localPaid = matchingPayments.reduce((sum, inc) => sum + (Number(inc.amount) || 0), 0);
           const serverPaid = Number(d.paid_amount !== undefined ? d.paid_amount : (d.total_donated || 0));

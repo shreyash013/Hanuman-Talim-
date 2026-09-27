@@ -175,48 +175,76 @@ export function reconcileDonorsAndIncome() {
     });
     donorsList = Array.from(uniqueDonorsMap.values());
 
-    // Deduplicate known test duplicates (Txn 56 / 999998, Txn 54 / 999997)
+    // Deduplicate known test duplicates & multiple duplicate pavtya
     const seenIncomeReceipts = new Set();
+    const seenDonorPayments = new Map();
+    const duplicateIdsToPurge = new Set([301, 302, 305, 306, 54, 56]);
+    const duplicateReceiptsToPurge = new Set([
+      'HANUMAN-2026-999998',
+      'HANUMAN-2026-999997',
+      'HANUMAN-2026-000106',
+      'HANUMAN-2026-000109',
+      'HANUMAN-2026-000110',
+      'HANUMAN-2026-000111',
+      'HANUMAN-2026-000114'
+    ]);
+
     const cleanedIncome = [];
     incomeList.forEach(inc => {
-      if (!inc) return;
-      // Remove duplicate 999998 (Akshay Ingale duplicate)
-      if (inc.receipt_number === 'HANUMAN-2026-999998' || String(inc.id) === '56') {
-        incomeModified = true;
-        return;
-      }
-      // Remove duplicate 999997 (Sachin Gavade SRM duplicate)
-      if (inc.receipt_number === 'HANUMAN-2026-999997' || String(inc.id) === '54') {
+      if (!inc || inc.is_deleted) return;
+      if (duplicateIdsToPurge.has(Number(inc.id)) || duplicateReceiptsToPurge.has(inc.receipt_number)) {
         incomeModified = true;
         return;
       }
       // Skip duplicate receipt numbers
-      if (inc.receipt_number && seenIncomeReceipts.has(inc.receipt_number) && !inc.is_deleted) {
+      if (inc.receipt_number && seenIncomeReceipts.has(inc.receipt_number)) {
         incomeModified = true;
         return;
       }
-      if (inc.receipt_number && !inc.is_deleted) {
+
+      // Deduplicate identical donor name + amount generated within duplicate bursts
+      const dKey = normalizeText(inc.donor_name || '');
+      const amt = Number(inc.amount) || 0;
+      if (dKey && amt > 0) {
+        const pairKey = `${dKey}_${amt}`;
+        if (seenDonorPayments.has(pairKey)) {
+          const prev = seenDonorPayments.get(pairKey);
+          const prevNum = parseInt((prev.receipt_number || '').replace(/\D/g, '') || 0, 10);
+          const curNum = parseInt((inc.receipt_number || '').replace(/\D/g, '') || 0, 10);
+          if (Math.abs(curNum - prevNum) <= 10) {
+            incomeModified = true;
+            return;
+          }
+        } else {
+          seenDonorPayments.set(pairKey, inc);
+        }
+      }
+
+      if (inc.receipt_number) {
         seenIncomeReceipts.add(inc.receipt_number);
       }
       cleanedIncome.push(inc);
     });
     incomeList = cleanedIncome;
 
-    // 1. Link donor_id between existing donors and income transactions, and synchronize verified paid_amount
-    let maxReceiptNum = 0;
-    incomeList.forEach(inc => {
-      if (inc && inc.receipt_number && !inc.is_deleted) {
-        const m = inc.receipt_number.match(/(\d+)$/);
-        if (m) {
-          const num = parseInt(m[1], 10);
-          if (!isNaN(num) && num > maxReceiptNum && num < 500000) maxReceiptNum = num;
+    // Purge duplicates from shirol_receipts as well
+    try {
+      const rawRcpts = localStorage.getItem('shirol_receipts');
+      if (rawRcpts) {
+        let rcptList = JSON.parse(rawRcpts);
+        if (Array.isArray(rcptList)) {
+          const filteredRcpts = rcptList.filter(r => 
+            !duplicateIdsToPurge.has(Number(r.id)) && 
+            !duplicateReceiptsToPurge.has(r.receipt_number)
+          );
+          if (filteredRcpts.length !== rcptList.length) {
+            localStorage.setItem('shirol_receipts', JSON.stringify(filteredRcpts));
+          }
         }
       }
-    });
+    } catch (e) {}
 
-    const settings = getLocalStore('mandal_settings_custom', SHIROL_MANDAL_SETTINGS);
-    const prefix = settings.receipt_prefix || 'HANUMAN-2026-';
-
+    // 1. Link donor_id between existing donors and income transactions, and synchronize verified paid_amount
     donorsList.forEach((donor) => {
       if (!donor) return;
       const matching = incomeList.filter(inc => isExactDonorMatch(donor, inc));
@@ -237,44 +265,13 @@ export function reconcileDonorsAndIncome() {
           donorsModified = true;
         }
       } else {
-        // Donor has recorded paid_amount > 0, but no matching income transaction exists yet
-        const paid = Number(donor.paid_amount || donor.total_donated || 0);
-        if (paid > 0) {
-          maxReceiptNum += 1;
-          const formattedNum = String(maxReceiptNum).padStart(6, '0');
-          const receiptNo = `${prefix}${formattedNum}`;
-          const newTx = {
-            id: Date.now() + Math.floor(Math.random() * 1000),
-            transaction_id: `TXN-2026-${formattedNum}`,
-            receipt_number: receiptNo,
-            donor_name: donor.name,
-            donor_id: donor.id,
-            mobile: donor.mobile || '',
-            address: donor.address || donor.area || 'शिरोळ',
-            amount: paid,
-            payment_method: donor.payment_method || 'cash',
-            category: 'vargani',
-            purpose: 'श्री गणेशोत्सव वर्गणी',
-            collector_name: 'अध्यक्ष (Admin)',
-            amount_in_words_mr: numberToWordsMarathi(paid),
-            amount_in_words_en: numberToWordsEnglish(paid),
-            status: 'completed',
-            is_deleted: false,
-            created_at: donor.last_donated_at || donor.created_at || new Date().toISOString()
-          };
-          incomeList.push(newTx);
-          incomeModified = true;
-
-          // Also add to receipts store
-          const receiptsList = getLocalStore('receipts', []);
-          receiptsList.unshift(newTx);
-          localStorage.setItem('shirol_receipts', JSON.stringify(receiptsList));
-
-          donor.paid_amount = paid;
-          donor.total_donated = paid;
-          donor.donations_count = 1;
-          donor.pending_amount = Math.max(0, (Number(donor.target_amount) || 0) - paid);
-          donor.status = paid >= (Number(donor.target_amount) || 0) && Number(donor.target_amount) > 0 ? 'paid' : 'partial';
+        // Donor has no matching income transactions. Do NOT auto-generate phantom receipts!
+        if (Number(donor.paid_amount || 0) > 0 || Number(donor.total_donated || 0) > 0) {
+          donor.paid_amount = 0;
+          donor.total_donated = 0;
+          donor.donations_count = 0;
+          donor.pending_amount = Number(donor.target_amount || 0);
+          donor.status = 'unpaid';
           donorsModified = true;
         }
       }

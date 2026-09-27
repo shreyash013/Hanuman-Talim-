@@ -392,6 +392,17 @@ export async function autoSyncAll(req, res) {
         continue;
       }
 
+      // Deduplication safeguard: Do not insert duplicate transaction for the same donor with identical amount
+      const duplicateTx = (existingIncome || []).find(t => 
+        !t.is_deleted &&
+        t.donor_name &&
+        t.donor_name.trim().toLowerCase() === cleanDonorName.toLowerCase() &&
+        Number(t.amount) === parsedAmount
+      );
+      if (duplicateTx) {
+        continue;
+      }
+
       // If new, ensure receipt number doesn't collide
       let safeReceiptNo = rNo;
       if (!safeReceiptNo || existingReceiptMap.has(safeReceiptNo)) {
