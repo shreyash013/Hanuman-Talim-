@@ -209,15 +209,37 @@ export function DonorsPage() {
           };
         });
 
-        // Deduplicate to guarantee no duplicate donors are displayed
-        const seenKeys = new Set();
-        donorsList = donorsList.filter(d => {
-          if (!d || !d.name) return false;
+        // Deduplicate donor records without dropping a valid paid amount. If the same donor
+        // appears more than once, keep the stronger record (highest paid total and latest activity).
+        const donorMap = new Map();
+        donorsList.forEach(d => {
+          if (!d || !d.name) return;
           const k = ((d.name || '').trim().toLowerCase()) + '_' + ((d.mobile || '').replace(/\D/g, '').slice(-10));
-          if (seenKeys.has(k)) return false;
-          seenKeys.add(k);
-          return true;
+          const existing = donorMap.get(k);
+          if (!existing) {
+            donorMap.set(k, { ...d });
+            return;
+          }
+
+          const existingPaid = Number(existing.paid_amount || existing.total_donated || 0);
+          const nextPaid = Number(d.paid_amount || d.total_donated || 0);
+          const existingTarget = Number(existing.target_amount || existing.total_donated || 0);
+          const nextTarget = Number(d.target_amount || d.total_donated || 0);
+
+          existing.target_amount = Math.max(existingTarget, nextTarget);
+          existing.paid_amount = Math.max(existingPaid, nextPaid);
+          existing.total_donated = existing.paid_amount;
+          existing.pending_amount = Math.max(0, existing.target_amount - existing.paid_amount);
+          existing.status = existing.paid_amount >= existing.target_amount && existing.target_amount > 0 ? 'paid' : (existing.paid_amount > 0 ? 'partial' : 'unpaid');
+          existing.donations_count = Math.max(Number(existing.donations_count || 0), Number(d.donations_count || 0));
+          if (!existing.mobile && d.mobile) existing.mobile = d.mobile;
+          if (!existing.address && d.address) existing.address = d.address;
+          if (!existing.area && d.area) existing.area = d.area;
+          if (d.last_donated_at && (!existing.last_donated_at || new Date(d.last_donated_at) > new Date(existing.last_donated_at))) {
+            existing.last_donated_at = d.last_donated_at;
+          }
         });
+        donorsList = Array.from(donorMap.values());
 
         // Enforce highest amount first
         donorsList.sort((a, b) => {
